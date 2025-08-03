@@ -9,7 +9,7 @@ used from both sync and async code without requiring an event-loop.
 
 Design
 ~~~~~~
-" LiveSession  in-memory representation that callers (e.g. BrowserAdapter)
+" LiveSession   in-memory representation that callers (e.g. BrowserAdapter)
   can enrich with transient objects such as Playwright ``Page``.
 " The JSON file only stores CDP-level identifiers; Playwright objects are
   reconstructed on re-attach.
@@ -44,7 +44,16 @@ class LiveSession:
     provider: LLMProvider
     target_id: str          # CDP target identifier
     window_id: int          # Chrome window identifier
+    group_id: int | None = None  # Chrome tab-group ID (optional)
     page_guid: Optional[str] = None  # Playwright "guid" of the Page (optional)
+
+
+@dataclass(slots=True)
+class TabGroup:
+    """Lightweight record for a Chrome tab group."""
+    group_id: int
+    name: str
+    color: str
 
 
 # --------------------------------------------------------------------------- #
@@ -72,6 +81,7 @@ class StateManager:
     def _init(self, state_file: Path) -> None:
         self._state_file = state_file
         self._sessions: Dict[str, LiveSession] = {}
+        self._groups: Dict[int, TabGroup] = {}     # New: tab-group registry
         self._state_file.parent.mkdir(parents=True, exist_ok=True)
         self._load_from_disk()
 
@@ -102,7 +112,16 @@ class StateManager:
                 provider=provider,
                 target_id=item["target_id"],
                 window_id=item["window_id"],
+                group_id=item.get("group_id"),   # NEW
                 page_guid=None,
+            )
+
+        # NEW: load tab groups
+        for g in raw.get("groups", []):
+            self._groups[g["group_id"]] = TabGroup(
+                group_id=g["group_id"],
+                name=g.get("name", f"group-{g['group_id']}"),
+                color=g.get("color", "grey"),
             )
 
     def _write_atomic(self, data: dict) -> None:
@@ -117,7 +136,7 @@ class StateManager:
 
     def _persist(self) -> None:
         data = {
-            "version": 1,
+            "version": 2,   # bumped
             "saved_at": datetime.now(timezone.utc).isoformat(),
             "sessions": [
                 {
@@ -125,8 +144,17 @@ class StateManager:
                     "provider": s.provider.name,
                     "target_id": s.target_id,
                     "window_id": s.window_id,
+                    "group_id": s.group_id,
                 }
                 for s in self._sessions.values()
+            ],
+            "groups": [
+                {
+                    "group_id": g.group_id,
+                    "name": g.name,
+                    "color": g.color,
+                }
+                for g in self._groups.values()
             ],
         }
         try:
@@ -142,6 +170,7 @@ class StateManager:
         provider: LLMProvider,
         target_id: str,
         window_id: int,
+        group_id: int | None = None,
         page_guid: str | None = None,
     ) -> LiveSession:
         """
@@ -149,7 +178,7 @@ class StateManager:
 
         Returns the LiveSession instance that is now tracked.
         """
-        session = LiveSession(task_name, provider, target_id, window_id, page_guid)
+        session = LiveSession(task_name, provider, target_id, window_id, group_id, page_guid)
         self._sessions[task_name] = session
         self._persist()
         return session
@@ -191,3 +220,32 @@ class StateManager:
         
         _LOG.info("Renamed session '%s' to '%s'", old_name, new_name)
         return session
+
+    # ----------------  Tab-group helpers  ---------------------------- #
+
+    def register_group(self, group_id: int, name: str, color: str) -> TabGroup:
+        """Insert or update a TabGroup definition and persist."""
+        grp = TabGroup(group_id, name, color)
+        self._groups[group_id] = grp
+        self._persist()
+        return grp
+
+    def get_group_by_name(self, name: str) -> Optional[TabGroup]:
+        """Retrieve a group by its display name."""
+        for grp in self._groups.values():
+            if grp.name == name:
+                return grp
+        return None
+
+    def list_groups(self) -> Dict[int, TabGroup]:
+        """Return a shallow copy of all known tab groups."""
+        return dict(self._groups)
+
+    def assign_session_to_group(self, task_name: str, group_id: int) -> None:
+        """Attach an existing session to *group_id* and persist."""
+        session = self._sessions.get(task_name)
+        if session is None:
+            _LOG.warning("assign_session_to_group: unknown task '%s'", task_name)
+            return
+        session.group_id = group_id
+        self._persist()

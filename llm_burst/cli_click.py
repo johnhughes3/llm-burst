@@ -20,7 +20,12 @@ from typing import Optional
 
 import click
 
-from llm_burst.constants import LLMProvider
+from llm_burst.constants import LLMProvider, TabColor
+from llm_burst.tab_groups import (
+    create_group_sync,
+    move_to_group_sync,
+    list_groups_sync,
+)
 from llm_burst.cli import (
     open_llm_window,
     send_prompt_sync,
@@ -123,12 +128,20 @@ def _provider_from_str(raw: str) -> LLMProvider:
     is_flag=True,
     help="Fail if *task-name* already exists instead of re-creating.",
 )
+@click.option(
+    "-g",
+    "--group",
+    "group_name",
+    type=str,
+    help="Chrome tab-group name.",
+)
 def cmd_open(
     provider: Optional[str],
     task_name: Optional[str],
     prompt_text: Optional[str],
     stdin: bool,
     reuse: bool,
+    group_name: Optional[str],
 ) -> None:
     """Open a new LLM window (or re-attach) and optionally send a prompt."""
 
@@ -172,6 +185,15 @@ def cmd_open(
         new_name = auto_name_sync(handle)
         if new_name and new_name != actual_name:
             click.echo(f"Session renamed to '{new_name}'")
+            actual_name = new_name  # ensure group op uses current name
+
+    # NEW: assign to tab group if requested
+    if group_name:
+        try:
+            move_to_group_sync(actual_name, group_name)
+            click.echo(f"Added '{actual_name}' to group '{group_name}'.")
+        except RuntimeError as exc:
+            click.echo(f"Tab-group failed: {exc}", err=True)
 
 
 # --------------------------------------------------------------------------- #
@@ -201,3 +223,50 @@ def cmd_stop(task_names: tuple[str, ...], stop_all: bool) -> None:
             click.echo(f"No active window for '{task}'", err=True)
 
     click.echo(f"Done – {closed} window(s) closed.")
+
+
+@cli.group("group")
+def group_commands() -> None:
+    """Manage Chrome tab groups."""
+    pass
+
+
+@group_commands.command("list")
+def cmd_group_list() -> None:
+    """List all known tab groups."""
+    groups = list_groups_sync()
+    if not groups:
+        click.echo("No tab groups defined.")
+        return
+    click.echo(f"{'ID':>5}  {'Name':20}  Colour")
+    click.echo("-" * 35)
+    for gid, grp in groups.items():
+        click.echo(f"{gid:>5}  {grp.name:20}  {grp.color}")
+
+
+@group_commands.command("create")
+@click.argument("name")
+@click.option(
+    "-c",
+    "--color",
+    type=click.Choice([c.value for c in TabColor]),
+    default=TabColor.GREY.value,
+    show_default=True,
+    help="Tab colour.",
+)
+def cmd_group_create(name: str, color: str) -> None:
+    """Create a new Chrome tab group."""
+    grp = create_group_sync(name, color)
+    click.echo(f"Group '{grp.name}' (id={grp.group_id}) ready.")
+
+
+@group_commands.command("move")
+@click.argument("task_name")
+@click.argument("group_name")
+def cmd_group_move(task_name: str, group_name: str) -> None:
+    """Move an existing task/tab into *group_name*."""
+    try:
+        move_to_group_sync(task_name, group_name)
+        click.echo(f"Moved '{task_name}' → '{group_name}'.")
+    except RuntimeError as exc:
+        raise click.ClickException(str(exc)) from exc

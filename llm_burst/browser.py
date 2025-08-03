@@ -83,6 +83,7 @@ class BrowserAdapter:
         self._context: BrowserContext | None = None
         self._chrome_proc: subprocess.Popen[str] | None = None
         self._state = StateManager()
+        self._tab_groups_supported: bool | None = None
 
     # ---------------- Context manager plumbing ---------------- #
 
@@ -161,13 +162,16 @@ class BrowserAdapter:
         try:
             self._browser = await self._playwright.chromium.connect_over_cdp(ws_endpoint)
         except PlaywrightError:
-            # No remote-debugging Chrome running  launch our own.
+            # No remote-debugging Chrome running   launch our own.
             self._launch_chrome_headful()
             await self._wait_for_cdp(ws_endpoint)
             self._browser = await self._playwright.chromium.connect_over_cdp(ws_endpoint)
 
         # Use the default user profile (index 0 in contexts)
         self._context = self._browser.contexts[0]
+
+        # NEW: detect Tab Groups support once per session
+        await self._probe_tab_groups()
 
     def _launch_chrome_headful(self) -> None:
         """Spawn Chrome with remote-debugging enabled."""
@@ -254,6 +258,73 @@ class BrowserAdapter:
         finally:
             self._state.remove(task_name)
         return True
+
+    async def _probe_tab_groups(self) -> None:
+        """Set self._tab_groups_supported based on CDP capability."""
+        if self._tab_groups_supported is not None:
+            return  # already probed
+        cdp = self._browser.contexts[0]._connection
+        try:
+            await cdp.send("TabGroups.get", {"groupId": -1})
+            self._tab_groups_supported = True
+        except PlaywrightError as exc:
+            if "methodNotFound" in str(exc):
+                self._tab_groups_supported = False
+            else:
+                self._tab_groups_supported = True  # assume true for other errors
+        except Exception:
+            self._tab_groups_supported = False
+
+    async def _get_or_create_group(self, name: str, color: str, window_id: int) -> int:
+        """
+        Return an existing Chrome groupId for *name* or create a fresh one.
+        Persists metadata via StateManager.
+        """
+        existing = self._state.get_group_by_name(name)
+        if existing:
+            return existing.group_id
+
+        if not self._tab_groups_supported:
+            raise RuntimeError("Chrome build lacks Tab Groups API")
+
+        cdp = self._browser.contexts[0]._connection
+        res = await cdp.send(
+            "TabGroups.create",
+            {"windowId": window_id, "title": name, "color": color},
+        )
+        group_id = res["groupId"]
+        self._state.register_group(group_id, name, color)
+        return group_id
+
+    async def _add_target_to_group(self, target_id: str, group_id: int) -> None:
+        """Add a CDP target (tab) to *group_id*."""
+        if not self._tab_groups_supported:
+            return
+        cdp = self._browser.contexts[0]._connection
+        await cdp.send("TabGroups.addTab", {"groupId": group_id, "tabId": target_id})
+
+    async def move_task_to_group(self, task_name: str, group_name: str) -> None:
+        """
+        Move an existing llm-burst task/tab into the specified tab group.
+        The group is created if it does not already exist.
+        """
+        await self._ensure_connection()
+
+        session = self._state.get(task_name)
+        if session is None:
+            raise RuntimeError(f"No active session named '{task_name}'")
+
+        if not self._tab_groups_supported:
+            raise RuntimeError("Chrome build lacks Tab Groups API")
+
+        # Resolve colour automatically from provider when unknown
+        from .constants import DEFAULT_PROVIDER_COLORS
+        default_colour = DEFAULT_PROVIDER_COLORS.get(session.provider)
+        colour_str = default_colour.value if default_colour else "grey"
+
+        group_id = await self._get_or_create_group(group_name, colour_str, session.window_id)
+        await self._add_target_to_group(session.target_id, group_id)
+        self._state.assign_session_to_group(task_name, group_id)
 
 async def set_window_title(page: Page, title: str) -> None:
     """Set the tab/window title to *title* for the given Playwright Page."""

@@ -58,6 +58,29 @@ LLM_URLS: Final[dict[LLMProvider, str]] = {
     LLMProvider.GROK:    "https://grok.com",
 }
 
+class TabColor(str, Enum):
+    """
+    Named colours recognised by Chrome’s Tab Groups API.
+    Values must be the lowercase strings expected by CDP.
+    """
+    GREY = "grey"
+    BLUE = "blue"
+    RED = "red"
+    YELLOW = "yellow"
+    GREEN = "green"
+    PINK = "pink"
+    PURPLE = "purple"
+    CYAN = "cyan"
+
+
+# Default colour choice per provider (used for automatic grouping)
+DEFAULT_PROVIDER_COLORS: Final[dict[LLMProvider, TabColor]] = {
+    LLMProvider.GEMINI:  TabColor.BLUE,
+    LLMProvider.CLAUDE:  TabColor.YELLOW,
+    LLMProvider.CHATGPT: TabColor.GREEN,
+    LLMProvider.GROK:    TabColor.RED,
+}
+
 # Default CDP remote-debugging port Chrome will listen on.
 CHROME_REMOTE_PORT: Final[int] = 9222
 

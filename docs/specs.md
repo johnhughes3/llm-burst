@@ -1,67 +1,180 @@
-How to spend your 5 daily “Gemini Deep Think” runs
-(tailored to the patterns in your recent chats and to what Deep Think actually does best)
+## 0  High‑level summary
 
-⸻
+| Item                 | Decision                                                                                                                                                                                                                                   |
+| -------------------- | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------ |
+| **Entry points**     | Keep the three Keyboard Maestro (KM) hot‑keys:<br>• **⌃⌥R** = `LLMs Activate` (new conversation)<br>• **⌃⌥F** = `LLMs Follow Up`<br>• **⌃⌥W** = `LLMs Arrange`<br>and add **⌃⌥G** = `LLMs Group/UnGroup`                                   |
+| **Where KM stops**   | Each macro becomes one “Execute Shell Script” line that calls **`llm‑burst`**, passing a sub‑command (`activate`, `follow‑up`, `arrange`, `toggle‑group`).  No other KM actions remain except for reading the clipboard before `activate`. |
+| **Primary browser**  | **Google Chrome** (stable `tab.id`, tab‑group APIs).  Safari adapter will be added later.                                                                                                                                                  |
+| **UI layer**         | **swiftDialog** CLI (immediate win) → optional SwiftUI sheet later.                                                                                                                                                                        |
+| **Automation API**   | **Playwright for Python** driving Chrome with a non‑headless window.                                                                                                                                                                       |
+| **Layout / tiling**  | Keep Rectangle hot‑keys.  `llm‑burst arrange` simulates the proper keystrokes depending on N windows (2, 3, 4).                                                                                                                            |
+| **State store**      | `~/Library/Application Support/llm‑burst/state.json` (one JSON file, no DB).                                                                                                                                                               |
+| **Testing**          | Pytest + Playwright screenshots; every new feature ships with at least one failing test first (red‑green‑refactor).                                                                                                                        |
+| **Delivery cadence** | 6 milestones, each < 1½ days.  The tool is always in a usable state.                                                                                                                                                                       |
 
-1. What Deep Think is uniquely good at
+---
 
-Capability	Why it matters for you
-10-20× longer context window	Lets you paste entire pleadings, multi-file code snippets, or long economic proofs and get a coherent, end-to-end answer.
-Chain-of-thought retention	Can keep track of nested legal doctrines, procedural timelines, or cross-file type definitions without losing the thread.
-Structured long-form output	Generates 3-5 k-word research memos, architectural blueprints, or slide decks in a single pass.
-High-precision code & math	Handles strictly-typed TS/Python refactors or formal economic models with fewer hallucinations.
-Better self-critique	Will surface edge cases, counter-arguments, and weak spots you can tighten in follow-ups.
+## 1  Repository / folder layout
 
-Use it when the depth and span of the work, not just speed, are the bottleneck.
+```
+llm-burst/
+├── llm_burst/                 # PYTHON PACKAGE  (import llm_burst)
+│   ├── __main__.py            # parses CLI args and dispatches
+│   ├── cli.py                 # Click / argparse commands
+│   ├── browser.py             # BrowserAbstraction + ChromeAdapter
+│   ├── sites/                 # one module per LLM website
+│   │   ├── __init__.py
+│   │   ├── gemini.py
+│   │   ├── claude.py
+│   │   ├── chatgpt.py
+│   │   └── grok.py
+│   ├── state.py               # load/save/upgrade JSON, prune dead sessions
+│   ├── layout.py              # window arrange & tab‑group utilities
+│   ├── autoname.py            # Gemini Flash call
+│   └── constants.py
+├── bin/
+│   └── swift_prompt.sh        # swiftDialog wrapper (Stage 1)
+├── tests/
+│   ├── test_activate.py
+│   ├── test_followup.py
+│   ├── test_arrange.py
+│   └── assets/                # reference screenshots
+├── requirements.txt           # playwright, click, pytest, google‑generativeai …
+└── README.md
+```
 
-⸻
+---
 
-2. Your highest-leverage query types
+## 2  Incremental milestones (T‑shirt sizes = actual dev time)
 
-Based on the last few weeks you regularly ask for:
-	1.	Complex legal synthesis – Rule 19 sovereign-immunity wrinkles, receivership offset doctrine, conflicts of interest for lawyer-founders.
-	2.	Long technical research prompts – NSFW male-model comparison, OAuth-MCP server scans, image-gen training costs.
-	3.	Architecture docs & refactors – Nix/Poetry/NPM mono-repo plans, RAG pipelines, batch-processing workflows.
-	4.	Economic thought experiments – AI abundance GE models, labor-market equilibria.
-	5.	Slide-worthy narratives – Partner-track AI talks, Westlaw Precision presentations.
+| Stage | Goal / deliverable                                                                                                                                                                                                                                                                                                                                                                                                                                                  | Key files                                        | Size |
+| ----- | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- | ------------------------------------------------ | ---- |
+| **0** | **Patch selectors** & wrap each in `tryFind()` helper; keep old KM macros.                                                                                                                                                                                                                                                                                                                                                                                          | `sites/*.py` (just JS strings today)             | S    |
+| **1** | **swiftDialog prompt**: huge textarea, task name, Research & Incognito check‑boxes.  KM `LLMs Activate` calls `swift_prompt.sh`, which sets KM variables then proceeds to old macro.                                                                                                                                                                                                                                                                                | `bin/swift_prompt.sh`                            | M    |
+| **2** | **Chrome adapter** in AppleScript (temporary) + JSON now records `{browser:"chrome", windowId, tabId}`.  KM macros still orchestrate.                                                                                                                                                                                                                                                                                                                               | `browser.py` (skeleton), `state.py`              | M    |
+| **3** | **llm‑burst CLI (Python + Playwright)** reproduces Activate & Follow‑up end‑to‑end.  KM macros slim down to `do shell script "llm-burst activate"` etc.                                                                                                                                                                                                                                                                                                             | `__main__.py`, `cli.py`, `browser.py`, `sites/*` | L    |
+| **4** | **Auto‑naming** via Gemini Flash.  Adds `title` to JSON and pregenerates default in swiftDialog.                                                                                                                                                                                                                                                                                                                                                                    | `autoname.py`, modify `swift_prompt.sh`          | S    |
+| **5** | **Group / UnGroup** command:<br>• If 4 free windows ⟶ group into one Chrome Tab Group named “📁 Archived Session” and remove them from Rectangle grid.<br>• If the front window is a Tab Group created by the tool ⟶ split back into 4 windows; any tabs **between** known LLM tabs ride along with their left neighbour.<br>Includes Playwright tests that validate: “after toggle‑group, `state.json` window ids are updated & screenshot patterns match sample.” | `layout.py`, tests                               | M    |
 
-These are exactly the arenas where Deep Think’s big context and reasoning shine.
+*After Stage 5, old AppleScript is deleted.  SafariAdapter becomes a standing backlog item.*
 
-⸻
+---
 
-3. Five concrete “ticket types” worth spending a daily use on
+## 3  Detailed component specs
 
-Ticket	When to invoke it	Example prompt seed (adapt to the day’s need)
-A. End-to-end legal brief or memo	Any time a partner-level argument must survey dozens of cases or statutes.	“Produce a 4,000-word memo: may an SEC receiver offset gross vs net collateral recoveries? Distill holdings, split into majority/minority approaches, cite 15+ cases.”
-B. Deep technical landscaping	When you need a survey + comparison + recommendation in one shot.	“Map the current OSS RAG orchestration runners (LangGraph, LlamaIndex, Flowise…). Rate on typing support, multitenancy cost control, and plug-in ecosystem.”
-C. Architecture playbook or refactor plan	Multilayer diagrams, typed code scaffolds, migration checklists.	“Design a Nix-flake mono-repo for Next.js 15 + Supabase + Python pipelines, strict TS + mypy, dev-container spec included.”
-D. Economic or statistical model write-up	Formalize rough ideas—you can later iterate with normal runs.	“Formulate a DSGE model showing equilibrium labor income share under AI price-level shocks; define equations and solve steady state.”
-E. Flagship slide-deck skeleton	For talks/clients where story arc matters.	“Draft a 15-slide outline (titles + bullet cues) for a partner CLE on AI liability: strict-product vs negligence, contract carve-outs, insurability.”
+### 3.1 `browser.py`
 
+```python
+class BrowserAdapter(ABC):
+    def open_llm_tab(self, model: str) -> Tuple[int, int]: ...
+    def focus(self, window_id: int, tab_id: int): ...
+    def execute_js(self, tab_id: int, script: str): ...
+    def close(self): ...
 
-⸻
+class ChromeAdapter(BrowserAdapter):
+    # uses Playwright's chromium.launch() and page.context
+```
 
-4. Workflow hacks to stretch each run
-	1.	Pre-stage inputs – Paste the statute sections, code files, or tabular data in the same request; Deep Think can digest ~80–100 k tokens.
-	2.	Ask for a scaffold first – e.g., “Give me headings + key points; we’ll flesh out sections II & III next.” Saves follow-up credits.
-	3.	Iterate in standard mode – Use normal Gemini/ChatGPT for polishing, shortening, or generating variants; reserve Deep Think for the heavy lifting.
-	4.	Bundle related asks – Instead of three separate prompts about RAG cost, embeddings, and queue orchestration, frame one integrated “pipeline cost model” request.
-	5.	Keep one slot free for “unknown unknowns” – A late-day curve-ball (e.g., emergency motion, sudden board question) often yields the highest ROI.
+*Keep one Playwright browser **context** for all four tabs to share cookies.*
 
-⸻
+### 3.2 `sites/*`
 
-5. Sample daily allocation
+Each module exposes:
 
-Slot	Typical timing	Use
-#1 – Morning	09:00	Draft that day’s most substantial legal/tech memo.
-#2 – Midday	12:30	Produce an architecture/design doc or code-refactor plan you’ll implement in the afternoon.
-#3 – Afternoon	15:00	Generate a slide-deck skeleton or economic model after client/partner calls clarify scope.
-#4 – Early evening	18:00	Deep comparative scan (e.g., vendor landscape) for strategic planning.
-#5 – Flex	Hold until needed	Emergency brief, large-context summarization, or serendipitous exploration.
+```python
+SUBMIT_JS = """/* javascript string with fallback selectors */"""
+FOLLOWUP_JS = """/* similar */"""
 
+def selectors_up_to_date(page) -> bool:
+    """Quick test used by pytest; fails if site UI changed."""
+```
 
-⸻
+### 3.3 `state.json` schema (v2)
 
-TL;DR
+```jsonc
+{
+  "schema": 2,
+  "sessions": [
+    {
+      "title": "My research idea",
+      "created": "2025-08-04T01:23:45Z",
+      "browser": "chrome",
+      "tabs": {
+        "gemini":   {"windowId": 111, "tabId": 222},
+        "claude":   {"windowId": 113, "tabId": 224},
+        "chatgpt":  {"windowId": 115, "tabId": 226},
+        "grok":     {"windowId": 117, "tabId": 228}
+      },
+      "grouped": false
+    }
+  ]
+}
+```
 
-Deploy Deep Think where context size + reasoning depth limit normal runs: gold-standard memos, exhaustive tech surveys, typed architecture blueprints, formal economic models, and flagship decks. Stage inputs carefully, ask for scaffolds first, and offload iterative polishing to baseline models to make each of your five daily shots count.
+`state.upgrade()` auto‑migrates v1→v2.
+
+### 3.4 `layout.py`
+
+```python
+def arrange(session):  # rectangle tiling
+    n = count_alive_windows(...)
+    trigger_rectangle_hotkeys(n)
+
+def group(session):
+    # Uses CDP via Playwright: chrome.tabs.group(...)
+    move_extra_tabs_left_of_each_llm_tab(...)
+
+def ungroup(session):
+    # Reverse of group(); respects manual extra tabs
+```
+
+### 3.5 swiftDialog wrapper (`bin/swift_prompt.sh`)
+
+*Parses dialog output of the form `Label : Value` and sets environment variables for KM or directly prints JSON for `llm‑burst activate --stdin-json`.*
+
+---
+
+## 4  Testing strategy
+
+| Test file                    | Purpose                                                                                                        | What the agent must implement              |
+| ---------------------------- | -------------------------------------------------------------------------------------------------------------- | ------------------------------------------ |
+| `tests/test_activate.py`     | “activate” opens 4 Chrome tabs, selectors all present, screenshots match `assets/activate_ok.png` at p90 SSIM. | Use Playwright screenshot + `pytest-ssim`. |
+| `tests/test_followup.py`     | After follow‑up, each tab input area is empty and waiting for reply.                                           | DOM assertions.                            |
+| `tests/test_arrange.py`      | On a 1440 × 900 virtual screen, Rectangle grid leaves no overlap.                                              | Use `pyobjc` to read window frames.        |
+| `tests/test_toggle_group.py` | Group then ungroup returns to original `state.json`, window ids changed, tabs count preserved.                 | JSON diff check.                           |
+
+Each new PR **must**:
+
+1. Add/modify a failing test.
+2. Make it pass.
+3. Run `pytest -q` with all green ticks.
+
+---
+
+## 5  KM macro stubs (for the human installer)
+
+```applescript
+-- LLMs Activate  (⌃⌥R)
+/usr/local/bin/llm-burst activate
+
+-- LLMs Follow Up (⌃⌥F)
+/usr/local/bin/llm-burst follow-up
+
+-- LLMs Arrange    (⌃⌥W)
+/usr/local/bin/llm-burst arrange
+
+-- LLMs Group / UnGroup (⌃⌥G)
+/usr/local/bin/llm-burst toggle-group
+```
+
+(If you need clipboard text inside `activate`, have KM place it in `LLMB_CLIPBOARD` env var before the shell call.)
+
+---
+
+## 6  Immediate next action for the coding agent
+
+1. **Clone** empty repo, create structure in §1.
+2. **Stage 0**: copy existing JS selectors into `sites/*`, wrap with `tryFind()`, add basic unit test `selectors_up_to_date` that simply calls each function. Commit.
+3. Create GitHub Actions workflow that runs `pytest` on macOS‑latest with Playwright headed mode.
+
+Once Stage 0 is merged, proceed to Stage 1, following the table in §2 exactly.
