@@ -1,5 +1,0 @@
-playwright
-pytest
-pytest-playwright
-click
-google-generativeai
