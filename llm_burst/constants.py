@@ -86,7 +86,7 @@ GEMINI_MODEL_NAME: Final[str] = "gemini-2.0-flash-exp"
 GEMINI_API_KEY_ENV: Final[str] = "GEMINI_API_KEY"
 
 # Maximum characters to extract from conversation for naming
-AUTO_NAMING_MAX_CHARS: Final[int] = 25000
+AUTO_NAMING_MAX_CHARS: Final[int] = 10000
 
 # Timeout for auto-naming operation (seconds)
 AUTO_NAMING_TIMEOUT: Final[float] = 15.0
