@@ -19,7 +19,7 @@ jobs:
       - name: Install dependencies
         run: |
           pip install -e .
-          pip install pytest pytest-playwright
+          pip install pytest pytest-asyncio pytest-playwright
           python -m playwright install --with-deps chromium
 
       - name: Run pytest (headed)
