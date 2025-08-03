@@ -156,7 +156,9 @@ async def extract_conversation(
         full_text = "\n\n".join(conversation)
         
         # Truncate to max_chars from the end (most recent context)
+        # This keeps the latest messages which are most relevant for naming
         if len(full_text) > max_chars:
+            # Keep the last max_chars characters, add "..." to indicate truncation
             full_text = "..." + full_text[-(max_chars - 3):]
         
         return full_text
