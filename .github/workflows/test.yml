@@ -22,8 +22,14 @@ jobs:
           pip install pytest pytest-asyncio pytest-playwright
           python -m playwright install --with-deps chromium
 
-      - name: Run pytest (headed)
+      - name: Run pytest (unit tests)
         env:
           PYTHONUNBUFFERED: "1"
         run: |
-          pytest -v --headed
+          pytest -v -m unit tests/test_browser.py
+      
+      - name: Run pytest (integration tests - headed)
+        env:
+          PYTHONUNBUFFERED: "1"
+        run: |
+          pytest -v --headed -m "not unit"

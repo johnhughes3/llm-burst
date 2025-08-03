@@ -22,6 +22,10 @@ testpaths = ["tests"]
 python_files = ["test_*.py"]
 python_classes = ["Test*"]
 python_functions = ["test_*"]
+asyncio_mode = "auto"
+markers = [
+    "unit: marks tests as unit tests (deselect with '-m \"not unit\"')",
+]
 
 [tool.uv]
 dev-dependencies = [

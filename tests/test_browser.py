@@ -17,6 +17,9 @@ from llm_burst.browser import BrowserAdapter, SessionHandle
 from llm_burst.constants import LLMProvider, LLM_URLS, CHROME_REMOTE_PORT
 from llm_burst.state import StateManager, LiveSession
 
+# Mark all tests in this module as unit tests to avoid playwright conflicts
+pytestmark = pytest.mark.unit
+
 
 @pytest.fixture
 def temp_state_file(tmp_path):
