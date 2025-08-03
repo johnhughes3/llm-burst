@@ -231,3 +231,26 @@ class BrowserAdapter:
         except Exception:             # pragma: no cover
             return None
         return None
+
+    async def close_window(self, task_name: str) -> bool:
+        """
+        Close the browser window associated with *task_name*.
+
+        Returns
+        -------
+        bool
+            True if a window was found and closed, False otherwise.
+        """
+        await self._ensure_connection()
+
+        session = self._state.get(task_name)
+        if session is None:
+            return False
+
+        # Issue CDP command to close the target and clean up state
+        cdp = self._browser.contexts[0]._connection
+        try:
+            await cdp.send("Target.closeTarget", {"targetId": session.target_id})
+        finally:
+            self._state.remove(task_name)
+        return True

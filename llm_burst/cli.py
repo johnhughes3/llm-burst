@@ -18,7 +18,8 @@ import asyncio
 import json
 import subprocess
 import sys
-from typing import Any, Dict
+from typing import Any, Dict, Union
+import logging
 
 from .constants import (
     SWIFT_PROMPT_SCRIPT,
@@ -27,6 +28,7 @@ from .constants import (
     LLMProvider,
 )
 from .browser import BrowserAdapter, SessionHandle
+from .providers import get_injector
 
 
 def prompt_user() -> Dict[str, Any]:
@@ -106,6 +108,45 @@ async def _async_open_window(task_name: str, provider: LLMProvider) -> SessionHa
         return await adapter.open_window(task_name, provider)
 
 
+def send_prompt_sync(handle_or_task: Union[SessionHandle, str], prompt: str) -> None:
+    """
+    Synchronous bridge that injects *prompt* into an existing session.
+
+    Parameters
+    ----------
+    handle_or_task : SessionHandle | str
+        Either a previously returned SessionHandle or a task name.
+    prompt : str
+        Text to send to the provider's chat box.
+    """
+    asyncio.run(_async_send_prompt(handle_or_task, prompt))
+
+
+async def _async_send_prompt(handle_or_task: Union[SessionHandle, str], prompt: str) -> None:
+    from .state import StateManager
+    from .browser import BrowserAdapter
+
+    # Resolve provider + page
+    if isinstance(handle_or_task, SessionHandle):
+        provider = handle_or_task.live.provider
+        page = handle_or_task.page
+    else:
+        task_name = handle_or_task
+        state = StateManager()
+        session = state.get(task_name)
+        if session is None:
+            raise RuntimeError(f"No live session found for task '{task_name}'")
+
+        async with BrowserAdapter() as adapter:
+            page = await adapter._find_page_for_target(session.target_id)
+            if page is None:
+                raise RuntimeError(f"Could not locate page for task '{task_name}'")
+            provider = session.provider
+
+    injector = get_injector(provider)
+    await injector(page, prompt)
+
+
 def get_running_sessions() -> Dict[str, Any]:
     """
     Retrieve all currently tracked browser sessions.
@@ -135,3 +176,19 @@ def get_running_sessions() -> Dict[str, Any]:
         }
         for task_name, session in sessions.items()
     }
+
+
+def close_llm_window_sync(task_name: str) -> bool:
+    """
+    Close and unregister the browser window for *task_name*.
+
+    Returns True if a window was found and closed.
+    """
+    return asyncio.run(_async_close_window(task_name))
+
+
+async def _async_close_window(task_name: str) -> bool:
+    from .browser import BrowserAdapter
+
+    async with BrowserAdapter() as adapter:
+        return await adapter.close_window(task_name)
