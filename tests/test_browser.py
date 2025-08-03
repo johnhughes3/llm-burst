@@ -94,61 +94,75 @@ async def test_browser_adapter_launches_chrome_if_not_running(temp_state_file):
 @pytest.mark.asyncio
 async def test_open_window_creates_new_window(temp_state_file):
     """Test that open_window creates a new browser window and tracks it."""
+    # Ensure clean state
+    StateManager._instance = None
+    
     with patch("llm_burst.browser.async_playwright") as mock_playwright:
-        # Setup mocks
+        # --- Playwright bootstrap --------------------------------------- #
         mock_pw_instance = AsyncMock()
         mock_playwright.return_value.start = AsyncMock(return_value=mock_pw_instance)
-        
+
+        # --- Mock Page -------------------------------------------------- #
         mock_page = AsyncMock()
         mock_page.guid = "test-page-guid"
-        mock_page.goto = AsyncMock()
-        
-        # Create CDP session mock for the slow path in _find_page_for_target
-        mock_session = AsyncMock()
-        mock_session.send = AsyncMock()
-        
+        mock_page.goto = AsyncMock(return_value=None)
+        mock_page._target_id = "test-target-id"
+
+        # --- Browser / context / CDP wiring ---------------------------- #
         mock_context = AsyncMock()
-        mock_context.pages = []  # Start empty, will be populated after attach
+        # Start with no pages - they'll be added during CDP attach
+        mock_context.pages = []
+        
+        # Mock CDP session for slow path in _find_page_for_target
+        mock_session = AsyncMock()
+        async def session_send(command, params):
+            if command == "Target.attachToTarget":
+                # After attach, add the page to context
+                mock_context.pages.append(mock_page)
+            return {}
+        mock_session.send = AsyncMock(side_effect=session_send)
         mock_context.new_cdp_session = AsyncMock(return_value=mock_session)
-        
+
         mock_connection = AsyncMock()
-        mock_connection.send = AsyncMock(side_effect=[
-            {"targetId": "test-target-id"},  # Browser.createTarget
-            {"windowId": 12345},              # Browser.getWindowForTarget
-        ])
+
+        async def mock_cdp_send(command, params=None):
+            # Handle Tab-Groups probe and standard commands
+            if command == "TabGroups.get":
+                from playwright.async_api import Error as PlaywrightError
+                raise PlaywrightError("methodNotFound")
+            if command == "Browser.createTarget":
+                return {"targetId": "test-target-id"}
+            if command == "Browser.getWindowForTarget":
+                return {"windowId": 12345}
+            raise ValueError(f"Unexpected CDP command: {command}")
+
+        mock_connection.send = AsyncMock(side_effect=mock_cdp_send)
         mock_context._connection = mock_connection
-        
+
         mock_browser = AsyncMock()
         mock_browser.contexts = [mock_context]
         mock_pw_instance.chromium.connect_over_cdp = AsyncMock(return_value=mock_browser)
-        
+
+        # --- Execute ---------------------------------------------------- #
         # Patch asyncio.sleep to avoid delays in tests
         with patch("asyncio.sleep", new_callable=AsyncMock):
             async with BrowserAdapter() as adapter:
-                # Simulate page appearing after CDP attach
-                # This happens after Target.attachToTarget in _find_page_for_target
-                async def add_page_after_attach(*args, **kwargs):
-                    mock_page._target_id = "test-target-id"
-                    mock_context.pages = [mock_page]
-                
-                mock_session.send.side_effect = add_page_after_attach
-                
                 handle = await adapter.open_window("Test-Task", LLMProvider.CLAUDE)
-                
-                # Verify session handle
+
+                # Verify session handle contents
                 assert isinstance(handle, SessionHandle)
                 assert handle.live.task_name == "Test-Task"
                 assert handle.live.provider == LLMProvider.CLAUDE
                 assert handle.live.target_id == "test-target-id"
                 assert handle.live.window_id == 12345
                 assert handle.page is mock_page
-                
-                # Verify navigation
-                mock_page.goto.assert_called_once_with(
+
+                # Verify navigation call
+                mock_page.goto.assert_awaited_once_with(
                     LLM_URLS[LLMProvider.CLAUDE],
-                    wait_until="domcontentloaded"
+                    wait_until="domcontentloaded",
                 )
-                
+
                 # Verify state persistence
                 state = StateManager()
                 session = state.get("Test-Task")
