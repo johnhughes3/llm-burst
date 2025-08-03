@@ -27,6 +27,7 @@ from llm_burst.cli import (
     get_running_sessions,
     close_llm_window_sync,
     prompt_user,
+    auto_name_sync,   # Added
 )
 
 _LOG = logging.getLogger(__name__)
@@ -131,33 +132,46 @@ def cmd_open(
 ) -> None:
     """Open a new LLM window (or re-attach) and optionally send a prompt."""
 
-    # Merge missing values from swiftDialog
-    if provider is None or task_name is None or (prompt_text is None and not stdin):
+    # Merge missing values from swiftDialog prompt when any field absent
+    if provider is None or (task_name is None and not reuse) or (prompt_text is None and not stdin):
         user_data = prompt_user()
         provider = provider or user_data.get("provider")
         task_name = task_name or user_data.get("task_name") or user_data.get("task")
         prompt_text = prompt_text or user_data.get("prompt_text") or user_data.get("prompt")
 
-    if provider is None or task_name is None:
-        raise click.UsageError("provider and task-name are required")
+    # Validation
+    if provider is None:
+        raise click.UsageError("provider is required")
+
+    if reuse and task_name is None:
+        raise click.UsageError("--reuse requires --task-name")
 
     provider_enum = _provider_from_str(provider)
 
     from llm_burst.state import StateManager
-
     state = StateManager()
     if reuse and task_name in state.list_all():
         raise click.ClickException(f"Session '{task_name}' already exists (reuse flag set).")
 
+    # Read prompt text from STDIN if requested
     if stdin:
         prompt_text = sys.stdin.read()
 
+    # Open / attach window
     handle = open_llm_window(task_name, provider_enum)
-    click.echo(f"Opened window '{task_name}' → {provider_enum.name}")
+    actual_name = handle.live.task_name
+    click.echo(f"Opened window '{actual_name}' → {provider_enum.name}")
 
+    # Send prompt if provided
     if prompt_text:
         send_prompt_sync(handle, prompt_text)
         click.echo("Prompt sent.")
+
+    # Attempt auto-naming when we used a placeholder (no explicit task_name)
+    if task_name is None:
+        new_name = auto_name_sync(handle)
+        if new_name and new_name != actual_name:
+            click.echo(f"Session renamed to '{new_name}'")
 
 
 # --------------------------------------------------------------------------- #

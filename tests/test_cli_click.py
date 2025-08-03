@@ -70,6 +70,7 @@ def test_list_command_json_output(runner):
 def test_open_command_with_all_args(runner):
     """Test open command with all arguments provided."""
     mock_handle = Mock()
+    mock_handle.live.task_name = "Test-Task"
     with patch("llm_burst.cli_click.open_llm_window", return_value=mock_handle):
         with patch("llm_burst.cli_click.send_prompt_sync") as mock_send:
             result = runner.invoke(
@@ -95,6 +96,7 @@ def test_open_command_with_dialog(runner):
         "prompt_text": "From dialog",
     }
     mock_handle = Mock()
+    mock_handle.live.task_name = "Dialog-Task"
     
     with patch("llm_burst.cli_click.prompt_user", return_value=mock_user_data):
         with patch("llm_burst.cli_click.open_llm_window", return_value=mock_handle):
@@ -107,6 +109,7 @@ def test_open_command_with_dialog(runner):
 def test_open_command_stdin(runner):
     """Test open command reading from stdin."""
     mock_handle = Mock()
+    mock_handle.live.task_name = "Stdin-Task"
     stdin_text = "This is from stdin"
     
     with patch("llm_burst.cli_click.open_llm_window", return_value=mock_handle):

@@ -74,3 +74,19 @@ STATE_FILE: Final[Path] = Path(
         Path.home() / ".config/llm-burst/state.json",
     )
 )
+
+# --------------------------------------------------------------------------- #
+# Gemini API Configuration
+# --------------------------------------------------------------------------- #
+
+# Gemini model to use for auto-naming
+GEMINI_MODEL_NAME: Final[str] = "gemini-1.5-flash"
+
+# Environment variable for Gemini API key
+GEMINI_API_KEY_ENV: Final[str] = "GEMINI_API_KEY"
+
+# Maximum characters to extract from conversation for naming
+AUTO_NAMING_MAX_CHARS: Final[int] = 4000
+
+# Timeout for auto-naming operation (seconds)
+AUTO_NAMING_TIMEOUT: Final[float] = 15.0

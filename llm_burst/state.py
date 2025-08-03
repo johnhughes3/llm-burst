@@ -167,3 +167,27 @@ class StateManager:
     def list_all(self) -> Dict[str, LiveSession]:
         """Shallow copy of the internal mapping."""
         return dict(self._sessions)
+
+    def rename(self, old_name: str, new_name: str) -> Optional[LiveSession]:
+        """
+        Rename a session from old_name to new_name.
+        
+        Returns the renamed LiveSession on success, None if:
+        - old_name doesn't exist
+        - new_name already exists (collision)
+        """
+        # Check preconditions
+        if old_name not in self._sessions:
+            return None
+        if new_name in self._sessions:
+            _LOG.warning("Cannot rename '%s' to '%s': target name already exists", old_name, new_name)
+            return None
+        
+        # Perform rename
+        session = self._sessions.pop(old_name)
+        session.task_name = new_name
+        self._sessions[new_name] = session
+        self._persist()
+        
+        _LOG.info("Renamed session '%s' to '%s'", old_name, new_name)
+        return session

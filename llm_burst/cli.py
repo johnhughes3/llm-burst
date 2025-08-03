@@ -18,8 +18,9 @@ import asyncio
 import json
 import subprocess
 import sys
-from typing import Any, Dict, Union
+from typing import Any, Dict, Union, Optional
 import logging
+from uuid import uuid4
 
 from .constants import (
     SWIFT_PROMPT_SCRIPT,
@@ -73,32 +74,22 @@ def prompt_user() -> Dict[str, Any]:
 # Stage-2: Async bridge functions                                             #
 # --------------------------------------------------------------------------- #
 
+def _generate_placeholder(provider: LLMProvider) -> str:
+    """Generate a placeholder task name like 'PROVIDER-1a2b'."""
+    return f"{provider.name}-{uuid4().hex[:4]}"
+
+
 def open_llm_window(task_name: str, provider: LLMProvider) -> SessionHandle:
     """
     Synchronous wrapper to open an LLM browser window.
-    
-    This function bridges the gap between synchronous CLI code and the async
-    BrowserAdapter, allowing Stage 3's Click CLI to remain fully synchronous.
-    
-    Parameters
-    ----------
-    task_name : str
-        The name of the task (used for tracking and window titles).
-    provider : LLMProvider
-        Which LLM service to open (GEMINI, CLAUDE, CHATGPT, or GROK).
-    
-    Returns
-    -------
-    SessionHandle
-        Contains the live session metadata and Playwright Page object.
-    
-    Example
-    -------
-    >>> from llm_burst.constants import LLMProvider
-    >>> from llm_burst.cli import open_llm_window
-    >>> handle = open_llm_window("Research-APIs", LLMProvider.CLAUDE)
-    >>> print(f"Opened {handle.live.provider.name} window for {handle.live.task_name}")
+
+    *task_name* may be ``None`` – in that case a placeholder of the form
+    ``PROVIDER-xxxx`` is generated and later eligible for auto-naming.
     """
+    # Generate placeholder if caller supplied no explicit name
+    if task_name is None:                       # type: ignore[arg-type]
+        task_name = _generate_placeholder(provider)
+
     return asyncio.run(_async_open_window(task_name, provider))
 
 
@@ -192,3 +183,18 @@ async def _async_close_window(task_name: str) -> bool:
 
     async with BrowserAdapter() as adapter:
         return await adapter.close_window(task_name)
+
+
+def auto_name_sync(handle: SessionHandle) -> Optional[str]:
+    """
+    Invoke the asynchronous auto-naming routine for *handle* and wait for
+    completion.
+
+    Returns
+    -------
+    str | None
+        The new task name when a rename occurred, otherwise ``None``.
+    """
+    from .auto_namer import auto_name_session
+
+    return asyncio.run(auto_name_session(handle.live, handle.page))

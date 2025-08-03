@@ -254,3 +254,11 @@ class BrowserAdapter:
         finally:
             self._state.remove(task_name)
         return True
+
+async def set_window_title(page: Page, title: str) -> None:
+    """Set the tab/window title to *title* for the given Playwright Page."""
+    try:
+        await page.evaluate(f"document.title = {repr(title)}")
+    except Exception as exc:
+        import logging
+        logging.getLogger(__name__).debug("Failed to set window title: %s", exc)
