@@ -1,33 +1,24 @@
 """Gemini site automation JavaScript selectors and functions."""
 
-SUBMIT_JS = """
-function tryFind(selector, description) {
-    try {
-        const element = document.querySelector(selector);
-        if (!element) {
-            console.warn(`${description} not found with selector: ${selector}`);
-            return null;
-        }
-        return element;
-    } catch (error) {
-        console.error(`Error finding ${description}: ${error.message}`);
-        return null;
-    }
-}
-
+# JavaScript for initial prompt submission (activate command)
+SUBMIT_JS = r"""
 function automateGeminiChat(messageText, enableResearch) {
   return new Promise((resolve, reject) => {
     try {
       // Step 1: Check if we need to enable Deep Research first
       if (enableResearch === 'Yes') {
         console.log('Research mode requested, will enable Deep Research first');
+        // Enable research before model selection to avoid dropdown conflicts
         enableDeepResearch(() => {
+          // Continue with model selection after enabling research
           selectModelAndProceed(messageText, resolve, reject);
         }, () => {
+          // If research enabling fails, still try to continue with model selection
           console.log('Could not enable Deep Research, continuing with model selection');
           selectModelAndProceed(messageText, resolve, reject);
         });
       } else {
+        // Skip research step, go directly to model selection
         console.log('Regular mode requested, proceeding to model selection');
         selectModelAndProceed(messageText, resolve, reject);
       }
@@ -42,13 +33,15 @@ function enableDeepResearch(onSuccess, onFailure) {
     // Method 1: Try toolbar button first
     const toolbarButtons = Array.from(document.querySelectorAll('button.toolbox-drawer-item-button'))
       .filter(button => {
-        const labelDiv = tryFind('.toolbox-drawer-button-label', 'toolbar label');
+        const labelDiv = button.querySelector('.toolbox-drawer-button-label');
         return labelDiv && labelDiv.textContent.trim() === 'Deep Research';
       });
     
     if (toolbarButtons.length > 0) {
       console.log('Found Deep Research button in toolbar, clicking it');
       toolbarButtons[0].click();
+      
+      // Wait for button action to take effect
       setTimeout(onSuccess, 500);
       return;
     }
@@ -63,6 +56,22 @@ function enableDeepResearch(onSuccess, onFailure) {
     if (iconButtons.length > 0) {
       console.log('Found Deep Research button by icon, clicking it');
       iconButtons[0].click();
+      
+      setTimeout(onSuccess, 500);
+      return;
+    }
+    
+    // Method 3: Any button containing Deep Research text
+    const anyButtons = Array.from(document.querySelectorAll('button'))
+      .filter(button => {
+        const text = button.textContent || '';
+        return text.includes('Deep Research');
+      });
+    
+    if (anyButtons.length > 0) {
+      console.log('Found Deep Research button by text content, clicking it');
+      anyButtons[0].click();
+      
       setTimeout(onSuccess, 500);
       return;
     }
@@ -77,8 +86,10 @@ function enableDeepResearch(onSuccess, onFailure) {
 
 function selectModelAndProceed(messageText, resolve, reject) {
   try {
+    // Find and click the model selector button
     console.log('Looking for model selector button');
     
+    // Find buttons that might be the model selector
     const possibleModelButtons = Array.from(document.querySelectorAll('button'))
       .filter(button => {
         const text = button.textContent || '';
@@ -93,6 +104,7 @@ function selectModelAndProceed(messageText, resolve, reject) {
     
     if (!modelButton) {
       console.log('Model selector button not found, proceeding with current model');
+      // Skip to adding text
       addTextAndSend(messageText, resolve, reject);
       return;
     }
@@ -100,9 +112,11 @@ function selectModelAndProceed(messageText, resolve, reject) {
     console.log('Found model selector button, clicking it');
     modelButton.click();
     
+    // Wait for dropdown to appear and click 2.5 Pro option
     setTimeout(() => {
       console.log('Looking for 2.5 Pro button in dropdown');
       
+      // Find 2.5 Pro button in the dropdown
       const proButtons = Array.from(document.querySelectorAll('button'))
         .filter(button => {
           const text = button.textContent || '';
@@ -113,6 +127,7 @@ function selectModelAndProceed(messageText, resolve, reject) {
       
       if (!proButton) {
         console.log('2.5 Pro button not found, proceeding with current model');
+        // Click somewhere else to close the dropdown
         document.body.click();
         setTimeout(() => {
           addTextAndSend(messageText, resolve, reject);
@@ -123,6 +138,7 @@ function selectModelAndProceed(messageText, resolve, reject) {
       console.log('Found 2.5 Pro button, clicking it');
       proButton.click();
       
+      // Wait for model selection to apply and dropdown to close
       setTimeout(() => {
         addTextAndSend(messageText, resolve, reject);
       }, 500);
@@ -134,41 +150,49 @@ function selectModelAndProceed(messageText, resolve, reject) {
 
 function addTextAndSend(messageText, resolve, reject) {
   try {
-    const editor = tryFind('.ql-editor', 'Gemini editor');
+    // Find the editable text area
+    const editor = document.querySelector('.ql-editor');
     if (!editor) {
       reject('Editor element not found');
       return;
     }
     console.log('Found editor element');
     
+    // Focus the editor
     editor.focus();
+    
+    // Clear existing content
     editor.innerHTML = '';
     
-    const lines = messageText.split('\\n');
+    // Split text into paragraphs and add them properly
+    const lines = messageText.split('\n');
     lines.forEach(line => {
       const p = document.createElement('p');
-      p.textContent = line || '\\u00A0';
+      // Use non-breaking space for empty lines to maintain structure
+      p.textContent = line || '\u00A0';
       editor.appendChild(p);
     });
     console.log('Text added as individual paragraphs');
     
+    // Dispatch input event to ensure the UI updates
     editor.dispatchEvent(new Event('input', { bubbles: true, cancelable: true }));
     console.log('Input event dispatched');
     
+    // Wait for send button (using the slightly longer delay and retry logic)
     setTimeout(() => {
-      const sendButton = tryFind('button.send-button', 'send button');
+      const sendButton = document.querySelector('button.send-button');
       if (!sendButton) {
         reject('Send button not found');
         return;
       }
       console.log('Found send button');
-      
       if (sendButton.getAttribute('aria-disabled') === 'true') {
         console.log('Send button is disabled, waiting longer...');
         setTimeout(() => {
           if (sendButton.getAttribute('aria-disabled') === 'true') {
+            // Try dispatching another input event just before the final check
             editor.dispatchEvent(new Event('input', { bubbles: true, cancelable: true }));
-            setTimeout(() => {
+            setTimeout(() => { // Nested timeout
               if (sendButton.getAttribute('aria-disabled') === 'true') {
                 reject('Send button is still disabled after waiting and extra event');
                 return;
@@ -188,32 +212,23 @@ function addTextAndSend(messageText, resolve, reject) {
       sendButton.click();
       console.log('Send button clicked');
       resolve();
-    }, 750);
+    }, 750); // Initial wait after inserting text
   } catch (error) {
     reject(`Error adding text or sending: ${error}`);
   }
 }
+
+// Entry point
+automateGeminiChat(messageText, enableResearch);
 """
 
-FOLLOWUP_JS = """
-function tryFind(selector, description) {
-    try {
-        const element = document.querySelector(selector);
-        if (!element) {
-            console.warn(`${description} not found with selector: ${selector}`);
-            return null;
-        }
-        return element;
-    } catch (error) {
-        console.error(`Error finding ${description}: ${error.message}`);
-        return null;
-    }
-}
-
+# JavaScript for follow-up messages
+FOLLOWUP_JS = r"""
 function geminiFollowUpMessage(messageText) {
   return new Promise((resolve, reject) => {
     try {
-      const editor = tryFind('.ql-editor', 'Gemini editor');
+      // Find the editable text area
+      const editor = document.querySelector('.ql-editor');
       if (!editor) {
         console.error('Gemini editor element not found');
         reject('Editor element not found');
@@ -222,21 +237,24 @@ function geminiFollowUpMessage(messageText) {
       console.log('Found Gemini editor element');
 
       editor.focus();
-      editor.innerHTML = '';
+      editor.innerHTML = ''; // Clear existing content
 
-      const lines = messageText.split('\\n');
+      // Split text into paragraphs and add them properly
+      const lines = messageText.split('\n');
       lines.forEach(line => {
         const p = document.createElement('p');
-        p.textContent = line || '\\u00A0';
+        p.textContent = line || '\u00A0'; // Use non-breaking space for empty lines
         editor.appendChild(p);
       });
       console.log('Follow-up text added as individual paragraphs');
 
+      // Dispatch input event
       editor.dispatchEvent(new Event('input', { bubbles: true, cancelable: true }));
       console.log('Input event dispatched');
 
+      // Wait for send button (using the existing retry logic)
       const checkSendButton = () => {
-        const sendButton = tryFind('.send-button', 'send button');
+        const sendButton = document.querySelector('.send-button');
         if (!sendButton) {
           reject('Send button not found');
           return;
@@ -247,7 +265,7 @@ function geminiFollowUpMessage(messageText) {
 
         if (isDisabled) {
           console.log('Send button is disabled, waiting...');
-          setTimeout(checkSendButton, 300);
+          setTimeout(checkSendButton, 300); // Keep checking
           return;
         }
         console.log('Send button enabled, clicking');
@@ -255,7 +273,7 @@ function geminiFollowUpMessage(messageText) {
         console.log('Gemini follow-up message sent successfully');
         resolve();
       };
-      setTimeout(checkSendButton, 500);
+      setTimeout(checkSendButton, 500); // Initial delay before checking
 
     } catch (error) {
         console.error(`Error in geminiFollowUpMessage: ${error}`);
@@ -263,6 +281,9 @@ function geminiFollowUpMessage(messageText) {
     }
   });
 }
+
+// Entry point
+geminiFollowUpMessage(messageText);
 """
 
 def selectors_up_to_date(page) -> bool:

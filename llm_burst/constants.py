@@ -113,3 +113,48 @@ AUTO_NAMING_MAX_CHARS: Final[int] = 10000
 
 # Timeout for auto-naming operation (seconds)
 AUTO_NAMING_TIMEOUT: Final[float] = 15.0
+
+class RectangleAction(str, Enum):
+    """
+    Window-positioning actions understood by Rectangle.app.
+
+    Values correspond to the `--action` flags accepted by *rectangle-cli*
+    (when installed).  For keystroke fallback, we map each action to a
+    (key, modifiers) tuple in ``RECTANGLE_KEY_BINDINGS``.
+    """
+    LEFT_HALF = "left-half"
+    RIGHT_HALF = "right-half"
+    UPPER_LEFT = "upper-left"
+    UPPER_RIGHT = "upper-right"
+    LOWER_LEFT = "lower-left"
+    LOWER_RIGHT = "lower-right"
+
+# Map number-of-windows → ordered list of RectangleAction operations.
+# The order in which actions are executed determines the final grid
+# (top-to-bottom, left-to-right for deterministic screenshots).
+RECTANGLE_LAYOUTS: Final[dict[int, list[RectangleAction]]] = {
+    1: [RectangleAction.LEFT_HALF],  # fall back to left-half for single window
+    2: [RectangleAction.LEFT_HALF, RectangleAction.RIGHT_HALF],
+    3: [
+        RectangleAction.LEFT_HALF,
+        RectangleAction.UPPER_RIGHT,
+        RectangleAction.LOWER_RIGHT,
+    ],
+    4: [
+        RectangleAction.UPPER_LEFT,
+        RectangleAction.UPPER_RIGHT,
+        RectangleAction.LOWER_LEFT,
+        RectangleAction.LOWER_RIGHT,
+    ],
+}
+
+# Default key + modifier mapping that matches Rectangle’s factory shortcuts.
+# These will be used when rectangle-cli is unavailable.
+RECTANGLE_KEY_BINDINGS: Final[dict[RectangleAction, tuple[str, str]]] = {
+    RectangleAction.LEFT_HALF:  ("Left",  "ctrl+alt"),
+    RectangleAction.RIGHT_HALF: ("Right", "ctrl+alt"),
+    RectangleAction.UPPER_LEFT: ("Left",  "ctrl+alt+shift"),
+    RectangleAction.UPPER_RIGHT:("Right", "ctrl+alt+shift"),
+    RectangleAction.LOWER_LEFT: ("Left",  "ctrl+alt+cmd"),
+    RectangleAction.LOWER_RIGHT:("Right", "ctrl+alt+cmd"),
+}

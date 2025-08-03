@@ -98,52 +98,40 @@ function focusInputArea() {
 }
 """
 
-FOLLOWUP_JS = """
-function tryFind(selector, description) {
-    try {
-        const element = document.querySelector(selector);
-        if (!element) {
-            console.warn(`${description} not found with selector: ${selector}`);
-            return null;
-        }
-        return element;
-    } catch (error) {
-        console.error(`Error finding ${description}: ${error.message}`);
-        return null;
-    }
-}
-
+FOLLOWUP_JS = r"""
 function claudeFollowUpMessage(messageText) {
   return new Promise((resolve, reject) => {
     try {
-        const editorElement = tryFind('.ProseMirror', 'Claude editor');
+        // Find the ProseMirror element
+        const editorElement = document.querySelector('.ProseMirror');
         if (!editorElement) {
           console.error('Claude editor element not found');
           reject('Editor element not found');
           return;
         }
         editorElement.focus();
-        editorElement.innerHTML = '';
-        
-        const lines = messageText.split('\\n');
+        editorElement.innerHTML = ''; // Clear
+        // Split text by line breaks and create proper paragraph elements
+        const lines = messageText.split('\n');
         lines.forEach(line => {
           const p = document.createElement('p');
-          p.textContent = line || '\\u00A0';
+          p.textContent = line || '\u00A0'; // Use nbsp for empty lines
           editorElement.appendChild(p);
         });
         console.log('Follow-up text added as individual paragraphs');
-        
+        // Dispatch input event
         const inputEvent = new Event('input', { bubbles: true });
         editorElement.dispatchEvent(inputEvent);
         console.log('Input event dispatched');
-        
+        // Wait for send button (existing logic is fine)
         setTimeout(() => {
-          const sendButton = tryFind('button[aria-label="Send message"]', 'Claude send button');
+          const sendButton = document.querySelector('button[aria-label="Send message"]');
           if (!sendButton) {
             reject('Send button not found');
             return;
           }
           if (sendButton.disabled) {
+             // Adding a retry mechanism similar to Gemini's for robustness
              console.log('Claude send button disabled, retrying...');
              setTimeout(() => {
                  if (sendButton.disabled) {
@@ -153,6 +141,7 @@ function claudeFollowUpMessage(messageText) {
                  sendButton.click();
                  console.log('Follow-up message sent successfully after retry');
                  
+                 // Scroll to bottom after 1 second
                  setTimeout(() => {
                    window.scrollTo({
                      top: document.documentElement.scrollHeight,
@@ -162,12 +151,13 @@ function claudeFollowUpMessage(messageText) {
                  }, 1000);
                  
                  resolve();
-             }, 500);
+             }, 500); // Wait another 500ms
              return;
           }
           sendButton.click();
           console.log('Follow-up message sent successfully');
           
+          // Scroll to bottom after 1 second
           setTimeout(() => {
             window.scrollTo({
               top: document.documentElement.scrollHeight,
@@ -177,13 +167,16 @@ function claudeFollowUpMessage(messageText) {
           }, 1000);
           
           resolve();
-        }, 500);
+        }, 500); // Initial timeout
     } catch (error) {
         console.error(`Error in claudeFollowUpMessage: ${error}`);
         reject(`Error adding text or sending: ${error}`);
     }
   });
 }
+
+// Entry point
+claudeFollowUpMessage(messageText);
 """
 
 def selectors_up_to_date(page) -> bool:

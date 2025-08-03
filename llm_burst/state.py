@@ -26,7 +26,7 @@ import fcntl
 from dataclasses import dataclass
 from datetime import datetime, timezone
 from pathlib import Path
-from typing import Dict, Optional, Any
+from typing import Dict, Optional, Any, Tuple, NamedTuple, List
 
 from .constants import STATE_FILE, LLMProvider
 
@@ -36,6 +36,19 @@ _LOG = logging.getLogger(__name__)
 # --------------------------------------------------------------------------- #
 # Dataclasses                                                                 #
 # --------------------------------------------------------------------------- #
+
+# New lightweight tuple for tab metadata
+class TabHandle(NamedTuple):
+    window_id: int
+    tab_id: str
+
+@dataclass(slots=True)
+class MultiProviderSession:
+    """Stage-3: one logical *task* spanning multiple provider tabs."""
+    title: str
+    created: str                # ISO timestamp
+    grouped: bool
+    tabs: Dict[LLMProvider, TabHandle]
 
 @dataclass(slots=True)
 class LiveSession:
@@ -80,7 +93,8 @@ class StateManager:
 
     def _init(self, state_file: Path) -> None:
         self._state_file = state_file
-        self._sessions: Dict[str, LiveSession] = {}
+        self._sessions: Dict[str, LiveSession] = {}       # legacy v1 (per-tab)
+        self._multi_sessions: Dict[str, MultiProviderSession] = {}  # NEW v2
         self._groups: Dict[int, TabGroup] = {}     # New: tab-group registry
         self._state_file.parent.mkdir(parents=True, exist_ok=True)
         self._load_from_disk()
@@ -100,21 +114,39 @@ class StateManager:
             _LOG.warning("Failed to load state from %s: %s", self._state_file, exc)
             return
 
-        for item in raw.get("sessions", []):
-            try:
-                provider = LLMProvider[item["provider"]]
-            except KeyError:
-                _LOG.warning("Unknown provider '%s' in state file", item.get("provider"))
-                continue
-
-            self._sessions[item["task_name"]] = LiveSession(
-                task_name=item["task_name"],
-                provider=provider,
-                target_id=item["target_id"],
-                window_id=item["window_id"],
-                group_id=item.get("group_id"),   # NEW
-                page_guid=None,
-            )
+        schema_ver = raw.get("schema", raw.get("version", 1))
+        if schema_ver == 2:
+            for sess in raw.get("sessions", []):
+                tabs = {
+                    LLMProvider[k.upper()]: TabHandle(t["windowId"], t["tabId"])
+                    for k, t in sess.get("tabs", {}).items()
+                    if k.upper() in LLMProvider.__members__
+                }
+                self._multi_sessions[sess["title"]] = MultiProviderSession(
+                    title=sess["title"],
+                    created=sess.get("created", ""),
+                    grouped=bool(sess.get("grouped", False)),
+                    tabs=tabs,
+                )
+        else:
+            # Legacy upgrade path: treat each single-provider record as part of a
+            # MultiProviderSession keyed by task_name (best-effort).
+            for item in raw.get("sessions", []):
+                provider_name = item.get("provider", "").upper()
+                if provider_name not in LLMProvider.__members__:
+                    continue
+                provider = LLMProvider[provider_name]
+                title = item["task_name"]
+                sess = self._multi_sessions.get(title)
+                if not sess:
+                    sess = MultiProviderSession(
+                        title=title,
+                        created=datetime.now(timezone.utc).isoformat(),
+                        grouped=False,
+                        tabs={},
+                    )
+                    self._multi_sessions[title] = sess
+                sess.tabs[provider] = TabHandle(item["window_id"], item["target_id"])
 
         # NEW: load tab groups
         for g in raw.get("groups", []):
@@ -136,17 +168,22 @@ class StateManager:
 
     def _persist(self) -> None:
         data = {
-            "version": 2,   # bumped
+            "schema": 2,
             "saved_at": datetime.now(timezone.utc).isoformat(),
             "sessions": [
                 {
-                    "task_name": s.task_name,
-                    "provider": s.provider.name,
-                    "target_id": s.target_id,
-                    "window_id": s.window_id,
-                    "group_id": s.group_id,
+                    "title": s.title,
+                    "created": s.created,
+                    "grouped": s.grouped,
+                    "tabs": {
+                        prov.name.lower(): {
+                            "windowId": th.window_id,
+                            "tabId": th.tab_id,
+                        }
+                        for prov, th in s.tabs.items()
+                    },
                 }
-                for s in self._sessions.values()
+                for s in self._multi_sessions.values()
             ],
             "groups": [
                 {
@@ -249,3 +286,43 @@ class StateManager:
             return
         session.group_id = group_id
         self._persist()
+
+    # ----------------  multi-provider helpers  ---------------------------- #
+
+    def create_session(self, title: str) -> MultiProviderSession:
+        if title in self._multi_sessions:
+            return self._multi_sessions[title]
+        sess = MultiProviderSession(
+            title=title,
+            created=datetime.now(timezone.utc).isoformat(),
+            grouped=False,
+            tabs={},
+        )
+        self._multi_sessions[title] = sess
+        self._persist()
+        return sess
+
+    def get_session(self, title: str) -> Optional[MultiProviderSession]:
+        return self._multi_sessions.get(title)
+
+    def add_tab_to_session(
+        self,
+        title: str,
+        provider: LLMProvider,
+        window_id: int,
+        tab_id: str,
+    ) -> None:
+        sess = self._multi_sessions.get(title)
+        if sess is None:
+            sess = self.create_session(title)
+        sess.tabs[provider] = TabHandle(window_id, tab_id)
+        self._persist()
+
+    def list_sessions(self) -> Dict[str, MultiProviderSession]:
+        return dict(self._multi_sessions)
+
+    def set_grouped(self, title: str, grouped: bool) -> None:
+        sess = self._multi_sessions.get(title)
+        if sess:
+            sess.grouped = grouped
+            self._persist()
