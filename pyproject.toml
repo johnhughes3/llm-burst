@@ -34,3 +34,6 @@ dev-dependencies = [
 include = [
     "bin/swift_prompt.sh",
 ]
+
+[tool.hatch.build.targets.wheel]
+packages = ["llm_burst"]
