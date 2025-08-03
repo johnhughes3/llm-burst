@@ -7,10 +7,14 @@ CLI helpers and entry points for the llm-burst tool.
 Stage-1: expose a prompt_user() function that launches the swiftDialog wrapper
 and returns the user's selections as a Python dict.  Later stages will build a
 Click-based interface on top of this helper.
+
+Stage-2: add async bridge functions to enable synchronous CLI code to interact
+with the asynchronous BrowserAdapter.
 """
 
 from __future__ import annotations
 
+import asyncio
 import json
 import subprocess
 import sys
@@ -20,7 +24,9 @@ from .constants import (
     SWIFT_PROMPT_SCRIPT,
     PROMPT_OK_EXIT,
     PROMPT_CANCEL_EXIT,
+    LLMProvider,
 )
+from .browser import BrowserAdapter, SessionHandle
 
 
 def prompt_user() -> Dict[str, Any]:
@@ -59,3 +65,73 @@ def prompt_user() -> Dict[str, Any]:
         # Malformed JSON is treated as an error / cancel.
         sys.stderr.write(f"Failed to parse JSON from swiftDialog: {exc}\n")
         sys.exit(PROMPT_CANCEL_EXIT)
+
+
+# --------------------------------------------------------------------------- #
+# Stage-2: Async bridge functions                                             #
+# --------------------------------------------------------------------------- #
+
+def open_llm_window(task_name: str, provider: LLMProvider) -> SessionHandle:
+    """
+    Synchronous wrapper to open an LLM browser window.
+    
+    This function bridges the gap between synchronous CLI code and the async
+    BrowserAdapter, allowing Stage 3's Click CLI to remain fully synchronous.
+    
+    Parameters
+    ----------
+    task_name : str
+        The name of the task (used for tracking and window titles).
+    provider : LLMProvider
+        Which LLM service to open (GEMINI, CLAUDE, CHATGPT, or GROK).
+    
+    Returns
+    -------
+    SessionHandle
+        Contains the live session metadata and Playwright Page object.
+    
+    Example
+    -------
+    >>> from llm_burst.constants import LLMProvider
+    >>> from llm_burst.cli import open_llm_window
+    >>> handle = open_llm_window("Research-APIs", LLMProvider.CLAUDE)
+    >>> print(f"Opened {handle.live.provider.name} window for {handle.live.task_name}")
+    """
+    return asyncio.run(_async_open_window(task_name, provider))
+
+
+async def _async_open_window(task_name: str, provider: LLMProvider) -> SessionHandle:
+    """Internal async implementation for open_llm_window."""
+    async with BrowserAdapter() as adapter:
+        return await adapter.open_window(task_name, provider)
+
+
+def get_running_sessions() -> Dict[str, Any]:
+    """
+    Retrieve all currently tracked browser sessions.
+    
+    Returns
+    -------
+    dict
+        Mapping of task_name to session metadata (provider, target_id, window_id).
+    
+    Example
+    -------
+    >>> from llm_burst.cli import get_running_sessions
+    >>> sessions = get_running_sessions()
+    >>> for task, info in sessions.items():
+    ...     print(f"{task}: {info['provider']}")
+    """
+    from .state import StateManager
+    
+    state = StateManager()
+    sessions = state.list_all()
+    
+    return {
+        task_name: {
+            "provider": session.provider.name,
+            "target_id": session.target_id,
+            "window_id": session.window_id,
+        }
+        for task_name, session in sessions.items()
+    }

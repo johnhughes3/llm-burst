@@ -6,6 +6,9 @@ Centralised constants shared across the llm-burst code-base.
 """
 
 from pathlib import Path
+from enum import Enum, auto
+from typing import Final
+import os
 
 # --------------------------------------------------------------------------- #
 # Paths
@@ -35,3 +38,39 @@ KM_DATE_ICU_FORMAT: str = "%a, %b %-d, %Y %-H:%M"
 
 PROMPT_OK_EXIT: int = 0       # User pressed "OK"
 PROMPT_CANCEL_EXIT: int = 1   # User pressed "Cancel" / closed dialog / error
+
+# --------------------------------------------------------------------------- #
+# Chrome adapter – LLM providers and default configuration
+# --------------------------------------------------------------------------- #
+
+class LLMProvider(Enum):
+    """Enumeration of supported LLM web front-ends."""
+    GEMINI = auto()
+    CLAUDE = auto()
+    CHATGPT = auto()
+    GROK = auto()
+
+# Mapping of provider → landing URL.
+LLM_URLS: Final[dict[LLMProvider, str]] = {
+    LLMProvider.GEMINI:  "https://gemini.google.com/app",
+    LLMProvider.CLAUDE:  "https://claude.ai/new",
+    LLMProvider.CHATGPT: "https://chat.openai.com",
+    LLMProvider.GROK:    "https://grok.com",
+}
+
+# Default CDP remote-debugging port Chrome will listen on.
+CHROME_REMOTE_PORT: Final[int] = 9222
+
+# Path to Chrome executable (macOS default). Override via $GOOGLE_CHROME executable path if needed.
+CHROME_EXECUTABLE: Final[str] = os.environ.get(
+    "GOOGLE_CHROME",
+    "/Applications/Google Chrome.app/Contents/MacOS/Google Chrome",
+)
+
+# Location of the persistent JSON state file (override with $LLM_BURST_STATE_FILE).
+STATE_FILE: Final[Path] = Path(
+    os.environ.get(
+        "LLM_BURST_STATE_FILE",
+        Path.home() / ".config/llm-burst/state.json",
+    )
+)
