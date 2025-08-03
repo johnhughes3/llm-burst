@@ -19,8 +19,11 @@ A tool for burst processing with LLMs - orchestrating multiple AI chat sessions 
 - Added basic Playwright tests
 - Set up GitHub Actions CI
 
-### 🔲 Stage 1 - swiftDialog Prompt
-- Add swiftDialog UI for task name and options
+### ✅ Stage 1 - swiftDialog Prompt (Complete)
+- Created `bin/swift_prompt.sh` wrapper script
+- Captures Task Name, Prompt Text, Research mode, and Incognito mode
+- Returns JSON output for Python parsing
+- Integrated with `llm_burst.cli.prompt_user()` function
 
 ### 🔲 Stage 2 - Chrome Adapter
 - Implement Chrome automation via Playwright
@@ -36,6 +39,13 @@ A tool for burst processing with LLMs - orchestrating multiple AI chat sessions 
 ### 🔲 Stage 5 - Group/UnGroup
 - Implement Chrome tab grouping functionality
 
+## Prerequisites
+
+- macOS (for swiftDialog and Rectangle integration)
+- Python 3.11+
+- swiftDialog: `brew install swiftdialog`
+- Chrome browser
+
 ## Installation
 
 ```bash
@@ -43,8 +53,11 @@ A tool for burst processing with LLMs - orchestrating multiple AI chat sessions 
 git clone https://github.com/jj3ny/llm-burst.git
 cd llm-burst
 
-# Install dependencies
-pip install -r requirements.txt
+# Install with uv (recommended)
+uv sync
+
+# Or install with pip
+pip install -e .
 
 # Install Playwright browsers
 python -m playwright install chromium
