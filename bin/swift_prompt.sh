@@ -45,7 +45,11 @@ fi
 # ---------- build prompt ------------------------------------------------------
 
 TASK_NAME=$(default_task_name)
-PROMPT_TEXT=$(clipboard_contents)
+if [[ -n "${LLMB_DEFAULT_PROMPT:-}" ]]; then
+  PROMPT_TEXT="$LLMB_DEFAULT_PROMPT"
+else
+  PROMPT_TEXT=$(clipboard_contents)
+fi
 
 # Invoke swiftDialog.
 #   --json   → print JSON to stdout
