@@ -9,7 +9,7 @@ These tests verify that the Chrome adapter can:
 """
 
 import pytest
-from unittest.mock import Mock, AsyncMock, patch
+from unittest.mock import Mock, AsyncMock, patch, PropertyMock
 import types
 import types
 
@@ -60,12 +60,7 @@ async def test_browser_adapter_context_manager():
 @pytest.mark.asyncio
 async def test_browser_adapter_launches_chrome_if_not_running(temp_state_file):
     """Test that BrowserAdapter launches Chrome if CDP connection fails."""
-    ws_side_effect = [None, "ws://dummy"]  # First call before launch, second after
-    with patch("llm_burst.browser.async_playwright") as mock_playwright, \
-         patch("llm_burst.browser.BrowserAdapter._get_websocket_endpoint", new_callable=AsyncMock, side_effect=ws_side_effect), \
-         patch("llm_burst.browser.scan_chrome_processes") as mock_scan:
-        
-        mock_scan.return_value = types.SimpleNamespace(running=False, remote_debug=False, pids=[])
+    ws_side_effect = [None, "ws://dummy", "ws://dummy"]  # First call before launch, second after, third for extra call
     with patch("llm_burst.browser.async_playwright") as mock_playwright, \
          patch("llm_burst.browser.BrowserAdapter._get_websocket_endpoint", new_callable=AsyncMock, side_effect=ws_side_effect), \
          patch("llm_burst.browser.scan_chrome_processes") as mock_scan:
@@ -118,27 +113,58 @@ async def test_open_window_creates_new_window(temp_state_file):
         mock_playwright.return_value.start = AsyncMock(return_value=mock_pw_instance)
 
         # --- Mock Page -------------------------------------------------- #
-        mock_page = AsyncMock()
+        # Create a simple namespace object to avoid Mock attribute issues
+        mock_page = types.SimpleNamespace()
         mock_page.guid = "test-page-guid"
         mock_page.goto = AsyncMock(return_value=None)
         mock_page._target_id = "test-target-id"
 
         # --- Browser / context / CDP wiring ---------------------------- #
         mock_context = AsyncMock()
-        # Start with no pages - they'll be added during CDP attach
-        mock_context.pages = []
+        # Need at least one page for _get_cdp_connection to work
+        mock_initial_page = AsyncMock()  # A different page for initial CDP session
+        mock_context.pages = [mock_initial_page]
 
         # Mock CDP session for slow path in _find_page_for_target
         mock_session = AsyncMock()
 
-        async def session_send(command, params):
+        async def session_send(command, params=None):
             if command == "Target.attachToTarget":
                 # After attach, add the page to context
                 mock_context.pages.append(mock_page)
+                return {}
+            if command == "Target.createTarget":
+                return {"targetId": "test-target-id"}
+            if command == "Browser.getWindowForTarget":
+                return {"windowId": 12345}
+            if command == "Target.getTargetInfo":
+                # Return targetInfo for the newly created page
+                return {"targetInfo": {"targetId": "test-target-id"}}
             return {}
 
         mock_session.send = AsyncMock(side_effect=session_send)
-        mock_context.new_cdp_session = AsyncMock(return_value=mock_session)
+        
+        # Mock new_cdp_session to return different sessions based on the page
+        async def new_cdp_session(page):
+            if page == mock_initial_page:
+                # This is for _get_cdp_connection, return the main session
+                return mock_session
+            elif page == mock_page:
+                # This is our target page for _find_page_for_target
+                page_session = AsyncMock()
+                page_session.send = AsyncMock(
+                    return_value={"targetInfo": {"targetId": "test-target-id"}}
+                )
+                return page_session
+            else:
+                # Any other page
+                page_session = AsyncMock()
+                page_session.send = AsyncMock(
+                    return_value={"targetInfo": {"targetId": "other-target-id"}}
+                )
+                return page_session
+            
+        mock_context.new_cdp_session = AsyncMock(side_effect=new_cdp_session)
 
         mock_connection = AsyncMock()
 
@@ -148,7 +174,7 @@ async def test_open_window_creates_new_window(temp_state_file):
                 from playwright.async_api import Error as PlaywrightError
 
                 raise PlaywrightError("methodNotFound")
-            if command == "Browser.createTarget":
+            if command == "Target.createTarget":
                 return {"targetId": "test-target-id"}
             if command == "Browser.getWindowForTarget":
                 return {"windowId": 12345}
@@ -209,9 +235,17 @@ async def test_open_window_reuses_existing_session(temp_state_file):
 
         mock_page = AsyncMock()
         mock_page._target_id = "existing-target"
+        mock_page.goto = AsyncMock(return_value=None)
 
+        # Mock CDP session for finding existing page
+        mock_cdp_session = AsyncMock()
+        mock_cdp_session.send = AsyncMock(
+            return_value={"targetInfo": {"targetId": "existing-target"}}
+        )
+        
         mock_context = AsyncMock()
         mock_context.pages = [mock_page]
+        mock_context.new_cdp_session = AsyncMock(return_value=mock_cdp_session)
 
         mock_browser = AsyncMock()
         mock_browser.contexts = [mock_context]
