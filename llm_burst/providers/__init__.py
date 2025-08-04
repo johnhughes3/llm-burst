@@ -125,29 +125,30 @@ def get_injector(provider: LLMProvider):
         cfg = _PROVIDER_CONFIG[provider]
     except KeyError as exc:
         raise KeyError(f"Unknown provider: {provider}") from exc
-    
+
     base_injector = _build_injector(*cfg)
-    
+
     # Special behaviour for Claude: after JS focuses the editor, paste + send.
     if provider is LLMProvider.CLAUDE:
-        
+
         async def _claude_inject(page: Page, prompt: str, opts: "InjectOptions") -> None:  # noqa: D401
             await base_injector(page, prompt, opts)
-            
+
             # Only for initial submission – follow-ups already handled in JS
             if not opts.follow_up:
                 try:
                     import pyperclip
+
                     pyperclip.copy(prompt)
                 except Exception:
                     # Non-fatal – continue without clipboard
                     pass
-                
+
                 # Give the browser a brief moment to settle focus
                 await page.wait_for_timeout(100)
                 await page.keyboard.press("Meta+V")
                 await page.keyboard.press("Enter")
-        
+
         return _claude_inject
-    
+
     return base_injector
