@@ -37,7 +37,7 @@ def test_arrange_no_sessions(temp_state_file):
         # Return a mock with no sessions
         mock_state = mock_state_class.return_value
         mock_state.list_all.return_value = {}
-        
+
         with patch("llm_burst.layout.rectangle_perform") as mock_perform:
             arrange()
             # Should not call rectangle_perform when no sessions

@@ -24,8 +24,8 @@ SUBMIT_JS = r"""// Grok Automation Script - Ultimate Version v1.0
 // ----------------------------------------------------------------------------
 
 // === Compatibility aliases (added by llm-burst) =============================
-const wait      = (...args) => window.wait(...args);
-const waitUntil = (...args) => window.waitUntil(...args);
+const wait      = (...args) => window.llmBurstWait(...args);
+const waitUntil = (...args) => window.llmBurstWaitUntil(...args);
 // =============================================================================
 
 /**
@@ -313,135 +313,184 @@ async function enableThinkMode() {
 async function sendPromptToGrok(messageText) {
   console.log("Sending prompt to Grok...");
   
-  // Step 1: Find and prepare textarea
-  const textarea = await findAndPrepareTextarea();
-  if (!textarea) {
-    throw new Error("Textarea not found or couldn't be prepared");
+  // Step 1: Find and prepare input element (textarea or contenteditable)
+  const inputElement = await findAndPrepareTextarea();
+  if (!inputElement) {
+    throw new Error("Input element not found or couldn't be prepared");
   }
   
-  // Step 2: Paste text with natural event sequence
-  await executeTextInput(textarea, messageText);
+  // Step 2: Input text with appropriate method
+  await executeTextInput(inputElement, messageText);
   
-  // Step 3: Verify text was accepted by React
-  const textAccepted = await verifyTextInputAccepted(textarea, messageText);
+  // Step 3: Verify text was accepted
+  const textAccepted = await verifyTextInputAccepted(inputElement, messageText);
   if (!textAccepted) {
     throw new Error("Text input verification failed");
   }
   
   // Step 4: Find and click submit button
-  await clickSubmitButton(textarea);
+  await clickSubmitButton(inputElement);
   
   console.log("✓ Prompt successfully sent");
 }
 
 /**
- * Finds the textarea and prepares it for input
- * @returns {Promise<Element|null>} The textarea element or null if not found
+ * Finds the input element (textarea or contenteditable) and prepares it for input
+ * @returns {Promise<Element|null>} The input element or null if not found
  */
 async function findAndPrepareTextarea() {
-  console.log("Finding and preparing textarea...");
+  console.log("Finding and preparing input element...");
   
   try {
-    // Find textarea with multiple selectors
-    const textarea = await waitUntil(() => (
+    // Find input element with multiple selectors - now includes contenteditable
+    const inputElement = await waitUntil(() => (
       document.querySelector('textarea[aria-label="Ask Grok anything"]') ||
       document.querySelector('textarea[placeholder*="Ask" i][placeholder*="Grok" i]') ||
-      document.querySelector('form textarea')
+      document.querySelector('form textarea') ||
+      document.querySelector('[contenteditable="true"]') ||  // New Grok UI uses contenteditable
+      document.querySelector('.ProseMirror[contenteditable="true"]')  // More specific selector
     ), 3000, 100);
     
-    if (!textarea) {
-      console.error("Textarea not found");
+    if (!inputElement) {
+      console.error("Input element not found");
       return null;
     }
     
-    // Ensure textarea is visible and enabled
-    const isVisible = textarea.offsetParent !== null;
-    const isEnabled = !textarea.disabled;
+    // Check if it's a contenteditable div or textarea
+    const isContentEditable = inputElement.getAttribute('contenteditable') === 'true';
+    console.log(`Found ${isContentEditable ? 'contenteditable div' : 'textarea'}`);
+    
+    // Ensure element is visible and enabled
+    const isVisible = inputElement.offsetParent !== null;
+    const isEnabled = isContentEditable ? true : !inputElement.disabled;
     
     if (!isVisible || !isEnabled) {
-      console.error("Textarea found but not visible or enabled");
+      console.error("Input element found but not visible or enabled");
       return null;
     }
     
     // Prepare by focusing with full event sequence
-    window.simulateFocusSequence(textarea);
+    window.simulateFocusSequence(inputElement);
     await wait(100); // Brief pause after focus
     
-    return textarea;
+    return inputElement;
   } catch (error) {
-    console.error(`Error finding textarea: ${error.message}`);
+    console.error(`Error finding input element: ${error.message}`);
     return null;
   }
 }
 
 /**
- * Executes text input with platform-aware paste simulation
- * @param {Element} textarea - The textarea element
+ * Executes text input for both textarea and contenteditable elements
+ * @param {Element} inputElement - The textarea or contenteditable element
  * @param {string} text - The text to input
  */
-async function executeTextInput(textarea, text) {
+async function executeTextInput(inputElement, text) {
   console.log(`Inputting text (${text.length} chars)...`);
   
-  // Determine platform for correct meta key
-  const isMac = navigator.platform.toLowerCase().includes("mac");
-  const metaKey = isMac ? "Meta" : "Control";
-  const metaKeyProps = isMac ? { metaKey: true } : { ctrlKey: true };
+  const isContentEditable = inputElement.getAttribute('contenteditable') === 'true';
   
   try {
-    // Meta key down (Cmd/Ctrl)
-    textarea.dispatchEvent(new KeyboardEvent("keydown", { 
-      key: metaKey, 
-      code: isMac ? "MetaLeft" : "ControlLeft", 
-      ...metaKeyProps, 
-      bubbles: true,
-      cancelable: true 
-    }));
-    
-    // V key down
-    textarea.dispatchEvent(new KeyboardEvent("keydown", { 
-      key: "v", 
-      code: "KeyV", 
-      ...metaKeyProps, 
-      bubbles: true,
-      cancelable: true 
-    }));
-    
-    // Set value directly
-    textarea.value = text;
-    
-    // Dispatch input event (critical for React)
-    textarea.dispatchEvent(new InputEvent("input", { 
-      bubbles: true,
-      cancelable: true, 
-      inputType: "insertFromPaste", 
-      data: text 
-    }));
-    
-    // Position cursor at end of text
-    textarea.selectionStart = textarea.selectionEnd = text.length;
-    
-    // Key up events in reverse order
-    textarea.dispatchEvent(new KeyboardEvent("keyup", { 
-      key: "v", 
-      code: "KeyV",
-      ...metaKeyProps, 
-      bubbles: true,
-      cancelable: true 
-    }));
-    
-    textarea.dispatchEvent(new KeyboardEvent("keyup", { 
-      key: metaKey, 
-      code: isMac ? "MetaLeft" : "ControlLeft",
-      ...metaKeyProps, 
-      bubbles: true,
-      cancelable: true
-    }));
-    
-    // Final change event
-    textarea.dispatchEvent(new Event("change", { 
-      bubbles: true,
-      cancelable: true 
-    }));
+    if (isContentEditable) {
+      // For contenteditable, we need to type the text
+      // First clear any existing content
+      inputElement.textContent = '';
+      
+      // Use keyboard API to type the text
+      for (const char of text) {
+        inputElement.dispatchEvent(new KeyboardEvent('keydown', {
+          key: char,
+          bubbles: true,
+          cancelable: true
+        }));
+        
+        // Insert the character
+        const currentText = inputElement.textContent || '';
+        inputElement.textContent = currentText + char;
+        
+        // Dispatch input event for each character
+        inputElement.dispatchEvent(new InputEvent('input', {
+          bubbles: true,
+          cancelable: true,
+          inputType: 'insertText',
+          data: char
+        }));
+        
+        inputElement.dispatchEvent(new KeyboardEvent('keyup', {
+          key: char,
+          bubbles: true,
+          cancelable: true
+        }));
+      }
+      
+      // Move cursor to end
+      const range = document.createRange();
+      const sel = window.getSelection();
+      range.selectNodeContents(inputElement);
+      range.collapse(false);
+      sel.removeAllRanges();
+      sel.addRange(range);
+    } else {
+      // Original textarea logic
+      const isMac = navigator.platform.toLowerCase().includes("mac");
+      const metaKey = isMac ? "Meta" : "Control";
+      const metaKeyProps = isMac ? { metaKey: true } : { ctrlKey: true };
+      
+      // Meta key down (Cmd/Ctrl)
+      inputElement.dispatchEvent(new KeyboardEvent("keydown", { 
+        key: metaKey, 
+        code: isMac ? "MetaLeft" : "ControlLeft", 
+        ...metaKeyProps, 
+        bubbles: true,
+        cancelable: true 
+      }));
+      
+      // V key down
+      inputElement.dispatchEvent(new KeyboardEvent("keydown", { 
+        key: "v", 
+        code: "KeyV", 
+        ...metaKeyProps, 
+        bubbles: true,
+        cancelable: true 
+      }));
+      
+      // Set value directly
+      inputElement.value = text;
+      
+      // Dispatch input event (critical for React)
+      inputElement.dispatchEvent(new InputEvent("input", { 
+        bubbles: true,
+        cancelable: true, 
+        inputType: "insertFromPaste", 
+        data: text 
+      }));
+      
+      // Position cursor at end of text
+      inputElement.selectionStart = inputElement.selectionEnd = text.length;
+      
+      // Key up events in reverse order
+      inputElement.dispatchEvent(new KeyboardEvent("keyup", { 
+        key: "v", 
+        code: "KeyV",
+        ...metaKeyProps, 
+        bubbles: true,
+        cancelable: true 
+      }));
+      
+      inputElement.dispatchEvent(new KeyboardEvent("keyup", { 
+        key: metaKey, 
+        code: isMac ? "MetaLeft" : "ControlLeft",
+        ...metaKeyProps, 
+        bubbles: true,
+        cancelable: true
+      }));
+      
+      // Final change event
+      inputElement.dispatchEvent(new Event("change", { 
+        bubbles: true,
+        cancelable: true 
+      }));
+    }
     
     await wait(50); // Brief pause after input sequence
   } catch (error) {
@@ -451,77 +500,92 @@ async function executeTextInput(textarea, text) {
 }
 
 /**
- * Verifies text input was accepted by React, with fallback mechanisms
- * @param {Element} textarea - The textarea element
- * @param {string} expectedText - The text that should be in the textarea
+ * Verifies text input was accepted, supporting both textarea and contenteditable
+ * @param {Element} inputElement - The textarea or contenteditable element
+ * @param {string} expectedText - The text that should be in the element
  * @returns {Promise<boolean>} True if verification succeeds
  */
-async function verifyTextInputAccepted(textarea, expectedText) {
+async function verifyTextInputAccepted(inputElement, expectedText) {
   console.log("Verifying text input was accepted...");
   
+  const isContentEditable = inputElement.getAttribute('contenteditable') === 'true';
+  
   return new Promise(async (resolve) => {
-    // Multiple placeholder selectors for different UI versions
-    const placeholderSelectors = [
-      'span.pointer-events-none', 
-      'span.text-fg-secondary.pointer-events-none',
-      'span[aria-hidden="true"]'
-    ];
-    
     let attempts = 0;
     const maxAttempts = 5;
     
     const checkStatus = async () => {
-      // Check if the textarea has the expected value
-      const valueCorrect = textarea.value === expectedText;
+      // Check if the element has the expected text
+      const actualText = isContentEditable ? 
+        (inputElement.textContent || '').trim() : 
+        inputElement.value;
+      const valueCorrect = actualText === expectedText;
       
-      // Check for placeholder visibility (hidden means React accepted the input)
-      const parent = textarea.parentElement;
-      if (!parent) {
-        resolve(valueCorrect); // Can't check placeholder, rely on value only
-        return;
-      }
-      
-      // Check each possible placeholder element
-      let placeholderHidden = true;
-      for (const selector of placeholderSelectors) {
-        const placeholder = parent.querySelector(selector);
-        if (placeholder) {
-          placeholderHidden = placeholder.classList.contains("hidden") || 
-                             placeholder.style.display === "none" ||
-                             placeholder.getAttribute("aria-hidden") === "true";
-          if (!placeholderHidden) break;
+      // For contenteditable, just check if text is present
+      if (isContentEditable) {
+        if (valueCorrect) {
+          console.log("✓ Text input accepted in contenteditable");
+          resolve(true);
+          return;
         }
-      }
-      
-      // If both checks pass, we're good
-      if (valueCorrect && placeholderHidden) {
-        console.log("✓ Text input accepted by React");
-        resolve(true);
-        return;
+      } else {
+        // Original textarea verification logic
+        const placeholderSelectors = [
+          'span.pointer-events-none', 
+          'span.text-fg-secondary.pointer-events-none',
+          'span[aria-hidden="true"]'
+        ];
+        
+        // Check for placeholder visibility (hidden means React accepted the input)
+        const parent = inputElement.parentElement;
+        if (!parent) {
+          resolve(valueCorrect);
+          return;
+        }
+        
+        let placeholderHidden = true;
+        for (const selector of placeholderSelectors) {
+          const placeholder = parent.querySelector(selector);
+          if (placeholder) {
+            placeholderHidden = placeholder.classList.contains("hidden") || 
+                               placeholder.style.display === "none" ||
+                               placeholder.getAttribute("aria-hidden") === "true";
+            if (!placeholderHidden) break;
+          }
+        }
+        
+        if (valueCorrect && placeholderHidden) {
+          console.log("✓ Text input accepted by React");
+          resolve(true);
+          return;
+        }
       }
       
       // Try fallback if attempts exhausted
       attempts++;
       if (attempts >= maxAttempts) {
-        console.warn("React did not accept input, trying execCommand fallback...");
-        
-        try {
-          // Clear and try execCommand approach
-          textarea.focus();
-          textarea.value = '';
-          document.execCommand("insertText", false, expectedText);
+        if (!isContentEditable) {
+          console.warn("React did not accept input, trying execCommand fallback...");
           
-          // Wait briefly and check if fallback worked
-          await wait(100);
-          if (textarea.value === expectedText) {
-            console.log("✓ execCommand fallback successful");
-            resolve(true);
-          } else {
-            console.error("Text input failed even with fallback");
+          try {
+            inputElement.focus();
+            inputElement.value = '';
+            document.execCommand("insertText", false, expectedText);
+            
+            await wait(100);
+            if (inputElement.value === expectedText) {
+              console.log("✓ execCommand fallback successful");
+              resolve(true);
+            } else {
+              console.error("Text input failed even with fallback");
+              resolve(false);
+            }
+          } catch (e) {
+            console.error(`execCommand fallback failed: ${e.message}`);
             resolve(false);
           }
-        } catch (e) {
-          console.error(`execCommand fallback failed: ${e.message}`);
+        } else {
+          console.error("Text input verification failed for contenteditable");
           resolve(false);
         }
         return;
@@ -537,41 +601,56 @@ async function verifyTextInputAccepted(textarea, expectedText) {
 
 /**
  * Finds and clicks the submit button
- * @param {Element} textarea - The textarea element (to help locate the form)
+ * @param {Element} inputElement - The input element (to help locate the form)
  * @throws {Error} If submit button cannot be found or clicked
  */
-async function clickSubmitButton(textarea) {
+async function clickSubmitButton(inputElement) {
   console.log("Finding submit button...");
   
   try {
-    // First try to find the button within the same form as the textarea
-    const form = textarea.closest('form');
+    // First try to find the button within the same form as the input element
+    const form = inputElement.closest('form');
     
     // Multiple strategies to find the submit button
+    // Note: Submit button may not exist until text is entered, so we wait for it
     const submitButton = await waitUntil(() => {
-      // Within form (most reliable)
+      // Within form - prioritize aria-label="Submit" over type="submit" 
+      // because Grok has a Search button with type="submit" that we want to avoid
       if (form) {
-        const formButton = form.querySelector('button[type="submit"]:not([disabled])') ||
-                          form.querySelector('button[aria-label="Submit"]:not([disabled])');
-        if (formButton) return formButton;
+        // First look for explicit Submit button
+        const submitBtn = form.querySelector('button[aria-label="Submit"]:not([disabled])');
+        if (submitBtn) return submitBtn;
+        
+        // Then check for submit type that's NOT the search button
+        const formButtons = Array.from(form.querySelectorAll('button[type="submit"]:not([disabled])'));
+        const nonSearchSubmit = formButtons.find(btn => {
+          const ariaLabel = btn.getAttribute('aria-label');
+          return ariaLabel !== 'Search'; // Exclude the search button
+        });
+        if (nonSearchSubmit) return nonSearchSubmit;
       }
       
-      // Global selectors (backup)
-      return document.querySelector('button[type="submit"]:not([disabled])') ||
-             document.querySelector('button[aria-label="Submit"]:not([disabled])') ||
-             Array.from(document.querySelectorAll('button:not([disabled])'))
-               .find(btn => {
-                 // Check type attribute
-                 const hasSubmitType = btn.getAttribute('type') === 'submit';
-                 // Check for common icon patterns
-                 const hasSendIcon = btn.querySelector('svg path[d*="M2.01 21L23 12 2.01 3"]'); // Send icon
-                 // Check visible text
-                 const text = (btn.textContent || '').trim().toLowerCase();
-                 const hasSubmitText = text === 'submit' || text === 'send';
-                 
-                 return hasSubmitType || hasSendIcon || hasSubmitText;
-               });
-    }, 3000, 100);
+      // Global selectors (backup) - prioritize aria-label="Submit"
+      const submitBtn = document.querySelector('button[aria-label="Submit"]:not([disabled])');
+      if (submitBtn) return submitBtn;
+      
+      // Look for submit buttons that are NOT search
+      const allSubmitBtns = Array.from(document.querySelectorAll('button[type="submit"]:not([disabled])'));
+      const nonSearchSubmit = allSubmitBtns.find(btn => {
+        const ariaLabel = btn.getAttribute('aria-label');
+        return ariaLabel !== 'Search';
+      });
+      if (nonSearchSubmit) return nonSearchSubmit;
+      
+      // Last resort: look for send icon
+      return Array.from(document.querySelectorAll('button:not([disabled])'))
+        .find(btn => {
+          const hasSendIcon = btn.querySelector('svg path[d*="M2.01 21L23 12 2.01 3"]'); // Send icon
+          const text = (btn.textContent || '').trim().toLowerCase();
+          const hasSubmitText = text === 'submit' || text === 'send';
+          return hasSendIcon || hasSubmitText;
+        });
+    }, 5000, 100); // Increased timeout since button appears after text entry
     
     if (!submitButton) {
       throw new Error("Submit button not found or not enabled");
@@ -641,7 +720,7 @@ window.simulateFocusSequence = function(element) {
  * @param {number} ms - Milliseconds to wait
  * @returns {Promise<void>}
  */
-window.wait = function(ms) {
+window.llmBurstWait = function(ms) {
   return new Promise(resolve => setTimeout(resolve, ms));
 }
 
@@ -652,7 +731,7 @@ window.wait = function(ms) {
  * @param {number} interval - Polling interval in milliseconds
  * @returns {Promise<any>} - Resolves with condition result when true
  */
-window.waitUntil = function(condition, timeout = 3000, interval = 100) {
+window.llmBurstWaitUntil = function(condition, timeout = 3000, interval = 100) {
   return new Promise((resolve, reject) => {
     const startTime = Date.now();
     
@@ -694,8 +773,8 @@ FOLLOWUP_JS = r"""/**
  */
 
 // === Compatibility aliases (added by llm-burst) =============================
-const wait      = (...args) => window.wait(...args);
-const waitUntil = (...args) => window.waitUntil(...args);
+const wait      = (...args) => window.llmBurstWait(...args);
+const waitUntil = (...args) => window.llmBurstWaitUntil(...args);
 // =============================================================================
 
 // Main function that Keyboard Maestro will call
@@ -784,7 +863,7 @@ async function performFollowUp(messageText, debug) {
     
     // Step 5: Click the submit button with full event sequence
     log("Clicking submit button...");
-    await clickSubmitButton(submitButton, log);
+    await clickSubmitButtonFollowup(submitButton, log);
     timing.submit = Math.round(performance.now() - submitStartTime);
     
     // Step 6: Verify submission was successful
@@ -1140,9 +1219,9 @@ async function findSubmitButton(textarea, log) {
 }
 
 /**
- * Click submit button with complete event sequence
+ * Click submit button with complete event sequence (follow-up mode)
  */
-async function clickSubmitButton(button, log) {
+async function clickSubmitButtonFollowup(button, log) {
   log("Clicking submit button with full event sequence...");
   
   // Complete pointer/mouse sequence that browsers generate
@@ -1218,7 +1297,7 @@ async function verifySubmissionStarted(log) {
 /**
  * Helper: Wait for a specified time
  */
-window.wait = function(ms) {
+window.llmBurstWait = function(ms) {
   return new Promise(resolve => setTimeout(resolve, ms));
 }
 
@@ -1269,11 +1348,12 @@ def selectors_up_to_date(page) -> bool:
         return page.evaluate(
             """
             () => {
-                const textarea = document.querySelector('textarea[aria-label="Ask Grok anything"]') ||
-                                 document.querySelector('form textarea');
+                const inputElement = document.querySelector('textarea[aria-label="Ask Grok anything"]') ||
+                                    document.querySelector('form textarea') ||
+                                    document.querySelector('[contenteditable="true"]');
                 const sendBtn  = document.querySelector('button[type="submit"]') ||
                                  document.querySelector('button[aria-label="Submit"]');
-                return textarea !== null && sendBtn !== null;
+                return inputElement !== null && sendBtn !== null;
             }
             """
         )

@@ -403,14 +403,14 @@ def cmd_follow_up(
             click.echo("Multiple active sessions:")
             for i, session in enumerate(sessions, 1):
                 click.echo(f"  {i}. {session}")
-            
+
             # Prompt user to select
             while True:
                 try:
                     choice = click.prompt(
-                        "Select session number", 
+                        "Select session number",
                         type=click.IntRange(1, len(sessions)),
-                        show_choices=True
+                        show_choices=True,
                     )
                     session_title = sessions[choice - 1]
                     break
