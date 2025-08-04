@@ -24,8 +24,8 @@ SUBMIT_JS = r"""// Grok Automation Script - Ultimate Version v1.0
 // ----------------------------------------------------------------------------
 
 // === Compatibility aliases (added by llm-burst) =============================
-const wait      = (...args) => window.wait(...args);
-const waitUntil = (...args) => window.waitUntil(...args);
+const wait      = (...args) => window.llmBurstWait(...args);
+const waitUntil = (...args) => window.llmBurstWaitUntil(...args);
 // =============================================================================
 
 /**
@@ -720,7 +720,7 @@ window.simulateFocusSequence = function(element) {
  * @param {number} ms - Milliseconds to wait
  * @returns {Promise<void>}
  */
-window.wait = function(ms) {
+window.llmBurstWait = function(ms) {
   return new Promise(resolve => setTimeout(resolve, ms));
 }
 
@@ -731,7 +731,7 @@ window.wait = function(ms) {
  * @param {number} interval - Polling interval in milliseconds
  * @returns {Promise<any>} - Resolves with condition result when true
  */
-window.waitUntil = function(condition, timeout = 3000, interval = 100) {
+window.llmBurstWaitUntil = function(condition, timeout = 3000, interval = 100) {
   return new Promise((resolve, reject) => {
     const startTime = Date.now();
     
@@ -773,8 +773,8 @@ FOLLOWUP_JS = r"""/**
  */
 
 // === Compatibility aliases (added by llm-burst) =============================
-const wait      = (...args) => window.wait(...args);
-const waitUntil = (...args) => window.waitUntil(...args);
+const wait      = (...args) => window.llmBurstWait(...args);
+const waitUntil = (...args) => window.llmBurstWaitUntil(...args);
 // =============================================================================
 
 // Main function that Keyboard Maestro will call
@@ -1297,7 +1297,7 @@ async function verifySubmissionStarted(log) {
 /**
  * Helper: Wait for a specified time
  */
-window.wait = function(ms) {
+window.llmBurstWait = function(ms) {
   return new Promise(resolve => setTimeout(resolve, ms));
 }
 

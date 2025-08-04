@@ -61,8 +61,8 @@ def _build_injector(
         else:
             js_src, call_tpl = submit_js, submit_tpl
 
-        # Load helper functions
-        await page.evaluate(js_src)
+        # Load helper functions (wrapped in IIFE to prevent conflicts)
+        await page.evaluate(f"(function() {{ {js_src} }})()")
 
         # Build call expression
         call_expr = call_tpl.format(
