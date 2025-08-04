@@ -76,6 +76,10 @@ class TestStateManagerRename:
 class TestActivateAutoNaming:
     """Test auto-naming in activate command."""
 
+    def setup_method(self):
+        """Clear StateManager singleton before each test."""
+        StateManager._instance = None
+
     @patch("llm_burst.browser.BrowserAdapter")
     @patch("llm_burst.auto_namer.auto_name_session", new_callable=AsyncMock)
     @patch("llm_burst.cli_click.get_injector")
@@ -111,12 +115,19 @@ class TestActivateAutoNaming:
     @patch("llm_burst.auto_namer.auto_name_session", new_callable=AsyncMock)
     @patch("llm_burst.cli_click.get_injector")
     @patch("llm_burst.state.StateManager")
+    @patch("llm_burst.cli_click.prompt_user")
     def test_session_renamed_when_auto_generated(
-        self, mock_state_class, mock_injector, mock_auto_name, mock_adapter
+        self, mock_prompt_user, mock_state_class, mock_injector, mock_auto_name, mock_adapter
     ):
         """Test that session is renamed when title was auto-generated."""
         from llm_burst.cli_click import cmd_activate
         from click.testing import CliRunner
+
+        # Mock prompt_user to return dummy data
+        mock_prompt_user.return_value = {
+            "Task Name": None,  # No title provided, will auto-generate
+            "Prompt Text": "test prompt"
+        }
 
         # Setup state mock - make sure the class returns our mock instance
         mock_state = MagicMock()
@@ -151,26 +162,8 @@ class TestActivateAutoNaming:
 
         runner = CliRunner()
         
-        # Add a side effect to track calls
-        def get_session_side_effect(title):
-            print(f"get_session called with: {title}")
-            return None
-        
-        mock_state.get_session.side_effect = get_session_side_effect
-        
-        result = runner.invoke(
-            cmd_activate,
-            ["--prompt-text", "test prompt"],  # No title provided, will auto-generate
-        )
-        
-        # Print debug info
-        if result.exception:
-            import traceback
-            traceback.print_exception(type(result.exception), result.exception, result.exception.__traceback__)
-        
-        print(f"Result output: {result.output}")
-        print(f"auto_name call count: {mock_auto_name.call_count}")
-        print(f"rename_session call count: {mock_state.rename_session.call_count}")
+        # Don't provide --prompt-text, let it come from mock_prompt_user
+        result = runner.invoke(cmd_activate, [])
 
         # rename_session should have been called
         mock_state.rename_session.assert_called_once()
