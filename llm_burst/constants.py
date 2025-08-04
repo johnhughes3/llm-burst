@@ -184,13 +184,14 @@ RECTANGLE_LAYOUTS: Final[dict[int, list[RectangleAction]]] = {
     ],
 }
 
-# Default key + modifier mapping that matches Rectangle’s factory shortcuts.
+# Default key + modifier mapping that matches the original Keyboard Maestro shortcuts.
 # These will be used when rectangle-cli is unavailable.
+# The original KM macros use Ctrl+Opt+U/I/J/K for quadrant positioning.
 RECTANGLE_KEY_BINDINGS: Final[dict[RectangleAction, tuple[str, str]]] = {
     RectangleAction.LEFT_HALF: ("Left", "ctrl+alt"),
     RectangleAction.RIGHT_HALF: ("Right", "ctrl+alt"),
-    RectangleAction.UPPER_LEFT: ("Left", "ctrl+alt+shift"),
-    RectangleAction.UPPER_RIGHT: ("Right", "ctrl+alt+shift"),
-    RectangleAction.LOWER_LEFT: ("Left", "ctrl+alt+cmd"),
-    RectangleAction.LOWER_RIGHT: ("Right", "ctrl+alt+cmd"),
+    RectangleAction.UPPER_LEFT: ("u", "ctrl+alt"),
+    RectangleAction.UPPER_RIGHT: ("i", "ctrl+alt"),
+    RectangleAction.LOWER_LEFT: ("j", "ctrl+alt"),
+    RectangleAction.LOWER_RIGHT: ("k", "ctrl+alt"),
 }
