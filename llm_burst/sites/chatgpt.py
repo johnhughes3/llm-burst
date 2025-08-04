@@ -2,8 +2,9 @@
 
 # JavaScript for initial prompt submission (activate command)
 SUBMIT_JS = r"""
-window.automateOpenAIChat = function(messageText, useResearch, useIncognito) {
-  return new Promise((resolve, reject) => {
+(function() {
+  window.automateOpenAIChat = function(messageText, useResearch, useIncognito) {
+    return new Promise((resolve, reject) => {
     try {
       console.log(`Starting ChatGPT automation. Research mode: ${useResearch}, Incognito mode: ${useIncognito}`);
       
@@ -185,8 +186,11 @@ window.automateOpenAIChat = function(messageText, useResearch, useIncognito) {
       
       // Function to submit the prompt
       function submitPrompt() {
-        // Find the ProseMirror editor element
-        const editorElement = document.querySelector('.ProseMirror');
+        // Find the editor element - try both selectors
+        let editorElement = document.querySelector('#prompt-textarea');
+        if (!editorElement) {
+          editorElement = document.querySelector('.ProseMirror');
+        }
         if (!editorElement) {
           reject('Editor element not found');
           return;
@@ -207,18 +211,42 @@ window.automateOpenAIChat = function(messageText, useResearch, useIncognito) {
         // Append the paragraph to the editor
         editorElement.appendChild(paragraph);
         
-        // Dispatch an input event to ensure the UI registers the change
-        const inputEvent = new Event('input', { bubbles: true });
+        // Dispatch multiple events to ensure the UI registers the change
+        const inputEvent = new Event('input', { bubbles: true, cancelable: true });
+        const changeEvent = new Event('change', { bubbles: true, cancelable: true });
+        const keyupEvent = new KeyboardEvent('keyup', { bubbles: true, cancelable: true, key: 'a' });
+        
         editorElement.dispatchEvent(inputEvent);
+        editorElement.dispatchEvent(changeEvent);
+        editorElement.dispatchEvent(keyupEvent);
+        
+        // Also try to trigger React's synthetic event system
+        const nativeInputValueSetter = Object.getOwnPropertyDescriptor(window.HTMLTextAreaElement.prototype, 'value')?.set ||
+                                       Object.getOwnPropertyDescriptor(window.HTMLInputElement.prototype, 'value')?.set;
+        if (nativeInputValueSetter && editorElement.value !== undefined) {
+          nativeInputValueSetter.call(editorElement, messageText);
+          editorElement.dispatchEvent(new Event('input', { bubbles: true }));
+        }
         
         console.log('Text added to input');
         
-        // Wait a moment for the send button to become enabled
-        setTimeout(() => {
+        // Wait for send button with retry logic
+        let attempts = 0;
+        const maxAttempts = 5;
+        const checkInterval = 500;
+        
+        const checkForSendButton = () => {
+          attempts++;
+          
           // Find the send button
           const sendButton = document.querySelector('button[data-testid="send-button"]');
+          
           if (!sendButton) {
-            reject('Send button not found');
+            if (attempts < maxAttempts) {
+              setTimeout(checkForSendButton, checkInterval);
+            } else {
+              reject('Send button not found after multiple attempts');
+            }
             return;
           }
           
@@ -226,18 +254,12 @@ window.automateOpenAIChat = function(messageText, useResearch, useIncognito) {
           
           // Check if the button is disabled
           if (sendButton.disabled) {
-            console.log('Send button is disabled, waiting longer...');
-            // Wait a bit longer and try again
-            setTimeout(() => {
-              if (sendButton.disabled) {
-                reject('Send button is still disabled after waiting');
-                return;
-              }
-              // Click the send button
-              sendButton.click();
-              console.log('Send button clicked');
-              resolve();
-            }, 1000);
+            if (attempts < maxAttempts) {
+              console.log('Send button is disabled, waiting...');
+              setTimeout(checkForSendButton, checkInterval);
+            } else {
+              reject('Send button is still disabled after waiting');
+            }
             return;
           }
           
@@ -245,14 +267,18 @@ window.automateOpenAIChat = function(messageText, useResearch, useIncognito) {
           sendButton.click();
           console.log('Send button clicked');
           resolve();
-        }, 500); // Give time for the button to become enabled after text is entered
+        };
+        
+        // Start checking after initial delay
+        setTimeout(checkForSendButton, 1000); // Give time for the button to appear after text is entered
       }
       
     } catch (error) {
       reject(`Error: ${error}`);
     }
   });
-}
+  };
+})();
 """
 
 # JavaScript for follow-up messages
@@ -286,34 +312,43 @@ window.chatGPTFollowUpMessage = function(messageText) {
       
       console.log('Follow-up text added to ChatGPT input');
       
-      // Wait a moment for the send button to become enabled
-      setTimeout(() => {
-        // Find the send button - looking for the submit button
-        const sendButton = document.querySelector('button[type="submit"]');
+      // Wait for send button with retry logic
+      let attempts = 0;
+      const maxAttempts = 5;
+      const checkInterval = 500;
+      
+      const checkForSendButton = () => {
+        attempts++;
+        console.log(`Follow-up: Attempt ${attempts} to find send button...`);
+        
+        // Try primary selector first
+        let sendButton = document.querySelector('[data-testid="send-button"]');
+        
+        // Fallback to submit button if primary not found
         if (!sendButton) {
-          // Try alternative selector if the primary one fails
-          const alternativeSendButton = document.querySelector('[data-testid="send-button"]');
-          if (!alternativeSendButton) {
-            reject('Send button not found');
-            return;
+          sendButton = document.querySelector('button[type="submit"]');
+        }
+        
+        if (!sendButton) {
+          if (attempts < maxAttempts) {
+            console.log('Follow-up: Send button not found yet, retrying...');
+            setTimeout(checkForSendButton, checkInterval);
+          } else {
+            reject('Send button not found after multiple attempts');
           }
-          
-          // Check if the button is disabled
-          if (alternativeSendButton.disabled) {
-            reject('Send button is disabled');
-            return;
-          }
-          
-          // Click the alternative send button
-          alternativeSendButton.click();
-          console.log('ChatGPT follow-up message sent successfully (alternative button)');
-          resolve();
           return;
         }
         
-        // Check if the primary button is disabled
+        console.log('Follow-up: Found send button');
+        
+        // Check if the button is disabled
         if (sendButton.disabled) {
-          reject('Send button is disabled');
+          if (attempts < maxAttempts) {
+            console.log('Follow-up: Send button is disabled, waiting...');
+            setTimeout(checkForSendButton, checkInterval);
+          } else {
+            reject('Send button is still disabled after waiting');
+          }
           return;
         }
         
@@ -321,7 +356,10 @@ window.chatGPTFollowUpMessage = function(messageText) {
         sendButton.click();
         console.log('ChatGPT follow-up message sent successfully');
         resolve();
-      }, 500); // Give time for the button to become enabled after text is entered
+      };
+      
+      // Start checking after initial delay
+      setTimeout(checkForSendButton, 1000); // Give time for the button to appear after text is entered
     } catch (error) {
       reject(`Error: ${error}`);
     }
@@ -330,18 +368,57 @@ window.chatGPTFollowUpMessage = function(messageText) {
 """
 
 
-def selectors_up_to_date(page) -> bool:
+async def selectors_up_to_date(page) -> bool:
     """Quick test to verify ChatGPT UI hasn't changed."""
     try:
-        # Check for key selectors
-        result = page.evaluate("""
+        # Check for editor element
+        editor_check = await page.evaluate("""
             () => {
-                const editor = document.querySelector('.ProseMirror') || document.querySelector('#prompt-textarea');
-                const sendButton = document.querySelector('button[type="submit"]') || 
-                                  document.querySelector('[data-testid="send-button"]');
-                return editor !== null && sendButton !== null;
+                const editor = document.querySelector('.ProseMirror') || 
+                              document.querySelector('#prompt-textarea');
+                return editor !== null;
             }
         """)
-        return result
+        
+        if not editor_check:
+            return False
+        
+        # Type some text to make send button appear
+        await page.evaluate("""
+            () => {
+                const editor = document.querySelector('#prompt-textarea');
+                if (editor) {
+                    editor.focus();
+                    editor.innerHTML = '<p>test</p>';
+                    const inputEvent = new Event('input', { bubbles: true });
+                    editor.dispatchEvent(inputEvent);
+                }
+            }
+        """)
+        
+        # Wait a moment for UI to update
+        await page.wait_for_timeout(500)
+        
+        # Now check for send button
+        button_check = await page.evaluate("""
+            () => {
+                const sendButton = document.querySelector('[data-testid="send-button"]');
+                return sendButton !== null && !sendButton.disabled;
+            }
+        """)
+        
+        # Clear the text we added
+        await page.evaluate("""
+            () => {
+                const editor = document.querySelector('#prompt-textarea');
+                if (editor) {
+                    editor.innerHTML = '';
+                    const inputEvent = new Event('input', { bubbles: true });
+                    editor.dispatchEvent(inputEvent);
+                }
+            }
+        """)
+        
+        return editor_check and button_check
     except Exception:
         return False
