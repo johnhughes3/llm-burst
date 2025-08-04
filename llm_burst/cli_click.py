@@ -391,14 +391,33 @@ def cmd_follow_up(
 
     state = StateManager()
 
-    # Auto-select session when only one exists
+    # Auto-select session when only one exists, or prompt for selection
     if session_title is None:
         sessions = list(state.list_sessions().keys())
         if not sessions:
             raise click.ClickException("No active sessions.")
         if len(sessions) > 1:
-            raise click.ClickException("Multiple sessions active – specify --title.")
-        session_title = sessions[0]
+            # Interactive selection when multiple sessions exist
+            click.echo("Multiple active sessions:")
+            for i, session in enumerate(sessions, 1):
+                click.echo(f"  {i}. {session}")
+            
+            # Prompt user to select
+            while True:
+                try:
+                    choice = click.prompt(
+                        "Select session number", 
+                        type=click.IntRange(1, len(sessions)),
+                        show_choices=True
+                    )
+                    session_title = sessions[choice - 1]
+                    break
+                except (click.BadParameter, click.Abort) as e:
+                    if isinstance(e, click.Abort):
+                        raise  # Re-raise abort (Ctrl+C)
+                    click.echo("Invalid selection. Please try again.")
+        else:
+            session_title = sessions[0]
 
     sess = state.get_session(session_title)
     if sess is None:

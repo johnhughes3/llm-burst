@@ -50,15 +50,20 @@ def _run_rectangle_cli(action: RectangleAction) -> None:
 
 def _apple_key_expr(key: str) -> str:
     """Return AppleScript snippet for the given *key* identifier."""
-    arrows = {
+    # Map key names to their macOS key codes
+    keycodes = {
         "left": 123,
         "right": 124,
         "up": 126,
         "down": 125,
+        "u": 32,
+        "i": 34,
+        "j": 38,
+        "k": 40,
     }
     low = key.lower()
-    if low in arrows:
-        return f"key code {arrows[low]}"
+    if low in keycodes:
+        return f"key code {keycodes[low]}"
     # Fallback to literal keystroke – enclose in quotes
     return f'keystroke "{key}"'
 

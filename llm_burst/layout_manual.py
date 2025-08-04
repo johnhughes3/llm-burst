@@ -2,11 +2,30 @@
 
 import asyncio
 import os
+import sys
 from .browser import BrowserAdapter
 from .state import StateManager, LiveSession
 import logging
 
 _LOG = logging.getLogger(__name__)
+
+
+def _get_screen_dimensions() -> tuple[int, int]:
+    """Get the primary screen dimensions dynamically."""
+    if sys.platform == "darwin":
+        try:
+            from AppKit import NSScreen
+            main_screen = NSScreen.mainScreen()
+            if main_screen:
+                frame = main_screen.visibleFrame()
+                return int(frame.size.width), int(frame.size.height)
+        except ImportError:
+            _LOG.warning("pyobjc not available, using default dimensions")
+        except Exception as e:
+            _LOG.warning(f"Failed to get screen dimensions: {e}, using defaults")
+    
+    # Fallback dimensions
+    return 1920, 1080
 
 
 async def _verify_bounds(
@@ -55,10 +74,9 @@ async def arrange_via_cdp(max_windows: int = 4) -> None:
     # Limit to max_windows
     sessions = sessions[:max_windows]
 
-    # Get screen dimensions (approximate for standard displays)
-    screen_width = 1920  # You could make this configurable
-    screen_height = 1080
-    menu_bar_height = 25
+    # Get screen dimensions dynamically
+    screen_width, screen_height = _get_screen_dimensions()
+    menu_bar_height = 25  # Standard macOS menu bar height
 
     # Define layouts for different window counts
     layouts = {
