@@ -18,7 +18,6 @@ Design
 
 from __future__ import annotations
 
-import contextlib
 import json
 import logging
 import os
@@ -26,7 +25,7 @@ import fcntl
 from dataclasses import dataclass
 from datetime import datetime, timezone
 from pathlib import Path
-from typing import Dict, Optional, Any, Tuple, NamedTuple, List
+from typing import Dict, Optional, NamedTuple
 
 from .constants import STATE_FILE, LLMProvider
 
@@ -37,26 +36,31 @@ _LOG = logging.getLogger(__name__)
 # Dataclasses                                                                 #
 # --------------------------------------------------------------------------- #
 
+
 # New lightweight tuple for tab metadata
 class TabHandle(NamedTuple):
     window_id: int
     tab_id: str
 
+
 @dataclass(slots=True)
 class MultiProviderSession:
     """Stage-3: one logical *task* spanning multiple provider tabs."""
+
     title: str
-    created: str                # ISO timestamp
+    created: str  # ISO timestamp
     grouped: bool
     tabs: Dict[LLMProvider, TabHandle]
+
 
 @dataclass(slots=True)
 class LiveSession:
     """In-memory representation of an open LLM browser window."""
+
     task_name: str
     provider: LLMProvider
-    target_id: str          # CDP target identifier
-    window_id: int          # Chrome window identifier
+    target_id: str  # CDP target identifier
+    window_id: int  # Chrome window identifier
     group_id: int | None = None  # Chrome tab-group ID (optional)
     page_guid: Optional[str] = None  # Playwright "guid" of the Page (optional)
 
@@ -64,6 +68,7 @@ class LiveSession:
 @dataclass(slots=True)
 class TabGroup:
     """Lightweight record for a Chrome tab group."""
+
     group_id: int
     name: str
     color: str
@@ -72,6 +77,7 @@ class TabGroup:
 # --------------------------------------------------------------------------- #
 # State Manager (singleton)                                                   #
 # --------------------------------------------------------------------------- #
+
 
 class StateManager:
     """
@@ -86,16 +92,16 @@ class StateManager:
     # ---------------  construction & internal helpers  -------------------- #
 
     def __new__(cls, state_file: Path = STATE_FILE) -> "StateManager":
-        if cls._instance is None:        # pragma: no cover
+        if cls._instance is None:  # pragma: no cover
             cls._instance = super().__new__(cls)
             cls._instance._init(state_file)
         return cls._instance
 
     def _init(self, state_file: Path) -> None:
         self._state_file = state_file
-        self._sessions: Dict[str, LiveSession] = {}       # legacy v1 (per-tab)
+        self._sessions: Dict[str, LiveSession] = {}  # legacy v1 (per-tab)
         self._multi_sessions: Dict[str, MultiProviderSession] = {}  # NEW v2
-        self._groups: Dict[int, TabGroup] = {}     # New: tab-group registry
+        self._groups: Dict[int, TabGroup] = {}  # New: tab-group registry
         self._state_file.parent.mkdir(parents=True, exist_ok=True)
         self._load_from_disk()
 
@@ -115,7 +121,9 @@ class StateManager:
             return
 
         schema_ver = raw.get("schema", raw.get("version", 1))
-        if schema_ver == 2:
+
+        # --- existing v2 loader (multi-provider) unchanged ---
+        if schema_ver == 2 or schema_ver == 2.1:
             for sess in raw.get("sessions", []):
                 tabs = {
                     LLMProvider[k.upper()]: TabHandle(t["windowId"], t["tabId"])
@@ -129,8 +137,7 @@ class StateManager:
                     tabs=tabs,
                 )
         else:
-            # Legacy upgrade path: treat each single-provider record as part of a
-            # MultiProviderSession keyed by task_name (best-effort).
+            # Legacy upgrade path … (unchanged)
             for item in raw.get("sessions", []):
                 provider_name = item.get("provider", "").upper()
                 if provider_name not in LLMProvider.__members__:
@@ -148,7 +155,21 @@ class StateManager:
                     self._multi_sessions[title] = sess
                 sess.tabs[provider] = TabHandle(item["window_id"], item["target_id"])
 
-        # NEW: load tab groups
+        # NEW: hydrate per-tab sessions (LiveSession objects)
+        for w in raw.get("windows", []):
+            prov_name = w.get("provider", "").upper()
+            if prov_name not in LLMProvider.__members__:
+                continue
+            self._sessions[w["task_name"]] = LiveSession(
+                task_name=w["task_name"],
+                provider=LLMProvider[prov_name],
+                target_id=w["target_id"],
+                window_id=w["window_id"],
+                group_id=w.get("group_id"),
+                page_guid=w.get("page_guid"),
+            )
+
+        # NEW: load tab groups (existing code, kept)
         for g in raw.get("groups", []):
             self._groups[g["group_id"]] = TabGroup(
                 group_id=g["group_id"],
@@ -167,9 +188,11 @@ class StateManager:
         tmp_path.replace(self._state_file)
 
     def _persist(self) -> None:
+        """Write the in-memory state to disk in an atomic manner."""
         data = {
-            "schema": 2,
+            "schema": 2.1,  # ← bumped (back-compat: float value tolerated by previous readers)
             "saved_at": datetime.now(timezone.utc).isoformat(),
+            # Per-session (multi-provider) – existing payload unchanged
             "sessions": [
                 {
                     "title": s.title,
@@ -185,6 +208,18 @@ class StateManager:
                 }
                 for s in self._multi_sessions.values()
             ],
+            # NEW: per-tab LiveSession records
+            "windows": [
+                {
+                    "task_name": s.task_name,
+                    "provider": s.provider.name.lower(),
+                    "target_id": s.target_id,
+                    "window_id": s.window_id,
+                    **({"group_id": s.group_id} if s.group_id is not None else {}),
+                    **({"page_guid": s.page_guid} if s.page_guid else {}),
+                }
+                for s in self._sessions.values()
+            ],
             "groups": [
                 {
                     "group_id": g.group_id,
@@ -196,7 +231,7 @@ class StateManager:
         }
         try:
             self._write_atomic(data)
-        except OSError as exc:           # pragma: no cover
+        except OSError as exc:  # pragma: no cover
             _LOG.error("Failed to write state to %s: %s", self._state_file, exc)
 
     # ---------------  public API  ----------------------------------------- #
@@ -215,7 +250,9 @@ class StateManager:
 
         Returns the LiveSession instance that is now tracked.
         """
-        session = LiveSession(task_name, provider, target_id, window_id, group_id, page_guid)
+        session = LiveSession(
+            task_name, provider, target_id, window_id, group_id, page_guid
+        )
         self._sessions[task_name] = session
         self._persist()
         return session
@@ -237,7 +274,7 @@ class StateManager:
     def rename(self, old_name: str, new_name: str) -> Optional[LiveSession]:
         """
         Rename a session from old_name to new_name.
-        
+
         Returns the renamed LiveSession on success, None if:
         - old_name doesn't exist
         - new_name already exists (collision)
@@ -246,15 +283,19 @@ class StateManager:
         if old_name not in self._sessions:
             return None
         if new_name in self._sessions:
-            _LOG.warning("Cannot rename '%s' to '%s': target name already exists", old_name, new_name)
+            _LOG.warning(
+                "Cannot rename '%s' to '%s': target name already exists",
+                old_name,
+                new_name,
+            )
             return None
-        
+
         # Perform rename
         session = self._sessions.pop(old_name)
         session.task_name = new_name
         self._sessions[new_name] = session
         self._persist()
-        
+
         _LOG.info("Renamed session '%s' to '%s'", old_name, new_name)
         return session
 
@@ -326,3 +367,43 @@ class StateManager:
         if sess:
             sess.grouped = grouped
             self._persist()
+
+    def rename_session(self, old_title: str, new_title: str) -> bool:
+        """
+        Rename an existing multi-provider session.
+
+        Parameters
+        ----------
+        old_title : str
+            Current session title.
+        new_title : str
+            Desired new session title.
+
+        Returns
+        -------
+        bool
+            True on success, False if *old_title* doesn't exist or *new_title*
+            collides with an existing session.
+        """
+        if old_title not in self._multi_sessions:
+            return False
+        if new_title in self._multi_sessions:
+            _LOG.warning(
+                "Cannot rename session '%s' to '%s': target already exists",
+                old_title,
+                new_title,
+            )
+            return False
+
+        sess = self._multi_sessions.pop(old_title)
+        sess.title = new_title
+        self._multi_sessions[new_title] = sess
+        self._persist()
+        _LOG.info("Renamed session '%s' → '%s'", old_title, new_title)
+        return True
+
+    # ---------------  public helper  -------------------------------------- #
+
+    def persist_now(self) -> None:
+        """Force an immediate state flush to disk."""
+        self._persist()

@@ -3,13 +3,12 @@ Tests for Stage 3 Click CLI functionality.
 """
 
 import json
-from unittest.mock import patch, Mock, MagicMock
+from unittest.mock import patch, Mock
 
 import pytest
 from click.testing import CliRunner
 
 from llm_burst.cli_click import cli
-from llm_burst.constants import LLMProvider
 
 
 @pytest.fixture
@@ -77,9 +76,12 @@ def test_open_command_with_all_args(runner):
                 cli,
                 [
                     "open",
-                    "--provider", "claude",
-                    "--task-name", "Test-Task",
-                    "--prompt-text", "Hello AI",
+                    "--provider",
+                    "claude",
+                    "--task-name",
+                    "Test-Task",
+                    "--prompt-text",
+                    "Hello AI",
                 ],
             )
             assert result.exit_code == 0
@@ -97,7 +99,7 @@ def test_open_command_with_dialog(runner):
     }
     mock_handle = Mock()
     mock_handle.live.task_name = "Dialog-Task"
-    
+
     with patch("llm_burst.cli_click.prompt_user", return_value=mock_user_data):
         with patch("llm_burst.cli_click.open_llm_window", return_value=mock_handle):
             with patch("llm_burst.cli_click.send_prompt_sync"):
@@ -111,15 +113,17 @@ def test_open_command_stdin(runner):
     mock_handle = Mock()
     mock_handle.live.task_name = "Stdin-Task"
     stdin_text = "This is from stdin"
-    
+
     with patch("llm_burst.cli_click.open_llm_window", return_value=mock_handle):
         with patch("llm_burst.cli_click.send_prompt_sync") as mock_send:
             result = runner.invoke(
                 cli,
                 [
                     "open",
-                    "-p", "chatgpt",
-                    "-t", "Stdin-Task",
+                    "-p",
+                    "chatgpt",
+                    "-t",
+                    "Stdin-Task",
                     "--stdin",
                 ],
                 input=stdin_text,
@@ -139,7 +143,9 @@ def test_stop_command_single(runner):
 
 def test_stop_command_multiple(runner):
     """Test stop command with multiple tasks."""
-    with patch("llm_burst.cli_click.close_llm_window_sync", side_effect=[True, False, True]):
+    with patch(
+        "llm_burst.cli_click.close_llm_window_sync", side_effect=[True, False, True]
+    ):
         result = runner.invoke(cli, ["stop", "-t", "T1", "-t", "T2", "-t", "T3"])
         assert result.exit_code == 0
         assert "Closed 'T1'" in result.output

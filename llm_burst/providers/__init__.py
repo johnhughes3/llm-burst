@@ -2,53 +2,127 @@
 llm_burst.providers
 -------------------
 
-Registry and helpers for provider-specific "prompt injection" routines.
+Map each LLMProvider → coroutine that drops the provider's SUBMIT_JS into the
+page and invokes the entry-point function defined in that script.
 
-Each provider module MUST define an ``async def send_prompt(page: Page, text: str)``.
-The decorator ``@register(LLMProvider.X)`` adds the implementation to the registry
-so callers can simply do:
-
-    injector = get_injector(LLMProvider.GEMINI)
-    await injector(page, "Hello!")
-
-Adding a new provider is therefore as easy as dropping a ``foo.py`` module that
-calls ``@register(LLMProvider.FOO)``.
+The goal is not to cover every edge-case but to provide a dependable baseline
+for both *activate* and *follow-up* commands.
 """
-from __future__ import annotations
 
-from collections.abc import Awaitable, Callable
-from typing import Dict
+from __future__ import annotations
+import json
+from dataclasses import dataclass
 
 from playwright.async_api import Page
 
 from llm_burst.constants import LLMProvider
+from llm_burst.sites import chatgpt, claude, gemini, grok
 
 __all__ = [
-    "register",
+    "InjectOptions",
     "get_injector",
 ]
 
-_Registry: Dict[LLMProvider, Callable[[Page, str], Awaitable[None]]] = {}
+
+@dataclass(slots=True)
+class InjectOptions:
+    """Control flags passed to the JS injector."""
+
+    follow_up: bool = False
+    research: bool = False
+    incognito: bool = False
 
 
-def register(provider: LLMProvider):
-    """
-    Decorator for registering a provider-specific ``send_prompt`` coroutine.
-    """
-    def _decorator(func: Callable[[Page, str], Awaitable[None]]):
-        _Registry[provider] = func
-        return func
-    return _decorator
+# --------------------------------------------------------------------------- #
+# Helper to build an injector                                                 #
+# --------------------------------------------------------------------------- #
 
 
-def get_injector(provider: LLMProvider) -> Callable[[Page, str], Awaitable[None]]:
+def _build_injector(
+    submit_js: str,
+    followup_js: str | None,
+    submit_tpl: str,
+    follow_tpl: str | None,
+):
     """
-    Return the injection coroutine for *provider*.
+    Build a coroutine that injects SUBMIT or FOLLOW-UP JavaScript into the page
+    and invokes the correct entry-point.
+
+    Placeholders accepted in the call templates:
+        {prompt}     – JSON-encoded prompt text
+        {research}   – \"'Yes'\" / \"'No'\"
+        {incognito}  – \"'Yes'\" / \"'No'\"
     """
-    # Import all provider modules to register them
-    from . import gemini, claude, chatgpt, grok  # noqa: F401
-    
+
+    async def _inject(page: Page, prompt: str, opts: "InjectOptions") -> None:  # noqa: D401
+        # Select script & template
+        if opts.follow_up and followup_js and follow_tpl:
+            js_src, call_tpl = followup_js, follow_tpl
+        else:
+            js_src, call_tpl = submit_js, submit_tpl
+
+        # Load helper functions
+        await page.evaluate(js_src)
+
+        # Build call expression
+        call_expr = call_tpl.format(
+            prompt=json.dumps(prompt),
+            research="'Yes'" if opts.research else "'No'",
+            incognito="'Yes'" if opts.incognito else "'No'",
+        )
+
+        # Execute inside async IIFE to await any internal promises
+        await page.evaluate(
+            f"(async () => {{ try {{ await {call_expr}; }} catch(e) {{ console.error(e); }} }})()"
+        )
+
+    return _inject
+
+
+# --------------------------------------------------------------------------- #
+# Registry                                                                     #
+# --------------------------------------------------------------------------- #
+
+# Provider ➜ (SUBMIT_JS, FOLLOWUP_JS, submit_call_tpl, follow_call_tpl)
+_PROVIDER_CONFIG: dict[LLMProvider, tuple[str, str | None, str, str | None]] = {
+    LLMProvider.CHATGPT: (
+        chatgpt.SUBMIT_JS,
+        chatgpt.FOLLOWUP_JS,
+        "automateOpenAIChat({prompt}, {research}, {incognito})",
+        "chatGPTFollowUpMessage({prompt})",
+    ),
+    LLMProvider.GEMINI: (
+        gemini.SUBMIT_JS,
+        gemini.FOLLOWUP_JS,
+        "automateGeminiChat({prompt}, {research})",
+        "geminiFollowUpMessage({prompt})",
+    ),
+    LLMProvider.CLAUDE: (
+        claude.SUBMIT_JS,
+        claude.FOLLOWUP_JS,
+        "(function(txt) {{ document.execCommand('insertText', false, txt); }})({prompt})",
+        "claudeFollowUpMessage({prompt})",
+    ),
+    LLMProvider.GROK: (
+        grok.SUBMIT_JS,
+        grok.FOLLOWUP_JS,
+        "automateGrokChat({prompt}, {research}, {incognito})",
+        "grokFollowUpMessage({prompt})",
+    ),
+}
+
+
+def get_injector(provider: LLMProvider):
+    """
+    Return an injector coroutine for *provider*.
+
+    Usage:
+        opts = InjectOptions(...)
+        injector = get_injector(provider)
+        await injector(page, prompt, opts)
+    """
     try:
-        return _Registry[provider]
-    except KeyError:                       # pragma: no cover
-        raise RuntimeError(f"No injector registered for provider: {provider}")
+        cfg = _PROVIDER_CONFIG[provider]
+    except KeyError as exc:
+        raise KeyError(f"Unknown provider: {provider}") from exc
+    return _build_injector(*cfg)

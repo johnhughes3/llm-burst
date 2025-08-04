@@ -2,25 +2,25 @@
 
 # JavaScript for initial prompt submission (activate command)
 SUBMIT_JS = r"""
-function automateGeminiChat(messageText, enableResearch) {
+window.automateGeminiChat = function(messageText, enableResearch) {
   return new Promise((resolve, reject) => {
     try {
       // Step 1: Check if we need to enable Deep Research first
       if (enableResearch === 'Yes') {
         console.log('Research mode requested, will enable Deep Research first');
         // Enable research before model selection to avoid dropdown conflicts
-        enableDeepResearch(() => {
+        window.enableDeepResearch(() => {
           // Continue with model selection after enabling research
-          selectModelAndProceed(messageText, resolve, reject);
+          window.selectModelAndProceed(messageText, resolve, reject);
         }, () => {
           // If research enabling fails, still try to continue with model selection
           console.log('Could not enable Deep Research, continuing with model selection');
-          selectModelAndProceed(messageText, resolve, reject);
+          window.selectModelAndProceed(messageText, resolve, reject);
         });
       } else {
         // Skip research step, go directly to model selection
         console.log('Regular mode requested, proceeding to model selection');
-        selectModelAndProceed(messageText, resolve, reject);
+        window.selectModelAndProceed(messageText, resolve, reject);
       }
     } catch (error) {
       reject(`Error in automation process: ${error}`);
@@ -28,7 +28,7 @@ function automateGeminiChat(messageText, enableResearch) {
   });
 }
 
-function enableDeepResearch(onSuccess, onFailure) {
+window.enableDeepResearch = function(onSuccess, onFailure) {
   try {
     // Method 1: Try toolbar button first
     const toolbarButtons = Array.from(document.querySelectorAll('button.toolbox-drawer-item-button'))
@@ -84,7 +84,7 @@ function enableDeepResearch(onSuccess, onFailure) {
   }
 }
 
-function selectModelAndProceed(messageText, resolve, reject) {
+window.selectModelAndProceed = function(messageText, resolve, reject) {
   try {
     // Find and click the model selector button
     console.log('Looking for model selector button');
@@ -105,7 +105,7 @@ function selectModelAndProceed(messageText, resolve, reject) {
     if (!modelButton) {
       console.log('Model selector button not found, proceeding with current model');
       // Skip to adding text
-      addTextAndSend(messageText, resolve, reject);
+      window.addTextAndSend(messageText, resolve, reject);
       return;
     }
     
@@ -130,7 +130,7 @@ function selectModelAndProceed(messageText, resolve, reject) {
         // Click somewhere else to close the dropdown
         document.body.click();
         setTimeout(() => {
-          addTextAndSend(messageText, resolve, reject);
+          window.addTextAndSend(messageText, resolve, reject);
         }, 300);
         return;
       }
@@ -140,7 +140,7 @@ function selectModelAndProceed(messageText, resolve, reject) {
       
       // Wait for model selection to apply and dropdown to close
       setTimeout(() => {
-        addTextAndSend(messageText, resolve, reject);
+        window.addTextAndSend(messageText, resolve, reject);
       }, 500);
     }, 500);
   } catch (error) {
@@ -148,7 +148,7 @@ function selectModelAndProceed(messageText, resolve, reject) {
   }
 }
 
-function addTextAndSend(messageText, resolve, reject) {
+window.addTextAndSend = function(messageText, resolve, reject) {
   try {
     // Find the editable text area
     const editor = document.querySelector('.ql-editor');
@@ -219,12 +219,11 @@ function addTextAndSend(messageText, resolve, reject) {
 }
 
 // Entry point
-automateGeminiChat(messageText, enableResearch);
 """
 
 # JavaScript for follow-up messages
 FOLLOWUP_JS = r"""
-function geminiFollowUpMessage(messageText) {
+window.geminiFollowUpMessage = function(messageText) {
   return new Promise((resolve, reject) => {
     try {
       // Find the editable text area
@@ -283,8 +282,8 @@ function geminiFollowUpMessage(messageText) {
 }
 
 // Entry point
-geminiFollowUpMessage(messageText);
 """
+
 
 def selectors_up_to_date(page) -> bool:
     """Quick test to verify Gemini UI hasn't changed."""

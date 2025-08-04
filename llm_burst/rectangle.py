@@ -40,7 +40,9 @@ def _run_rectangle_cli(action: RectangleAction) -> None:
     cli_path: Final[str] = shutil.which("rectangle-cli")  # type: ignore[assignment]
     if not cli_path:  # pragma: no cover
         raise RuntimeError("rectangle-cli not found on PATH")
-    subprocess.run([cli_path, "--action", action.value], check=True, capture_output=True)
+    subprocess.run(
+        [cli_path, "--action", action.value], check=True, capture_output=True
+    )
 
 
 # --------------------------- AppleScript fallback -------------------------- #

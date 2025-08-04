@@ -2,7 +2,7 @@
 
 # JavaScript for initial prompt submission (activate command)
 SUBMIT_JS = r"""
-function automateOpenAIChat(messageText, useResearch, useIncognito) {
+window.automateOpenAIChat = function(messageText, useResearch, useIncognito) {
   return new Promise((resolve, reject) => {
     try {
       console.log(`Starting ChatGPT automation. Research mode: ${useResearch}, Incognito mode: ${useIncognito}`);
@@ -253,14 +253,11 @@ function automateOpenAIChat(messageText, useResearch, useIncognito) {
     }
   });
 }
-
-// Entry point
-automateOpenAIChat(messageText, useResearch, useIncognito);
 """
 
 # JavaScript for follow-up messages
 FOLLOWUP_JS = r"""
-function chatGPTFollowUpMessage(messageText) {
+window.chatGPTFollowUpMessage = function(messageText) {
   return new Promise((resolve, reject) => {
     try {
       // Find the ProseMirror element (the editable div)
@@ -330,10 +327,8 @@ function chatGPTFollowUpMessage(messageText) {
     }
   });
 }
-
-// Entry point
-chatGPTFollowUpMessage(messageText);
 """
+
 
 def selectors_up_to_date(page) -> bool:
     """Quick test to verify ChatGPT UI hasn't changed."""

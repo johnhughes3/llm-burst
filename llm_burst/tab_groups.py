@@ -5,6 +5,7 @@ llm_burst.tab_groups
 Thin sync façade for Chrome Tab-Group operations so CLI code can remain
 synchronous, mirroring the bridge helpers in llm_burst.cli.
 """
+
 from __future__ import annotations
 
 import asyncio
@@ -17,6 +18,7 @@ from .state import TabGroup, StateManager
 # --------------------------------------------------------------------------- #
 # Low-level async helpers                                                     #
 # --------------------------------------------------------------------------- #
+
 
 async def _async_create_group(name: str, color: str) -> TabGroup:
     async with BrowserAdapter() as adapter:
@@ -44,6 +46,7 @@ async def _async_move_to_group(task_name: str, group_name: str) -> None:
 # --------------------------------------------------------------------------- #
 # Public sync bridge                                                          #
 # --------------------------------------------------------------------------- #
+
 
 def create_group_sync(name: str, color: str = "grey") -> TabGroup:
     """Create (or fetch) a Chrome tab group and return its metadata."""

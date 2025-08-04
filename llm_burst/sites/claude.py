@@ -1,7 +1,7 @@
 """Claude site automation JavaScript selectors and functions."""
 
 SUBMIT_JS = """
-function tryFind(selector, description) {
+window.tryFind = function(selector, description) {
     try {
         const element = document.querySelector(selector);
         if (!element) {
@@ -15,7 +15,7 @@ function tryFind(selector, description) {
     }
 }
 
-function automateClaudeInteraction(enableResearch) {
+window.automateClaudeInteraction = function(enableResearch) {
   console.log('Starting Claude automation' + (enableResearch ? ' with Research enabled' : ''));
   
   let automationChain = Promise.resolve();
@@ -39,7 +39,7 @@ function automateClaudeInteraction(enableResearch) {
   });
 }
 
-function enableResearchMode() {
+window.enableResearchMode = function() {
   return new Promise((resolve, reject) => {
     try {
       console.log('Attempting to enable Research mode...');
@@ -77,7 +77,7 @@ function enableResearchMode() {
   });
 }
 
-function focusInputArea() {
+window.focusInputArea = function() {
   return new Promise((resolve, reject) => {
     try {
       const editor = tryFind('.ProseMirror', 'Claude editor');
@@ -99,7 +99,7 @@ function focusInputArea() {
 """
 
 FOLLOWUP_JS = r"""
-function claudeFollowUpMessage(messageText) {
+window.claudeFollowUpMessage = function(messageText) {
   return new Promise((resolve, reject) => {
     try {
         // Find the ProseMirror element
@@ -174,10 +174,8 @@ function claudeFollowUpMessage(messageText) {
     }
   });
 }
-
-// Entry point
-claudeFollowUpMessage(messageText);
 """
+
 
 def selectors_up_to_date(page) -> bool:
     """Quick test to verify Claude UI hasn't changed."""

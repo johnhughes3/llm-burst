@@ -19,7 +19,6 @@ import json
 import subprocess
 import sys
 from typing import Any, Dict, Union, Optional
-import logging
 from uuid import uuid4
 
 from .constants import (
@@ -29,7 +28,6 @@ from .constants import (
     LLMProvider,
 )
 from .browser import BrowserAdapter, SessionHandle
-from .providers import get_injector
 
 
 def prompt_user() -> Dict[str, Any]:
@@ -47,7 +45,18 @@ def prompt_user() -> Dict[str, Any]:
       with PROMPT_CANCEL_EXIT.
     " Any stderr emitted by the shell script is forwarded to this program's
       stderr to aid debugging.
+
+    Raises
+    ------
+    FileNotFoundError
+        If swiftDialog is not installed or script not found.
     """
+    # Check if dialog binary exists first
+    import shutil
+
+    if not shutil.which("dialog"):
+        raise FileNotFoundError("swiftDialog not installed")
+
     result = subprocess.run(
         [str(SWIFT_PROMPT_SCRIPT)],
         capture_output=True,
@@ -74,6 +83,7 @@ def prompt_user() -> Dict[str, Any]:
 # Stage-2: Async bridge functions                                             #
 # --------------------------------------------------------------------------- #
 
+
 def _generate_placeholder(provider: LLMProvider) -> str:
     """Generate a placeholder task name like 'PROVIDER-1a2b'."""
     return f"{provider.name}-{uuid4().hex[:4]}"
@@ -87,7 +97,7 @@ def open_llm_window(task_name: str, provider: LLMProvider) -> SessionHandle:
     ``PROVIDER-xxxx`` is generated and later eligible for auto-naming.
     """
     # Generate placeholder if caller supplied no explicit name
-    if task_name is None:                       # type: ignore[arg-type]
+    if task_name is None:  # type: ignore[arg-type]
         task_name = _generate_placeholder(provider)
 
     return asyncio.run(_async_open_window(task_name, provider))
@@ -99,23 +109,52 @@ async def _async_open_window(task_name: str, provider: LLMProvider) -> SessionHa
         return await adapter.open_window(task_name, provider)
 
 
-def send_prompt_sync(handle_or_task: Union[SessionHandle, str], prompt: str) -> None:
+def send_prompt_sync(
+    handle_or_task: Union[SessionHandle, str],
+    prompt: str,
+    *,
+    follow_up: bool = False,
+    research: bool = False,
+    incognito: bool = False,
+) -> None:
     """
-    Synchronous bridge that injects *prompt* into an existing session.
+    Inject *prompt* into an existing session (synchronously).
 
     Parameters
     ----------
     handle_or_task : SessionHandle | str
-        Either a previously returned SessionHandle or a task name.
+        Session handle or task name.
     prompt : str
-        Text to send to the provider's chat box.
+        Text to send.
+    follow_up : bool, optional
+        Use provider's FOLLOWUP_JS. Defaults to False.
+    research : bool, optional
+        Enable research / deep-search mode where supported. Defaults to False.
+    incognito : bool, optional
+        Enable incognito / private mode where supported. Defaults to False.
     """
-    asyncio.run(_async_send_prompt(handle_or_task, prompt))
+    asyncio.run(
+        _async_send_prompt(
+            handle_or_task,
+            prompt,
+            follow_up=follow_up,
+            research=research,
+            incognito=incognito,
+        )
+    )
 
 
-async def _async_send_prompt(handle_or_task: Union[SessionHandle, str], prompt: str) -> None:
+async def _async_send_prompt(
+    handle_or_task: Union[SessionHandle, str],
+    prompt: str,
+    *,
+    follow_up: bool = False,
+    research: bool = False,
+    incognito: bool = False,
+) -> None:
     from .state import StateManager
     from .browser import BrowserAdapter
+    from llm_burst.providers import get_injector, InjectOptions
 
     # Resolve provider + page
     if isinstance(handle_or_task, SessionHandle):
@@ -134,19 +173,24 @@ async def _async_send_prompt(handle_or_task: Union[SessionHandle, str], prompt: 
                 raise RuntimeError(f"Could not locate page for task '{task_name}'")
             provider = session.provider
 
+    opts = InjectOptions(
+        follow_up=follow_up,
+        research=research,
+        incognito=incognito,
+    )
     injector = get_injector(provider)
-    await injector(page, prompt)
+    await injector(page, prompt, opts)
 
 
 def get_running_sessions() -> Dict[str, Any]:
     """
     Retrieve all currently tracked browser sessions.
-    
+
     Returns
     -------
     dict
         Mapping of task_name to session metadata (provider, target_id, window_id).
-    
+
     Example
     -------
     >>> from llm_burst.cli import get_running_sessions
@@ -155,10 +199,10 @@ def get_running_sessions() -> Dict[str, Any]:
     ...     print(f"{task}: {info['provider']}")
     """
     from .state import StateManager
-    
+
     state = StateManager()
     sessions = state.list_all()
-    
+
     return {
         task_name: {
             "provider": session.provider.name,

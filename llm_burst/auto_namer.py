@@ -36,8 +36,10 @@ _LOG = logging.getLogger(__name__)
 # Pydantic Model for Structured Output
 # --------------------------------------------------------------------------- #
 
+
 class TaskName(BaseModel):
     """Structured output schema for Gemini response."""
+
     task_name: str
     model_config = ConfigDict(str_strip_whitespace=True)
 
@@ -70,15 +72,18 @@ _CONVERSATION_SELECTORS: dict[LLMProvider, dict[str, str]] = {
 # Gemini API Client Setup
 # --------------------------------------------------------------------------- #
 
+
 def _setup_gemini() -> Optional[genai.GenerativeModel]:
     """Configure Gemini API and return model instance."""
     api_key = os.getenv(GEMINI_API_KEY_ENV)
     if not api_key:
-        _LOG.warning("No Gemini API key found in %s - auto-naming disabled", GEMINI_API_KEY_ENV)
+        _LOG.warning(
+            "No Gemini API key found in %s - auto-naming disabled", GEMINI_API_KEY_ENV
+        )
         return None
-    
+
     genai.configure(api_key=api_key)
-    
+
     # Configure for structured JSON output
     generation_config = {
         "temperature": 0.5,
@@ -88,7 +93,7 @@ def _setup_gemini() -> Optional[genai.GenerativeModel]:
         "response_mime_type": "application/json",
         "response_schema": TaskName.model_json_schema(),
     }
-    
+
     # Relaxed safety settings for naming task
     safety_settings = {
         HarmCategory.HARM_CATEGORY_HATE_SPEECH: HarmBlockThreshold.BLOCK_NONE,
@@ -96,7 +101,7 @@ def _setup_gemini() -> Optional[genai.GenerativeModel]:
         HarmCategory.HARM_CATEGORY_SEXUALLY_EXPLICIT: HarmBlockThreshold.BLOCK_NONE,
         HarmCategory.HARM_CATEGORY_DANGEROUS_CONTENT: HarmBlockThreshold.BLOCK_NONE,
     }
-    
+
     return genai.GenerativeModel(
         model_name=GEMINI_MODEL_NAME,
         generation_config=generation_config,
@@ -108,42 +113,41 @@ def _setup_gemini() -> Optional[genai.GenerativeModel]:
 # Conversation Extraction
 # --------------------------------------------------------------------------- #
 
+
 async def extract_conversation(
-    page: Page,
-    provider: LLMProvider,
-    max_chars: int = AUTO_NAMING_MAX_CHARS
+    page: Page, provider: LLMProvider, max_chars: int = AUTO_NAMING_MAX_CHARS
 ) -> Optional[str]:
     """
     Extract conversation content from the LLM page.
-    
+
     Returns formatted conversation text or None if extraction fails.
     """
     selectors = _CONVERSATION_SELECTORS.get(provider)
     if not selectors:
         _LOG.warning("No conversation selectors configured for %s", provider)
         return None
-    
+
     try:
         # Wait for at least one user message
         await page.wait_for_selector(selectors["user"], timeout=3000)
-        
+
         # Extract all messages
         messages = []
-        
+
         # Get user messages
         user_elements = await page.query_selector_all(selectors["user"])
         for elem in user_elements:
             text = await elem.inner_text()
             if text:
                 messages.append(("user", text.strip()))
-        
+
         # Get assistant messages if present
         assistant_elements = await page.query_selector_all(selectors["assistant"])
         for elem in assistant_elements:
             text = await elem.inner_text()
             if text:
                 messages.append(("assistant", text.strip()))
-        
+
         # Sort by appearance order (assuming DOM order)
         # Build conversation text
         conversation = []
@@ -152,9 +156,9 @@ async def extract_conversation(
                 conversation.append(f"User: {text}")
             else:
                 conversation.append(f"Assistant: {text}")
-        
+
         full_text = "\n\n".join(conversation)
-        
+
         # If conversation exceeds max_chars, take first half and last half
         # This preserves both initial context (what the task is about) and
         # recent context (current focus) for better naming
@@ -163,9 +167,9 @@ async def extract_conversation(
             first_part = full_text[:half_limit]
             last_part = full_text[-half_limit:]
             full_text = first_part + "\n\n...\n\n" + last_part
-        
+
         return full_text
-    
+
     except Exception as e:
         _LOG.debug("Failed to extract conversation: %s", e)
         return None
@@ -175,13 +179,13 @@ async def extract_conversation(
 # Name Generation
 # --------------------------------------------------------------------------- #
 
+
 async def generate_task_name(
-    conversation: str,
-    model: genai.GenerativeModel
+    conversation: str, model: genai.GenerativeModel
 ) -> Optional[str]:
     """
     Generate a task name from conversation context using Gemini API.
-    
+
     Returns the generated name or None if generation fails.
     """
     prompt = textwrap.dedent("""
@@ -200,21 +204,18 @@ async def generate_task_name(
         Conversation:
         {conversation}
     """).format(conversation=conversation)
-    
+
     try:
-        response = await asyncio.to_thread(
-            model.generate_content,
-            prompt
-        )
-        
+        response = await asyncio.to_thread(model.generate_content, prompt)
+
         # Parse the JSON response
         if response.text:
             task_obj = TaskName.model_validate_json(response.text)
             return task_obj.task_name
-        
+
     except Exception as e:
         _LOG.warning("Gemini API error: %s", e)
-    
+
     return None
 
 
@@ -222,25 +223,25 @@ async def generate_task_name(
 # Main Auto-naming Function
 # --------------------------------------------------------------------------- #
 
-async def auto_name_session(
-    session: LiveSession,
-    page: Page
-) -> Optional[str]:
+
+async def auto_name_session(session: LiveSession, page: Page) -> Optional[str]:
     """
     Automatically generate and apply a name for the session.
-    
+
     Returns the new name if successful, None otherwise.
     """
     # Skip if API not configured
     model = _setup_gemini()
     if not model:
         return None
-    
+
     # Skip if not a placeholder name (already has meaningful name)
     if not _is_placeholder_name(session.task_name):
-        _LOG.debug("Skipping auto-naming for '%s' - not a placeholder", session.task_name)
+        _LOG.debug(
+            "Skipping auto-naming for '%s' - not a placeholder", session.task_name
+        )
         return None
-    
+
     try:
         # Set overall timeout
         async with asyncio.timeout(AUTO_NAMING_TIMEOUT):
@@ -249,33 +250,35 @@ async def auto_name_session(
             if not conversation:
                 _LOG.debug("No conversation content to generate name from")
                 return None
-            
+
             # Generate name
             new_name = await generate_task_name(conversation, model)
             if not new_name or len(new_name) < 3:
                 _LOG.debug("Generated name too short or empty: %s", new_name)
                 return None
-            
+
             # Apply rename
             state = StateManager()
             renamed = state.rename(session.task_name, new_name)
             if renamed:
-                _LOG.info("Auto-named session: '%s' -> '%s'", session.task_name, new_name)
-                
+                _LOG.info(
+                    "Auto-named session: '%s' -> '%s'", session.task_name, new_name
+                )
+
                 # Update browser window title
                 await set_window_title(page, new_name)
-                
+
                 # Update session object for caller
                 session.task_name = new_name
                 return new_name
             else:
                 _LOG.warning("Failed to rename - name collision or session not found")
-    
+
     except asyncio.TimeoutError:
         _LOG.warning("Auto-naming timed out after %s seconds", AUTO_NAMING_TIMEOUT)
     except Exception as e:
         _LOG.warning("Auto-naming failed: %s", e)
-    
+
     return None
 
 
@@ -283,13 +286,14 @@ async def auto_name_session(
 # Helper Functions
 # --------------------------------------------------------------------------- #
 
+
 def _is_placeholder_name(name: str) -> bool:
     """Check if the name looks like an auto-generated placeholder."""
     # Patterns: Provider-xxxx, Provider-1, etc.
     providers = ["GEMINI", "CLAUDE", "CHATGPT", "GROK"]
     for provider in providers:
         if name.upper().startswith(provider + "-"):
-            suffix = name[len(provider) + 1:]
+            suffix = name[len(provider) + 1 :]
             # Check if suffix is numeric or hex-like
             if suffix.isdigit() or all(c in "0123456789abcdef" for c in suffix.lower()):
                 return True

@@ -11,18 +11,20 @@ open   : Open (or reuse) an LLM window and optionally send a prompt
 stop   : Close one or more running sessions
 arrange: Tile active windows with Rectangle.app
 """
+
 from __future__ import annotations
 
 import json
 import logging
 import sys
-import itertools
+import asyncio
 from importlib import metadata
 from typing import Optional
 
 import click
 
-from llm_burst.providers import get_injector
+from llm_burst.providers import get_injector, InjectOptions
+from llm_burst.auto_namer import auto_name_session  # Added
 from llm_burst.constants import LLMProvider, TabColor
 from llm_burst.tab_groups import (
     create_group_sync,
@@ -35,7 +37,7 @@ from llm_burst.cli import (
     get_running_sessions,
     close_llm_window_sync,
     prompt_user,
-    auto_name_sync,   # Added
+    auto_name_sync,  # Added
 )
 
 _LOG = logging.getLogger(__name__)
@@ -68,6 +70,7 @@ def cli(ctx: click.Context, verbose: bool) -> None:  # noqa: D401  (Click demand
 # --------------------------------------------------------------------------- #
 # list command                                                                #
 # --------------------------------------------------------------------------- #
+
 
 @cli.command("list")
 @click.option(
@@ -102,6 +105,7 @@ def cmd_list(output: str) -> None:
 # --------------------------------------------------------------------------- #
 # open command                                                                #
 # --------------------------------------------------------------------------- #
+
 
 def _provider_from_str(raw: str) -> LLMProvider:
     try:
@@ -154,11 +158,17 @@ def cmd_open(
     """Open a new LLM window (or re-attach) and optionally send a prompt."""
 
     # Merge missing values from swiftDialog prompt when any field absent
-    if provider is None or (task_name is None and not reuse) or (prompt_text is None and not stdin):
+    if (
+        provider is None
+        or (task_name is None and not reuse)
+        or (prompt_text is None and not stdin)
+    ):
         user_data = prompt_user()
         provider = provider or user_data.get("provider")
         task_name = task_name or user_data.get("task_name") or user_data.get("task")
-        prompt_text = prompt_text or user_data.get("prompt_text") or user_data.get("prompt")
+        prompt_text = (
+            prompt_text or user_data.get("prompt_text") or user_data.get("prompt")
+        )
 
     # Validation
     if provider is None:
@@ -170,9 +180,12 @@ def cmd_open(
     provider_enum = _provider_from_str(provider)
 
     from llm_burst.state import StateManager
+
     state = StateManager()
     if reuse and task_name in state.list_all():
-        raise click.ClickException(f"Session '{task_name}' already exists (reuse flag set).")
+        raise click.ClickException(
+            f"Session '{task_name}' already exists (reuse flag set)."
+        )
 
     # Read prompt text from STDIN if requested
     if stdin:
@@ -208,81 +221,138 @@ def cmd_open(
 # activate command (⌃⌥R replacement)                                         #
 # --------------------------------------------------------------------------- #
 
+
 @cli.command("activate")
-@click.option("-t", "--title", "session_title", type=str, help="Session title / task name.")
-@click.option("-m", "--prompt-text", type=str, help="Prompt to broadcast to all providers.")
+@click.option(
+    "-t", "--title", "session_title", type=str, help="Session title / task name."
+)
+@click.option(
+    "-m", "--prompt-text", type=str, help="Prompt to broadcast to all providers."
+)
 @click.option("-s", "--stdin", is_flag=True, help="Read prompt text from STDIN.")
 @click.option("-r", "--research", is_flag=True, help="Enable research/deep mode.")
 @click.option("-i", "--incognito", is_flag=True, help="Enable incognito/private mode.")
-def cmd_activate(session_title: str | None, prompt_text: str | None, stdin: bool, research: bool, incognito: bool) -> None:
+def cmd_activate(
+    session_title: str | None,
+    prompt_text: str | None,
+    stdin: bool,
+    research: bool,
+    incognito: bool,
+) -> None:
     """Open 4 LLM tabs and send the same prompt (⌃⌥R replacement)."""
+    from datetime import datetime
     from llm_burst.state import StateManager
-    
-    # Collect missing values from swiftDialog
-    if session_title is None or (prompt_text is None and not stdin):
-        data = prompt_user()
-        session_title = session_title or data.get("Task Name") or data.get("task_name")
-        prompt_text = prompt_text or data.get("Prompt Text") or data.get("prompt_text")
-        # Check for research/incognito from dialog
-        if not research and data.get("Research") == "Yes":
-            research = True
-        if not incognito and data.get("Incognito") == "Yes":
-            incognito = True
+    from llm_burst.browser import BrowserAdapter
 
-    if not session_title:
-        # Auto-generate name with timestamp
-        from datetime import datetime
+    # 1️⃣ Gather any missing fields from swiftDialog
+    if session_title is None or (prompt_text is None and not stdin):
+        try:
+            data = prompt_user()
+            session_title = (
+                session_title or data.get("Task Name") or data.get("task_name")
+            )
+            prompt_text = (
+                prompt_text
+                or data.get("Prompt Text")
+                or data.get("prompt_text")
+                or data.get("prompt")
+            )
+            if not research and data.get("Research") == "Yes":
+                research = True
+            if not incognito and data.get("Incognito") == "Yes":
+                incognito = True
+        except (FileNotFoundError, OSError):
+            # Dialog not available – continue with whatever CLI flags gave us
+            pass
+
+    # Auto-generate a nice title (timestamp) when still missing
+    auto_generated = False  # Track if we created a placeholder title
+    if session_title is None:
+        auto_generated = True
         session_title = datetime.now().strftime("%a, %b %d, %Y %I:%M%p")
-    
+
+    # Stdin overrides everything for prompt text
     if stdin:
         prompt_text = sys.stdin.read()
-    
-    if not prompt_text:
-        raise click.UsageError("Prompt text required (use --prompt-text, --stdin, or dialog)")
 
-    providers = list(LLMProvider)  # all four
-    state = StateManager()
-    
-    # Create or reuse session
-    sess = state.get_session(session_title)
-    if sess:
-        click.echo(f"Re-using existing session '{session_title}'")
-    else:
-        state.create_session(session_title)
-    
-    # Open each provider tab
-    opened = []
-    for prov in providers:
-        task = _task_slug(session_title, prov)
-        try:
-            handle = open_llm_window(task, prov)
-            # TODO: Pass research/incognito flags to JavaScript
-            send_prompt_sync(handle, prompt_text)
-            state.add_tab_to_session(
-                session_title,
-                prov,
-                handle.live.window_id,
-                handle.live.target_id,
-            )
-            opened.append(prov.name.lower())
-        except Exception as exc:
-            click.echo(f"Failed to open {prov.name}: {exc}", err=True)
-    
-    click.echo(f"✓ Session '{session_title}' activated with {len(opened)} providers")
-    
-    # Arrange windows unless research mode
+    if prompt_text is None or not prompt_text.strip():
+        raise click.UsageError(
+            "Prompt text required (via --prompt-text, --stdin, or dialog)"
+        )
+
+    providers = list(LLMProvider)  # All known providers for now
+
+    async def _async_activate() -> tuple[list[str], str]:
+        """Open all provider windows and send prompt while BrowserAdapter is alive."""
+        opened: list[str] = []
+        state = StateManager()
+        final_title = session_title  # May change after rename
+        first_renamed: str | None = None
+
+        # Create or reuse the session record
+        if state.get_session(session_title):
+            click.echo(f"Re-using existing session '{session_title}'")
+        else:
+            state.create_session(session_title)
+
+        async with BrowserAdapter() as adapter:
+            for prov in providers:
+                task = _task_slug(session_title, prov)
+                try:
+                    handle = await adapter.open_window(task, prov)
+                    opts = InjectOptions(
+                        follow_up=False,
+                        research=research,
+                        incognito=incognito,
+                    )
+                    injector = get_injector(prov)
+                    await injector(handle.page, prompt_text, opts)
+
+                    # Attempt auto-naming for this tab
+                    new_task_name = await auto_name_session(handle.live, handle.page)
+                    if new_task_name and first_renamed is None:
+                        first_renamed = new_task_name
+
+                    state.add_tab_to_session(
+                        session_title,
+                        prov,
+                        handle.live.window_id,
+                        handle.live.target_id,
+                    )
+                    opened.append(prov.name.lower())
+                except Exception as exc:
+                    click.echo(f"Failed to open {prov.name}: {exc}", err=True)
+
+            # If we used an auto-generated session title, try to improve it
+            if auto_generated and first_renamed:
+                candidate_title = first_renamed.split(":", 1)[0]
+                if state.rename_session(final_title, candidate_title):
+                    final_title = candidate_title
+
+            # Flush state so that follow-up commands see the new data
+            state.persist_now()
+            return opened, final_title
+
+    opened, session_title = asyncio.run(_async_activate())
+
+    click.echo(f"✓ Session '{session_title}' activated with {len(opened)} provider(s)")
+
+    # Arrange windows unless research mode is requested
     if not research and len(opened) > 1:
         try:
             from llm_burst.layout import arrange
+
             arrange(len(opened))
             click.echo("✓ Windows arranged")
         except Exception:
-            pass  # Silent fail on arrange
+            # Best-effort only
+            pass
 
 
 # --------------------------------------------------------------------------- #
 # stop command                                                                #
 # --------------------------------------------------------------------------- #
+
 
 @cli.command("stop")
 @click.option("-t", "--task-name", "task_names", multiple=True, help="Task(s) to stop.")
@@ -313,9 +383,12 @@ def cmd_stop(task_names: tuple[str, ...], stop_all: bool) -> None:
 @click.option("-t", "--title", "session_title", type=str, help="Session title.")
 @click.option("-m", "--prompt-text", type=str, help="Prompt text for follow-up.")
 @click.option("-s", "--stdin", is_flag=True, help="Read prompt from STDIN.")
-def cmd_follow_up(session_title: str | None, prompt_text: str | None, stdin: bool) -> None:
+def cmd_follow_up(
+    session_title: str | None, prompt_text: str | None, stdin: bool
+) -> None:
     """Send a follow-up prompt to every provider tab in the session."""
     from llm_burst.state import StateManager
+
     state = StateManager()
 
     # Auto-select session when only one exists
@@ -342,7 +415,7 @@ def cmd_follow_up(session_title: str | None, prompt_text: str | None, stdin: boo
     for prov in sess.tabs.keys():
         task = _task_slug(session_title, prov)
         try:
-            send_prompt_sync(task, prompt_text)
+            send_prompt_sync(task, prompt_text, follow_up=True)
         except RuntimeError as exc:
             click.echo(f"{prov.name}: {exc}", err=True)
 
@@ -362,6 +435,7 @@ def cmd_arrange(max_windows: int) -> None:
     """Arrange ungrouped LLM windows into a grid via Rectangle.app."""
     try:
         from llm_burst.layout import arrange
+
         arrange(max_windows)
         click.echo("Windows arranged.")
     except RuntimeError as exc:
@@ -373,6 +447,7 @@ def cmd_arrange(max_windows: int) -> None:
 def cmd_toggle_group(session_title: str | None) -> None:
     """Group or ungroup the Chrome tabs of *session_title*."""
     from llm_burst.state import StateManager
+
     state = StateManager()
 
     if session_title is None:

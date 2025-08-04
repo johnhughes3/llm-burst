@@ -23,6 +23,11 @@ SUBMIT_JS = r"""// Grok Automation Script - Ultimate Version v1.0
 //   kmvar.Incognito  - "Yes" | "No" for Private Chat mode
 // ----------------------------------------------------------------------------
 
+// === Compatibility aliases (added by llm-burst) =============================
+const wait      = (...args) => window.wait(...args);
+const waitUntil = (...args) => window.waitUntil(...args);
+// =============================================================================
+
 /**
  * Main Grok automation function
  * @param {string} promptText - The text to send to Grok
@@ -30,7 +35,7 @@ SUBMIT_JS = r"""// Grok Automation Script - Ultimate Version v1.0
  * @param {string} incognitoMode - "Yes" or "No" for Private Chat mode
  * @returns {Promise<string>} Success or error message
  */
-async function automateGrokChat(promptText, researchMode, incognitoMode) {
+window.automateGrokChat = async function(promptText, researchMode, incognitoMode) {
   console.log(`Starting Grok automation: Research=${researchMode}, Incognito=${incognitoMode}`);
   
   try {
@@ -109,7 +114,7 @@ async function enableIncognitoMode() {
     }
     
     // Use full click sequence for reliability
-    simulateButtonClick(button);
+    window.simulateButtonClick(button);
     
     // Verify state change if possible
     const stateCheck = button.getAttribute('aria-pressed') !== null;
@@ -239,7 +244,7 @@ async function activateDeeperSearchOption(option) {
     option;
   
   // Use full sequence for reliable clicking
-  simulateButtonClick(clickTarget);
+  window.simulateButtonClick(clickTarget);
   
   // Verify selection worked by checking aria-checked (with timeout)
   await waitUntil(
@@ -280,7 +285,7 @@ async function enableThinkMode() {
     
     // Click with full event sequence
     console.log("Clicking Think button");
-    simulateButtonClick(thinkButton);
+    window.simulateButtonClick(thinkButton);
     
     // Wait for button state to update
     await waitUntil(
@@ -359,7 +364,7 @@ async function findAndPrepareTextarea() {
     }
     
     // Prepare by focusing with full event sequence
-    simulateFocusSequence(textarea);
+    window.simulateFocusSequence(textarea);
     await wait(100); // Brief pause after focus
     
     return textarea;
@@ -573,7 +578,7 @@ async function clickSubmitButton(textarea) {
     }
     
     console.log("Submit button found, clicking...");
-    simulateButtonClick(submitButton);
+    window.simulateButtonClick(submitButton);
     
     // Brief wait for submission to start
     await wait(100);
@@ -593,7 +598,7 @@ async function clickSubmitButton(textarea) {
  * Simulates a complete button click with proper event sequence
  * @param {Element} element - The element to click
  */
-function simulateButtonClick(element) {
+window.simulateButtonClick = function(element) {
   // Use the full pointer/mouse event sequence for maximum compatibility
   const events = [
     new PointerEvent("pointerdown", { bubbles: true, cancelable: true, view: window, button: 0 }),
@@ -611,7 +616,7 @@ function simulateButtonClick(element) {
  * Simulates a complete focus sequence for text inputs
  * @param {Element} element - The element to focus
  */
-function simulateFocusSequence(element) {
+window.simulateFocusSequence = function(element) {
   // The exact event sequence observed in natural browser interactions
   const events = [
     new FocusEvent("focus", { bubbles: true, view: window }),
@@ -636,7 +641,7 @@ function simulateFocusSequence(element) {
  * @param {number} ms - Milliseconds to wait
  * @returns {Promise<void>}
  */
-function wait(ms) {
+window.wait = function(ms) {
   return new Promise(resolve => setTimeout(resolve, ms));
 }
 
@@ -647,7 +652,7 @@ function wait(ms) {
  * @param {number} interval - Polling interval in milliseconds
  * @returns {Promise<any>} - Resolves with condition result when true
  */
-function waitUntil(condition, timeout = 3000, interval = 100) {
+window.waitUntil = function(condition, timeout = 3000, interval = 100) {
   return new Promise((resolve, reject) => {
     const startTime = Date.now();
     
@@ -674,35 +679,7 @@ function waitUntil(condition, timeout = 3000, interval = 100) {
   });
 }
 
-// =============================================================================
-//  SCRIPT EXECUTION - Entry point that calls automateGrokChat with KM variables
-// =============================================================================
-
-// Ensure we have kmvar, providing fallbacks for testing
-if (typeof kmvar === 'undefined') {
-  console.warn("kmvar not defined, using testing defaults");
-  var kmvar = {
-    PromptText: "Test message from automation script",
-    Research: "No", 
-    Incognito: "No"
-  };
-}
-
-// Extract variables with fallbacks
-const promptText = kmvar.PromptText || "Test message";
-const researchMode = kmvar.Research || "No";
-const incognitoMode = kmvar.Incognito || "No";
-
-// Call the main function and handle results for Keyboard Maestro
-automateGrokChat(promptText, researchMode, incognitoMode)
-  .then(result => {
-    console.log("Final result:", result);
-    return result; // Return for Keyboard Maestro
-  })
-  .catch(error => {
-    console.error("Script execution failed:", error.message);
-    return `ERROR: ${error.message}`; // Return structured error for KM
-  });"""
+"""
 
 # --------------------------------------------------------------------------- #
 #  FOLLOW-UP MESSAGE                                                          #
@@ -716,8 +693,13 @@ FOLLOWUP_JS = r"""/**
  * to ensure React properly processes the input and submission.
  */
 
+// === Compatibility aliases (added by llm-burst) =============================
+const wait      = (...args) => window.wait(...args);
+const waitUntil = (...args) => window.waitUntil(...args);
+// =============================================================================
+
 // Main function that Keyboard Maestro will call
-function grokFollowUpMessage(messageText, debug = false) {
+window.grokFollowUpMessage = function(messageText, debug = false) {
   // Return a single promise for KM to handle
   return executeWithTimeout(
     performFollowUp(messageText, debug),
@@ -732,7 +714,7 @@ function grokFollowUpMessage(messageText, debug = false) {
 /**
  * Executes the main logic with a timeout safety net
  */
-function executeWithTimeout(promise, timeoutMs, timeoutMessage) {
+window.executeWithTimeout = function(promise, timeoutMs, timeoutMessage) {
   const timeout = new Promise((_, reject) => {
     setTimeout(() => reject(new Error(timeoutMessage)), timeoutMs);
   });
@@ -828,10 +810,10 @@ async function performFollowUp(messageText, debug) {
 /**
  * Finds the textarea using MutationObserver with polling fallback
  */
-function findTextareaWithObserver(log) {
+window.findTextareaWithObserver = function(log) {
   return new Promise((resolve) => {
     // First try immediate selection
-    const immediateTextarea = findTextareaImmediately();
+    const immediateTextarea = window.findTextareaImmediately();
     if (immediateTextarea) {
       return resolve(immediateTextarea);
     }
@@ -840,7 +822,7 @@ function findTextareaWithObserver(log) {
     
     // Set up MutationObserver to watch for textarea insertion
     const observer = new MutationObserver((mutations, obs) => {
-      const textarea = findTextareaImmediately();
+      const textarea = window.findTextareaImmediately();
       if (textarea) {
         log("Textarea found via MutationObserver");
         obs.disconnect();
@@ -860,7 +842,7 @@ function findTextareaWithObserver(log) {
     
     const pollForTextarea = () => {
       attempts++;
-      const textarea = findTextareaImmediately();
+      const textarea = window.findTextareaImmediately();
       
       if (textarea) {
         log(`Textarea found via polling (attempt ${attempts})`);
@@ -886,7 +868,7 @@ function findTextareaWithObserver(log) {
 /**
  * Immediate textarea detection with multiple selector strategies
  */
-function findTextareaImmediately() {
+window.findTextareaImmediately = function() {
   // Strategy 1: Direct aria-label match (most specific)
   let textarea = document.querySelector('textarea[aria-label="Ask Grok anything"]');
   
@@ -923,7 +905,7 @@ function findTextareaImmediately() {
  */
 async function inputTextToTextarea(textarea, text, log) {
   // Focus the textarea with natural event sequence
-  simulateFocusSequence(textarea);
+  window.simulateFocusSequence(textarea);
   await wait(50); // Brief pause after focus
   
   // Clear any existing content
@@ -979,7 +961,7 @@ function simulateFocusSequence(element) {
 /**
  * Simulate some keyboard activity to ensure React notices the input
  */
-function simulateTypingActivity(element) {
+window.simulateTypingActivity = function(element) {
   // Simulate a keystroke after paste
   element.dispatchEvent(new KeyboardEvent('keydown', { 
     key: 'Process', 
@@ -1236,14 +1218,14 @@ async function verifySubmissionStarted(log) {
 /**
  * Helper: Wait for a specified time
  */
-function wait(ms) {
+window.wait = function(ms) {
   return new Promise(resolve => setTimeout(resolve, ms));
 }
 
 /**
  * Helper: Wait until condition is true or timeout
  */
-function waitForCondition(condition, timeout = 3000, interval = 100) {
+window.waitForCondition = function(condition, timeout = 3000, interval = 100) {
   return new Promise((resolve, reject) => {
     const startTime = Date.now();
     
@@ -1270,13 +1252,12 @@ function waitForCondition(condition, timeout = 3000, interval = 100) {
   });
 }
 
-// Call the function with the prompt text from Keyboard Maestro
-var promptText = kmvar.PromptText;
-grokFollowUpMessage(promptText);"""
+"""
 
 # --------------------------------------------------------------------------- #
 #  QUICK SELECTOR SMOKE-TEST                                                  #
 # --------------------------------------------------------------------------- #
+
 
 def selectors_up_to_date(page) -> bool:
     """Quick Playwright test that Grok's key selectors still resolve.
