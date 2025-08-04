@@ -4,6 +4,10 @@ Test Grok with the fixed JavaScript (renamed functions).
 
 import asyncio
 import json
+import os
+
+import pytest
+
 from llm_burst.browser import BrowserAdapter
 from llm_burst.constants import LLMProvider
 
@@ -14,8 +18,12 @@ import llm_burst.sites.grok as grok_module
 importlib.reload(grok_module)
 
 
+@pytest.mark.asyncio
 async def test_grok_fixed():
     """Test the fixed Grok JavaScript with renamed functions."""
+    # Skip test if not explicitly enabled
+    if not os.environ.get("ENABLE_BROWSER_TESTS"):
+        pytest.skip("Browser tests disabled. Set ENABLE_BROWSER_TESTS=1 to run.")
     async with BrowserAdapter() as adapter:
         # Open Grok window
         handle = await adapter.open_window("test-fixed", LLMProvider.GROK)

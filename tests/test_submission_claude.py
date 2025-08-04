@@ -23,6 +23,9 @@ SCREENSHOT_DIR.mkdir(parents=True, exist_ok=True)
 @pytest.mark.asyncio
 async def test_claude_submission_with_screenshot():
     """Test Claude submission flow using real Chrome profile with existing session."""
+    # Skip test if not explicitly enabled
+    if not os.environ.get("ENABLE_BROWSER_TESTS"):
+        pytest.skip("Browser tests disabled. Set ENABLE_BROWSER_TESTS=1 to run.")
     # Use the actual BrowserAdapter to connect to existing Chrome with proper profile
     async with BrowserAdapter() as adapter:
         # Open a window for Claude (or reuse existing one)
@@ -135,6 +138,9 @@ async def test_claude_submission_with_screenshot():
 @pytest.mark.asyncio
 async def test_claude_selectors_with_real_profile():
     """Verify Claude selectors using the real Chrome profile."""
+    # Skip test if not explicitly enabled
+    if not os.environ.get("ENABLE_BROWSER_TESTS"):
+        pytest.skip("Browser tests disabled. Set ENABLE_BROWSER_TESTS=1 to run.")
     async with BrowserAdapter() as adapter:
         # Open Claude window
         handle = await adapter.open_window("Test-Selector-Check", LLMProvider.CLAUDE)

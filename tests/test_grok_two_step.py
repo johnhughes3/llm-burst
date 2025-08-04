@@ -4,13 +4,21 @@ Test Grok JavaScript injection using the exact two-step process from llm-burst.
 
 import asyncio
 import json
+import os
+
+import pytest
+
 from llm_burst.browser import BrowserAdapter
 from llm_burst.constants import LLMProvider
 from llm_burst.sites.grok import SUBMIT_JS
 
 
+@pytest.mark.asyncio
 async def test_grok_two_step():
     """Test the two-step injection process used by llm-burst."""
+    # Skip test if not explicitly enabled
+    if not os.environ.get("ENABLE_BROWSER_TESTS"):
+        pytest.skip("Browser tests disabled. Set ENABLE_BROWSER_TESTS=1 to run.")
     async with BrowserAdapter() as adapter:
         # Open Grok window
         handle = await adapter.open_window("test-two-step", LLMProvider.GROK)

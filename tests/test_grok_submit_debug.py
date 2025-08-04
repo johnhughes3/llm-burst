@@ -3,12 +3,20 @@ Debug test to understand Grok's submit button behavior.
 """
 
 import asyncio
+import os
+
+import pytest
+
 from llm_burst.browser import BrowserAdapter
 from llm_burst.constants import LLMProvider
 
 
+@pytest.mark.asyncio
 async def test_grok_submit_flow():
     """Test the actual submission flow step by step."""
+    # Skip test if not explicitly enabled
+    if not os.environ.get("ENABLE_BROWSER_TESTS"):
+        pytest.skip("Browser tests disabled. Set ENABLE_BROWSER_TESTS=1 to run.")
     async with BrowserAdapter() as adapter:
         # Open Grok window
         handle = await adapter.open_window("test-grok-submit", LLMProvider.GROK)

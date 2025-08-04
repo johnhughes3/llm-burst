@@ -3,12 +3,20 @@ Direct test to see what's actually on the Grok page.
 """
 
 import asyncio
+import os
+
+import pytest
+
 from llm_burst.browser import BrowserAdapter
 from llm_burst.constants import LLMProvider
 
 
+@pytest.mark.asyncio
 async def test_grok_page():
     """Check what elements are actually present on the Grok page."""
+    # Skip test if not explicitly enabled
+    if not os.environ.get("ENABLE_BROWSER_TESTS"):
+        pytest.skip("Browser tests disabled. Set ENABLE_BROWSER_TESTS=1 to run.")
     async with BrowserAdapter() as adapter:
         # Open Grok window
         handle = await adapter.open_window("test-grok-direct", LLMProvider.GROK)

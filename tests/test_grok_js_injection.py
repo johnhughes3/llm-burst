@@ -3,13 +3,21 @@ Test the actual Grok JavaScript injection to debug timeout issues.
 """
 
 import asyncio
+import os
+
+import pytest
+
 from llm_burst.browser import BrowserAdapter
 from llm_burst.constants import LLMProvider
 from llm_burst.sites.grok import SUBMIT_JS
 
 
+@pytest.mark.asyncio
 async def test_grok_js_injection():
     """Test injecting and running the Grok submit JavaScript."""
+    # Skip test if not explicitly enabled
+    if not os.environ.get("ENABLE_BROWSER_TESTS"):
+        pytest.skip("Browser tests disabled. Set ENABLE_BROWSER_TESTS=1 to run.")
     async with BrowserAdapter() as adapter:
         # Open Grok window
         handle = await adapter.open_window("test-js-injection", LLMProvider.GROK)

@@ -26,8 +26,8 @@ class TestGrokSubmission:
 
     @pytest.mark.asyncio
     @pytest.mark.skipif(
-        not os.environ.get("RUN_BROWSER_TESTS"),
-        reason="Requires real Chrome with authenticated Grok session. Set RUN_BROWSER_TESTS=1 to run.",
+        not os.environ.get("ENABLE_BROWSER_TESTS"),
+        reason="Requires real Chrome with authenticated Grok session. Set ENABLE_BROWSER_TESTS=1 to run.",
     )
     async def test_grok_submission_integration(self):
         """
@@ -36,7 +36,7 @@ class TestGrokSubmission:
         IMPORTANT: This test requires:
         - A running Chrome instance with --remote-debugging-port=9222
         - An authenticated Grok session in that Chrome instance
-        - Set RUN_BROWSER_TESTS=1 environment variable
+        - Set ENABLE_BROWSER_TESTS=1 environment variable
 
         This test:
         1. Connects to existing Chrome with BrowserAdapter
