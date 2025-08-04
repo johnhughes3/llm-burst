@@ -16,8 +16,10 @@ from __future__ import annotations
 
 import asyncio
 import json
+import os
 import subprocess
 import sys
+import pyperclip
 from typing import Any, Dict, Union, Optional
 from uuid import uuid4
 
@@ -57,10 +59,20 @@ def prompt_user() -> Dict[str, Any]:
     if not shutil.which("dialog"):
         raise FileNotFoundError("swiftDialog not installed")
 
+    # Grab clipboard to pre-seed the dialog (falls back silently)
+    try:
+        clipboard_text: str = pyperclip.paste()
+    except Exception:
+        clipboard_text = ""
+
+    env = os.environ.copy()
+    env["LLMB_DEFAULT_PROMPT"] = clipboard_text
+
     result = subprocess.run(
         [str(SWIFT_PROMPT_SCRIPT)],
         capture_output=True,
         text=True,
+        env=env,
     )
 
     # Forward any error output to the calling terminal.

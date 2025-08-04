@@ -12,6 +12,7 @@ dependencies = [
     "rich>=13.5.0",
     "aiohttp>=3.8.0",
     "pyobjc-framework-Cocoa>=10.0; sys_platform == 'darwin'",
+    "pyperclip>=1.8.0"
 ]
 
 [project.scripts]
