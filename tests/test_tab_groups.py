@@ -110,14 +110,18 @@ async def test_browser_probe_tab_groups():
 
     mock_cdp = AsyncMock()
 
-    with patch.object(BrowserAdapter, "_get_cdp_connection", AsyncMock(return_value=mock_cdp)):
+    with patch.object(
+        BrowserAdapter, "_get_cdp_connection", AsyncMock(return_value=mock_cdp)
+    ):
         await adapter._probe_tab_groups()
         assert adapter._tab_groups_supported is True
 
     # Reset side-effect to simulate methodNotFound error
     adapter._tab_groups_supported = None
     mock_cdp.send.side_effect = Exception("methodNotFound")
-    with patch.object(BrowserAdapter, "_get_cdp_connection", AsyncMock(return_value=mock_cdp)):
+    with patch.object(
+        BrowserAdapter, "_get_cdp_connection", AsyncMock(return_value=mock_cdp)
+    ):
         await adapter._probe_tab_groups()
         assert adapter._tab_groups_supported is False
 
@@ -135,7 +139,9 @@ async def test_browser_get_or_create_group():
     mock_cdp = AsyncMock()
     mock_cdp.send.return_value = {"groupId": 42}
 
-    with patch.object(BrowserAdapter, "_get_cdp_connection", AsyncMock(return_value=mock_cdp)):
+    with patch.object(
+        BrowserAdapter, "_get_cdp_connection", AsyncMock(return_value=mock_cdp)
+    ):
         with patch.object(adapter._state, "get_group_by_name", return_value=None):
             with patch.object(adapter._state, "register_group") as mock_register:
                 group_id = await adapter._get_or_create_group("Research", "blue", 100)
@@ -159,7 +165,9 @@ async def test_browser_add_target_to_group():
     adapter._tab_groups_supported = True
 
     mock_cdp = AsyncMock()
-    with patch.object(BrowserAdapter, "_get_cdp_connection", AsyncMock(return_value=mock_cdp)):
+    with patch.object(
+        BrowserAdapter, "_get_cdp_connection", AsyncMock(return_value=mock_cdp)
+    ):
         await adapter._add_target_to_group("target-123", 42)
 
     mock_cdp.send.assert_called_once_with(

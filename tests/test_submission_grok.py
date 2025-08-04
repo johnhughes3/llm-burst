@@ -27,7 +27,7 @@ class TestGrokSubmission:
     @pytest.mark.asyncio
     @pytest.mark.skipif(
         not os.environ.get("RUN_BROWSER_TESTS"),
-        reason="Requires real Chrome with authenticated Grok session. Set RUN_BROWSER_TESTS=1 to run."
+        reason="Requires real Chrome with authenticated Grok session. Set RUN_BROWSER_TESTS=1 to run.",
     )
     async def test_grok_submission_integration(self):
         """
@@ -170,7 +170,10 @@ class TestGrokSubmission:
         js_code = mock_page.evaluate.call_args[0][0]
 
         # Check that the JS contains our key selectors
-        assert 'textarea[aria-label="Ask Grok anything"]' in js_code or 'contenteditable="true"' in js_code
+        assert (
+            'textarea[aria-label="Ask Grok anything"]' in js_code
+            or 'contenteditable="true"' in js_code
+        )
         assert 'button[type="submit"]' in js_code
 
     @pytest.mark.asyncio

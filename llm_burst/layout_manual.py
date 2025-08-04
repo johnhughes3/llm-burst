@@ -15,6 +15,7 @@ def _get_screen_dimensions() -> tuple[int, int]:
     if sys.platform == "darwin":
         try:
             from AppKit import NSScreen
+
             main_screen = NSScreen.mainScreen()
             if main_screen:
                 frame = main_screen.visibleFrame()
@@ -23,7 +24,7 @@ def _get_screen_dimensions() -> tuple[int, int]:
             _LOG.warning("pyobjc not available, using default dimensions")
         except Exception as e:
             _LOG.warning(f"Failed to get screen dimensions: {e}, using defaults")
-    
+
     # Fallback dimensions
     return 1920, 1080
 

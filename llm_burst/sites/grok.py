@@ -612,30 +612,45 @@ async function clickSubmitButton(inputElement) {
     const form = inputElement.closest('form');
     
     // Multiple strategies to find the submit button
+    // Note: Submit button may not exist until text is entered, so we wait for it
     const submitButton = await waitUntil(() => {
-      // Within form (most reliable)
+      // Within form - prioritize aria-label="Submit" over type="submit" 
+      // because Grok has a Search button with type="submit" that we want to avoid
       if (form) {
-        const formButton = form.querySelector('button[type="submit"]:not([disabled])') ||
-                          form.querySelector('button[aria-label="Submit"]:not([disabled])');
-        if (formButton) return formButton;
+        // First look for explicit Submit button
+        const submitBtn = form.querySelector('button[aria-label="Submit"]:not([disabled])');
+        if (submitBtn) return submitBtn;
+        
+        // Then check for submit type that's NOT the search button
+        const formButtons = Array.from(form.querySelectorAll('button[type="submit"]:not([disabled])'));
+        const nonSearchSubmit = formButtons.find(btn => {
+          const ariaLabel = btn.getAttribute('aria-label');
+          return ariaLabel !== 'Search'; // Exclude the search button
+        });
+        if (nonSearchSubmit) return nonSearchSubmit;
       }
       
-      // Global selectors (backup)
-      return document.querySelector('button[type="submit"]:not([disabled])') ||
-             document.querySelector('button[aria-label="Submit"]:not([disabled])') ||
-             Array.from(document.querySelectorAll('button:not([disabled])'))
-               .find(btn => {
-                 // Check type attribute
-                 const hasSubmitType = btn.getAttribute('type') === 'submit';
-                 // Check for common icon patterns
-                 const hasSendIcon = btn.querySelector('svg path[d*="M2.01 21L23 12 2.01 3"]'); // Send icon
-                 // Check visible text
-                 const text = (btn.textContent || '').trim().toLowerCase();
-                 const hasSubmitText = text === 'submit' || text === 'send';
-                 
-                 return hasSubmitType || hasSendIcon || hasSubmitText;
-               });
-    }, 3000, 100);
+      // Global selectors (backup) - prioritize aria-label="Submit"
+      const submitBtn = document.querySelector('button[aria-label="Submit"]:not([disabled])');
+      if (submitBtn) return submitBtn;
+      
+      // Look for submit buttons that are NOT search
+      const allSubmitBtns = Array.from(document.querySelectorAll('button[type="submit"]:not([disabled])'));
+      const nonSearchSubmit = allSubmitBtns.find(btn => {
+        const ariaLabel = btn.getAttribute('aria-label');
+        return ariaLabel !== 'Search';
+      });
+      if (nonSearchSubmit) return nonSearchSubmit;
+      
+      // Last resort: look for send icon
+      return Array.from(document.querySelectorAll('button:not([disabled])'))
+        .find(btn => {
+          const hasSendIcon = btn.querySelector('svg path[d*="M2.01 21L23 12 2.01 3"]'); // Send icon
+          const text = (btn.textContent || '').trim().toLowerCase();
+          const hasSubmitText = text === 'submit' || text === 'send';
+          return hasSendIcon || hasSubmitText;
+        });
+    }, 5000, 100); // Increased timeout since button appears after text entry
     
     if (!submitButton) {
       throw new Error("Submit button not found or not enabled");
@@ -848,7 +863,7 @@ async function performFollowUp(messageText, debug) {
     
     // Step 5: Click the submit button with full event sequence
     log("Clicking submit button...");
-    await clickSubmitButton(submitButton, log);
+    await clickSubmitButtonFollowup(submitButton, log);
     timing.submit = Math.round(performance.now() - submitStartTime);
     
     // Step 6: Verify submission was successful
@@ -1204,9 +1219,9 @@ async function findSubmitButton(textarea, log) {
 }
 
 /**
- * Click submit button with complete event sequence
+ * Click submit button with complete event sequence (follow-up mode)
  */
-async function clickSubmitButton(button, log) {
+async function clickSubmitButtonFollowup(button, log) {
   log("Clicking submit button with full event sequence...");
   
   // Complete pointer/mouse sequence that browsers generate
