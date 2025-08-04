@@ -76,11 +76,14 @@ class TestStateManagerRename:
 class TestActivateAutoNaming:
     """Test auto-naming in activate command."""
 
-    @pytest.mark.asyncio
+    def setup_method(self):
+        """Clear StateManager singleton before each test."""
+        StateManager._instance = None
+
     @patch("llm_burst.browser.BrowserAdapter")
-    @patch("llm_burst.cli_click.auto_name_session", new_callable=AsyncMock)
+    @patch("llm_burst.auto_namer.auto_name_session", new_callable=AsyncMock)
     @patch("llm_burst.cli_click.get_injector")
-    async def test_auto_naming_called(
+    def test_auto_naming_called(
         self, mock_injector, mock_auto_name, mock_adapter
     ):
         """Test that auto_name_session is called for each provider."""
@@ -103,27 +106,36 @@ class TestActivateAutoNaming:
         mock_auto_name.return_value = None  # No rename
 
         runner = CliRunner()
-        runner.invoke(cmd_activate, ["--prompt-text", "test prompt"])
+        result = runner.invoke(cmd_activate, ["--prompt-text", "test prompt"])
 
         # Auto-name should be called for each provider
         assert mock_auto_name.call_count == len(LLMProvider)
 
-    @pytest.mark.asyncio
     @patch("llm_burst.browser.BrowserAdapter")
-    @patch("llm_burst.cli_click.auto_name_session", new_callable=AsyncMock)
+    @patch("llm_burst.auto_namer.auto_name_session", new_callable=AsyncMock)
     @patch("llm_burst.cli_click.get_injector")
     @patch("llm_burst.state.StateManager")
-    async def test_session_renamed_when_auto_generated(
-        self, mock_state_class, mock_injector, mock_auto_name, mock_adapter
+    @patch("llm_burst.cli_click.prompt_user")
+    def test_session_renamed_when_auto_generated(
+        self, mock_prompt_user, mock_state_class, mock_injector, mock_auto_name, mock_adapter
     ):
         """Test that session is renamed when title was auto-generated."""
         from llm_burst.cli_click import cmd_activate
         from click.testing import CliRunner
 
-        # Setup state mock
+        # Mock prompt_user to return dummy data
+        mock_prompt_user.return_value = {
+            "Task Name": None,  # No title provided, will auto-generate
+            "Prompt Text": "test prompt"
+        }
+
+        # Setup state mock - make sure the class returns our mock instance
         mock_state = MagicMock()
         mock_state_class.return_value = mock_state
         mock_state.get_session.return_value = None
+        mock_state.create_session = MagicMock()  # Add this
+        mock_state.add_tab_to_session = MagicMock()  # Add this
+        mock_state.persist_now = MagicMock()  # Add this
         mock_state.rename_session.return_value = True
 
         # Setup adapter mock
@@ -149,10 +161,9 @@ class TestActivateAutoNaming:
         ]
 
         runner = CliRunner()
-        runner.invoke(
-            cmd_activate,
-            ["--prompt-text", "test prompt"],  # No title provided, will auto-generate
-        )
+        
+        # Don't provide --prompt-text, let it come from mock_prompt_user
+        result = runner.invoke(cmd_activate, [])
 
         # rename_session should have been called
         mock_state.rename_session.assert_called_once()

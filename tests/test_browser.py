@@ -105,6 +105,12 @@ async def test_open_window_creates_new_window(temp_state_file):
     """Test that open_window creates a new browser window and tracks it."""
     # Ensure clean state
     StateManager._instance = None
+    
+    # Ensure no existing session for this test
+    state = StateManager()
+    if state.get("Test-Task"):
+        state._sessions = {}
+        state._persist()
 
     with patch("llm_burst.browser.async_playwright") as mock_playwright, \
          patch("llm_burst.browser.BrowserAdapter._get_websocket_endpoint", new_callable=AsyncMock, return_value="ws://dummy"):
@@ -123,7 +129,9 @@ async def test_open_window_creates_new_window(temp_state_file):
         mock_context = AsyncMock()
         # Need at least one page for _get_cdp_connection to work
         mock_initial_page = AsyncMock()  # A different page for initial CDP session
-        mock_context.pages = [mock_initial_page]
+        # Use a real list that we control with PropertyMock
+        pages_list = [mock_initial_page]
+        type(mock_context).pages = PropertyMock(return_value=pages_list)
 
         # Mock CDP session for slow path in _find_page_for_target
         mock_session = AsyncMock()
@@ -131,33 +139,36 @@ async def test_open_window_creates_new_window(temp_state_file):
         async def session_send(command, params=None):
             if command == "Target.attachToTarget":
                 # After attach, add the page to context
-                mock_context.pages.append(mock_page)
+                pages_list.append(mock_page)
                 return {}
             if command == "Target.createTarget":
                 return {"targetId": "test-target-id"}
             if command == "Browser.getWindowForTarget":
                 return {"windowId": 12345}
             if command == "Target.getTargetInfo":
-                # Return targetInfo for the newly created page
-                return {"targetInfo": {"targetId": "test-target-id"}}
+                # Return targetInfo for mock_initial_page (different from test-target-id)
+                return {"targetInfo": {"targetId": "initial-page-target-id"}}
             return {}
 
         mock_session.send = AsyncMock(side_effect=session_send)
         
         # Mock new_cdp_session to return different sessions based on the page
         async def new_cdp_session(page):
-            if page == mock_initial_page:
+            
+            if page is mock_initial_page:
                 # This is for _get_cdp_connection, return the main session
                 return mock_session
-            elif page == mock_page:
+            elif hasattr(page, '_target_id') and page._target_id == "test-target-id":
                 # This is our target page for _find_page_for_target
+                # Check by _target_id attribute since object identity might not be preserved
                 page_session = AsyncMock()
                 page_session.send = AsyncMock(
                     return_value={"targetInfo": {"targetId": "test-target-id"}}
                 )
                 return page_session
             else:
-                # Any other page
+                # Any other page - this shouldn't happen in our test
+                # print(f"WARNING: Unexpected page object: {page}")
                 page_session = AsyncMock()
                 page_session.send = AsyncMock(
                     return_value={"targetInfo": {"targetId": "other-target-id"}}

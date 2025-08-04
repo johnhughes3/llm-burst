@@ -24,7 +24,6 @@ from typing import Optional
 import click
 
 from llm_burst.providers import get_injector, InjectOptions
-from llm_burst.auto_namer import auto_name_session  # Added
 from llm_burst.constants import LLMProvider, TabColor
 from llm_burst.tab_groups import (
     create_group_sync,
@@ -284,6 +283,9 @@ def cmd_activate(
 
     async def _async_activate() -> tuple[list[str], str]:
         """Open all provider windows and send prompt while BrowserAdapter is alive."""
+        # Late import so test patches are honoured
+        from llm_burst.auto_namer import auto_name_session
+        
         opened: list[str] = []
         state = StateManager()
         final_title = session_title  # May change after rename
