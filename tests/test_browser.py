@@ -9,7 +9,7 @@ These tests verify that the Chrome adapter can:
 """
 
 import pytest
-from unittest.mock import Mock, AsyncMock, patch
+from unittest.mock import Mock, AsyncMock, PropertyMock, patch
 import types
 
 from llm_burst.browser import BrowserAdapter, SessionHandle
