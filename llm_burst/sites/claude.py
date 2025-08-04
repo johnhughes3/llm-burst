@@ -80,9 +80,37 @@ window.enableResearchMode = function() {
 window.focusInputArea = function() {
   return new Promise((resolve, reject) => {
     try {
+      // Check if we're on a login page first
+      if (window.location.href.includes('login') || window.location.href.includes('sign')) {
+        console.warn('Authentication required - on login page');
+        reject('Authentication required - please log in to Claude first');
+        return;
+      }
+      
       const editor = tryFind('.ProseMirror', 'Claude editor');
       if (!editor) {
-        reject('Editor element not found');
+        // Try alternative selectors for the input area
+        const alternativeSelectors = [
+          '[contenteditable="true"]',
+          'div[role="textbox"]',
+          'textarea[placeholder*="Message"]',
+          'textarea[placeholder*="Type"]',
+          'div.prose'
+        ];
+        
+        let foundElement = null;
+        for (const selector of alternativeSelectors) {
+          foundElement = tryFind(selector, `Alternative input (${selector})`);
+          if (foundElement) {
+            console.log(`Found alternative input element: ${selector}`);
+            foundElement.focus();
+            console.log('Alternative input focused - ready for paste');
+            resolve();
+            return;
+          }
+        }
+        
+        reject('Editor element not found - Claude UI may have changed');
         return;
       }
       
@@ -181,13 +209,15 @@ def selectors_up_to_date(page) -> bool:
     """Quick test to verify Claude UI hasn't changed."""
     try:
         # Check for key selectors
-        result = page.evaluate("""
+        result = page.evaluate(
+            """
             () => {
                 const editor = document.querySelector('.ProseMirror');
                 const sendButton = document.querySelector('button[aria-label="Send message"]');
                 return editor !== null && sendButton !== null;
             }
-        """)
-        return result
+        """
+        )
+        return bool(result)
     except Exception:
         return False
