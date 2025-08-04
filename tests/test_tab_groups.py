@@ -108,20 +108,18 @@ async def test_browser_probe_tab_groups():
     adapter = BrowserAdapter()
     adapter._browser = Mock()
 
-    # Mock CDP connection
     mock_cdp = AsyncMock()
-    adapter._browser.contexts = [Mock()]
-    adapter._browser.contexts[0]._connection = mock_cdp
 
-    # Test successful probe
-    await adapter._probe_tab_groups()
-    assert adapter._tab_groups_supported is True
+    with patch.object(BrowserAdapter, "_get_cdp_connection", AsyncMock(return_value=mock_cdp)):
+        await adapter._probe_tab_groups()
+        assert adapter._tab_groups_supported is True
 
-    # Test methodNotFound error
+    # Reset side-effect to simulate methodNotFound error
     adapter._tab_groups_supported = None
     mock_cdp.send.side_effect = Exception("methodNotFound")
-    await adapter._probe_tab_groups()
-    assert adapter._tab_groups_supported is False
+    with patch.object(BrowserAdapter, "_get_cdp_connection", AsyncMock(return_value=mock_cdp)):
+        await adapter._probe_tab_groups()
+        assert adapter._tab_groups_supported is False
 
 
 @pytest.mark.unit
@@ -134,22 +132,20 @@ async def test_browser_get_or_create_group():
     adapter._browser = Mock()
     adapter._tab_groups_supported = True
 
-    # Mock CDP and StateManager
     mock_cdp = AsyncMock()
-    adapter._browser.contexts = [Mock()]
-    adapter._browser.contexts[0]._connection = mock_cdp
     mock_cdp.send.return_value = {"groupId": 42}
 
-    with patch.object(adapter._state, "get_group_by_name", return_value=None):
-        with patch.object(adapter._state, "register_group") as mock_register:
-            group_id = await adapter._get_or_create_group("Research", "blue", 100)
+    with patch.object(BrowserAdapter, "_get_cdp_connection", AsyncMock(return_value=mock_cdp)):
+        with patch.object(adapter._state, "get_group_by_name", return_value=None):
+            with patch.object(adapter._state, "register_group") as mock_register:
+                group_id = await adapter._get_or_create_group("Research", "blue", 100)
 
-            assert group_id == 42
-            mock_cdp.send.assert_called_once_with(
-                "TabGroups.create",
-                {"windowId": 100, "title": "Research", "color": "blue"},
-            )
-            mock_register.assert_called_once_with(42, "Research", "blue")
+                assert group_id == 42
+                mock_cdp.send.assert_called_once_with(
+                    "TabGroups.create",
+                    {"windowId": 100, "title": "Research", "color": "blue"},
+                )
+                mock_register.assert_called_once_with(42, "Research", "blue")
 
 
 @pytest.mark.unit
@@ -163,10 +159,8 @@ async def test_browser_add_target_to_group():
     adapter._tab_groups_supported = True
 
     mock_cdp = AsyncMock()
-    adapter._browser.contexts = [Mock()]
-    adapter._browser.contexts[0]._connection = mock_cdp
-
-    await adapter._add_target_to_group("target-123", 42)
+    with patch.object(BrowserAdapter, "_get_cdp_connection", AsyncMock(return_value=mock_cdp)):
+        await adapter._add_target_to_group("target-123", 42)
 
     mock_cdp.send.assert_called_once_with(
         "TabGroups.addTab", {"groupId": 42, "tabId": "target-123"}

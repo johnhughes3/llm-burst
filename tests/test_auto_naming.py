@@ -78,7 +78,7 @@ class TestActivateAutoNaming:
 
     @pytest.mark.asyncio
     @patch("llm_burst.browser.BrowserAdapter")
-    @patch("llm_burst.cli_click.auto_name_session")
+    @patch("llm_burst.cli_click.auto_name_session", new_callable=AsyncMock)
     @patch("llm_burst.cli_click.get_injector")
     async def test_auto_naming_called(
         self, mock_injector, mock_auto_name, mock_adapter
@@ -110,7 +110,7 @@ class TestActivateAutoNaming:
 
     @pytest.mark.asyncio
     @patch("llm_burst.browser.BrowserAdapter")
-    @patch("llm_burst.cli_click.auto_name_session")
+    @patch("llm_burst.cli_click.auto_name_session", new_callable=AsyncMock)
     @patch("llm_burst.cli_click.get_injector")
     @patch("llm_burst.state.StateManager")
     async def test_session_renamed_when_auto_generated(

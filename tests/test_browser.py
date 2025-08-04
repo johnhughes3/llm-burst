@@ -10,6 +10,8 @@ These tests verify that the Chrome adapter can:
 
 import pytest
 from unittest.mock import Mock, AsyncMock, patch
+import types
+import types
 
 from llm_burst.browser import BrowserAdapter, SessionHandle
 from llm_burst.constants import LLMProvider, LLM_URLS, CHROME_REMOTE_PORT
@@ -33,7 +35,8 @@ def temp_state_file(tmp_path):
 @pytest.mark.asyncio
 async def test_browser_adapter_context_manager():
     """Test BrowserAdapter can be used as async context manager."""
-    with patch("llm_burst.browser.async_playwright") as mock_playwright:
+    with patch("llm_burst.browser.async_playwright") as mock_playwright, \
+         patch("llm_burst.browser.BrowserAdapter._get_websocket_endpoint", new_callable=AsyncMock, return_value="ws://dummy"):
         mock_pw_instance = AsyncMock()
         mock_playwright.return_value.start = AsyncMock(return_value=mock_pw_instance)
 
@@ -57,7 +60,17 @@ async def test_browser_adapter_context_manager():
 @pytest.mark.asyncio
 async def test_browser_adapter_launches_chrome_if_not_running(temp_state_file):
     """Test that BrowserAdapter launches Chrome if CDP connection fails."""
-    with patch("llm_burst.browser.async_playwright") as mock_playwright:
+    ws_side_effect = [None, "ws://dummy"]  # First call before launch, second after
+    with patch("llm_burst.browser.async_playwright") as mock_playwright, \
+         patch("llm_burst.browser.BrowserAdapter._get_websocket_endpoint", new_callable=AsyncMock, side_effect=ws_side_effect), \
+         patch("llm_burst.browser.scan_chrome_processes") as mock_scan:
+        
+        mock_scan.return_value = types.SimpleNamespace(running=False, remote_debug=False, pids=[])
+    with patch("llm_burst.browser.async_playwright") as mock_playwright, \
+         patch("llm_burst.browser.BrowserAdapter._get_websocket_endpoint", new_callable=AsyncMock, side_effect=ws_side_effect), \
+         patch("llm_burst.browser.scan_chrome_processes") as mock_scan:
+
+        mock_scan.return_value = types.SimpleNamespace(running=False, remote_debug=False, pids=[])
         mock_pw_instance = AsyncMock()
         mock_playwright.return_value.start = AsyncMock(return_value=mock_pw_instance)
 
@@ -98,7 +111,8 @@ async def test_open_window_creates_new_window(temp_state_file):
     # Ensure clean state
     StateManager._instance = None
 
-    with patch("llm_burst.browser.async_playwright") as mock_playwright:
+    with patch("llm_burst.browser.async_playwright") as mock_playwright, \
+         patch("llm_burst.browser.BrowserAdapter._get_websocket_endpoint", new_callable=AsyncMock, return_value="ws://dummy"):
         # --- Playwright bootstrap --------------------------------------- #
         mock_pw_instance = AsyncMock()
         mock_playwright.return_value.start = AsyncMock(return_value=mock_pw_instance)
@@ -188,7 +202,8 @@ async def test_open_window_reuses_existing_session(temp_state_file):
         window_id=99999,
     )
 
-    with patch("llm_burst.browser.async_playwright") as mock_playwright:
+    with patch("llm_burst.browser.async_playwright") as mock_playwright, \
+         patch("llm_burst.browser.BrowserAdapter._get_websocket_endpoint", new_callable=AsyncMock, return_value="ws://dummy"):
         mock_pw_instance = AsyncMock()
         mock_playwright.return_value.start = AsyncMock(return_value=mock_pw_instance)
 

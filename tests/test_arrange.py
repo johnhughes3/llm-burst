@@ -31,10 +31,17 @@ def temp_state_file(tmp_path):
 
 def test_arrange_no_sessions(temp_state_file):
     """Test arrange with no active sessions."""
-    with patch("llm_burst.layout.rectangle_perform") as mock_perform:
-        arrange()
-        # Should not call rectangle_perform when no sessions
-        mock_perform.assert_not_called()
+    # Clear singleton and patch StateManager to use empty state
+    StateManager._instance = None
+    with patch("llm_burst.layout.StateManager") as mock_state_class:
+        # Return a mock with no sessions
+        mock_state = mock_state_class.return_value
+        mock_state.list_all.return_value = {}
+        
+        with patch("llm_burst.layout.rectangle_perform") as mock_perform:
+            arrange()
+            # Should not call rectangle_perform when no sessions
+            mock_perform.assert_not_called()
 
 
 def test_arrange_two_windows(temp_state_file):
@@ -172,8 +179,14 @@ def test_arrange_handles_rectangle_error(temp_state_file):
         mock_perform.side_effect = RuntimeError("Rectangle not installed")
         with patch("llm_burst.layout._focus_window"):
             with patch("time.sleep"):
-                with pytest.raises(RuntimeError, match="Rectangle not installed"):
+                # Mock the CDP fallback to also fail
+                with patch("llm_burst.layout_manual.arrange_cdp_sync") as mock_cdp:
+                    mock_cdp.side_effect = RuntimeError("CDP also failed")
+                    # arrange() should log errors but not raise
                     arrange()
+                    # Verify both methods were attempted
+                    mock_perform.assert_called()
+                    mock_cdp.assert_called()
 
 
 def test_cli_arrange_command():
