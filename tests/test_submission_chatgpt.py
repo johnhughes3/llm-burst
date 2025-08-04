@@ -30,6 +30,10 @@ pytestmark = pytest.mark.integration
 @pytest.fixture
 async def browser_session():
     """Connect to existing authenticated Chrome session using BrowserAdapter."""
+    # Skip if browser tests are not enabled
+    if not os.environ.get("ENABLE_BROWSER_TESTS"):
+        pytest.skip("Browser tests disabled. Set ENABLE_BROWSER_TESTS=1 to run.")
+    
     async with BrowserAdapter() as adapter:
         # Open a ChatGPT window using the real adapter
         # This connects to an existing Chrome instance with remote debugging enabled
