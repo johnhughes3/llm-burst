@@ -88,6 +88,7 @@ def prompt_user() -> Dict[str, Any]:
     except json.JSONDecodeError as exc:
         # Malformed JSON is treated as an error / cancel.
         sys.stderr.write(f"Failed to parse JSON from swiftDialog: {exc}\n")
+        sys.stderr.write(f"Raw output was: {repr(result.stdout)}\n")
         sys.exit(PROMPT_CANCEL_EXIT)
 
 
@@ -108,6 +109,10 @@ def open_llm_window(task_name: str, provider: LLMProvider) -> SessionHandle:
     *task_name* may be ``None`` – in that case a placeholder of the form
     ``PROVIDER-xxxx`` is generated and later eligible for auto-naming.
     """
+    # Ensure Chrome is ready (idempotent)
+    from llm_burst.chrome_bootstrap import ensure_remote_debugging
+    ensure_remote_debugging()
+
     # Generate placeholder if caller supplied no explicit name
     if task_name is None:  # type: ignore[arg-type]
         task_name = _generate_placeholder(provider)

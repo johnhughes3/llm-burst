@@ -23,6 +23,9 @@ BIN_DIR: Path = PACKAGE_ROOT / "bin"
 # Full path to the swiftDialog wrapper script created in Stage 1.
 SWIFT_PROMPT_SCRIPT: Path = BIN_DIR / "swift_prompt.sh"
 
+# Full path to the swiftDialog helper script that offers to relaunch Chrome
+SWIFT_CHROME_FIX_SCRIPT: Path = BIN_DIR / "swift_chrome_fix.sh"
+
 # --------------------------------------------------------------------------- #
 # User-facing defaults
 # --------------------------------------------------------------------------- #

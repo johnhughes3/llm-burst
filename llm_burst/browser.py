@@ -287,21 +287,13 @@ class BrowserAdapter:
             return  # already launched by this adapter
 
         # Resolve the user-data directory we will pass to Chrome.
+        from .chrome_utils import launch_chrome_headful, get_chrome_profile_dir
+
         profile_dir = get_chrome_profile_dir()
         self._user_data_dir = profile_dir  # Remember for potential cleanup
 
-        flags = [
-            CHROME_EXECUTABLE,
-            *build_launch_args(CHROME_REMOTE_PORT, profile_dir),
-        ]
-
-        # Start Chrome in head-ful mode; suppress its stdout/stderr noise
-        self._chrome_proc = subprocess.Popen(
-            flags,
-            stdout=subprocess.DEVNULL,
-            stderr=subprocess.DEVNULL,
-            text=True,
-        )
+        # Delegate actual spawn to shared helper
+        self._chrome_proc = launch_chrome_headful(CHROME_REMOTE_PORT, profile_dir)
 
     async def _wait_for_cdp(self, ws_endpoint: str) -> None:
         """Poll until the CDP websocket becomes reachable or time out."""

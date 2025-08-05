@@ -155,6 +155,8 @@ def cmd_open(
     group_name: Optional[str],
 ) -> None:
     """Open a new LLM window (or re-attach) and optionally send a prompt."""
+    from llm_burst.chrome_bootstrap import ensure_remote_debugging  # Added
+    ensure_remote_debugging()  # Added
 
     # Merge missing values from swiftDialog prompt when any field absent
     if (
@@ -239,6 +241,9 @@ def cmd_activate(
     incognito: bool,
 ) -> None:
     """Open 4 LLM tabs and send the same prompt (⌃⌥R replacement)."""
+    from llm_burst.chrome_bootstrap import ensure_remote_debugging  # Added
+    ensure_remote_debugging()  # Added
+
     from datetime import datetime
     from llm_burst.state import StateManager
     from llm_burst.browser import BrowserAdapter

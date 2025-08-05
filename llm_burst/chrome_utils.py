@@ -190,3 +190,39 @@ def relaunch_chrome_with_flag(port: int) -> subprocess.Popen[str]:
     return subprocess.Popen(
         args, stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL, text=True
     )
+
+
+def launch_chrome_headful(port: int, profile_dir: "Path"):  # noqa: D401
+    """
+    Start a *head-ful* Google Chrome instance listening on *port* and using
+    *profile_dir* as the user-data directory.
+
+    Returns
+    -------
+    subprocess.Popen[str]
+        Handle for the launched Chrome process (stdout/stderr are silenced).
+    """
+    from pathlib import Path
+    import subprocess
+    import os
+
+    # Local import to avoid circular dependency when llm_burst.browser imports us
+    from llm_burst.constants import CHROME_EXECUTABLE
+
+    # Convert string to Path if needed
+    if isinstance(profile_dir, str):
+        profile_dir = Path(profile_dir)
+
+    flags = [
+        CHROME_EXECUTABLE,
+        *build_launch_args(port, profile_dir),
+    ]
+
+    # Spawn Chrome in the background; suppress noisy output
+    return subprocess.Popen(
+        flags,
+        stdout=subprocess.DEVNULL,
+        stderr=subprocess.DEVNULL,
+        text=True,
+        env=os.environ.copy(),
+    )

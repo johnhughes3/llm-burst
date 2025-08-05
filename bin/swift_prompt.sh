@@ -59,7 +59,7 @@ cat > "$TEMP_CONFIG" <<EOF
   "title": "Start LLM Burst",
   "width": 600,
   "height": 420,
-  "message": "Please confirm your prompt from clipboard:",
+  "message": "Please confirm your prompt from clipboard:\n\n**Keyboard shortcuts:** Press ⌘↩ (Cmd+Return) to submit",
   "messagefont": "size=14",
   "textfield": [
     {
