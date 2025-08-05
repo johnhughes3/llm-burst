@@ -52,16 +52,38 @@ set +e  # allow capture of non-zero exit codes
 # Need to escape the prompt text for shell
 ESCAPED_PROMPT=$(printf '%s' "$PROMPT_TEXT" | sed "s/'/'\\\\''/g")
 
-RESPONSE=$("$DIALOG_BIN" \
-  --json \
-  --title "Start LLM Burst" \
-  --width 600 --height 420 \
-  --message "Please confirm your prompt from clipboard:" \
-  --textfield "Prompt Text,editor,required,value=$ESCAPED_PROMPT" \
-  --checkbox "Research mode" \
-  --checkbox "Incognito mode" \
-)
+# Create temp file for complex prompt text
+TEMP_CONFIG=$(mktemp)
+cat > "$TEMP_CONFIG" <<EOF
+{
+  "title": "Start LLM Burst",
+  "width": 600,
+  "height": 420,
+  "message": "Please confirm your prompt from clipboard:",
+  "messagefont": "size=14",
+  "textfield": [
+    {
+      "title": "Prompt Text",
+      "editor": true,
+      "required": true,
+      "value": $(printf '%s' "$PROMPT_TEXT" | jq -Rs .)
+    }
+  ],
+  "checkbox": [
+    {"label": "Research mode", "checked": false},
+    {"label": "Incognito mode", "checked": false}
+  ],
+  "button1text": "OK",
+  "button1action": "return",
+  "button2text": "Cancel",
+  "hidetimerbar": true,
+  "moveable": true
+}
+EOF
+
+RESPONSE=$("$DIALOG_BIN" --jsonfile "$TEMP_CONFIG" --json)
 DIALOG_EXIT=$?
+rm -f "$TEMP_CONFIG"
 set -e
 
 # ---------- normalise exit status --------------------------------------------
