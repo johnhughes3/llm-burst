@@ -196,11 +196,6 @@ def launch_chrome_headful(port: int, profile_dir: "Path"):  # noqa: D401
     """
     Start a *head-ful* Google Chrome instance listening on *port* and using
     *profile_dir* as the user-data directory.
-
-    Returns
-    -------
-    subprocess.Popen[str]
-        Handle for the launched Chrome process (stdout/stderr are silenced).
     """
     from pathlib import Path
     import subprocess
@@ -209,13 +204,19 @@ def launch_chrome_headful(port: int, profile_dir: "Path"):  # noqa: D401
     # Local import to avoid circular dependency when llm_burst.browser imports us
     from llm_burst.constants import CHROME_EXECUTABLE
 
-    # Convert string to Path if needed
-    if isinstance(profile_dir, str):
-        profile_dir = Path(profile_dir)
+    # -----------------------------------------------------------------------
+    # BUGFIX: build_launch_args expects a *str*, not a Path object.
+    # We therefore coerce profile_dir to str in all cases.
+    # -----------------------------------------------------------------------
+    if isinstance(profile_dir, Path):
+        profile_dir_str = str(profile_dir)
+    else:
+        # Accept callers passing plain strings and other path-likes
+        profile_dir_str = str(profile_dir)
 
     flags = [
         CHROME_EXECUTABLE,
-        *build_launch_args(port, profile_dir),
+        *build_launch_args(port, profile_dir_str),
     ]
 
     # Spawn Chrome in the background; suppress noisy output

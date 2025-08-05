@@ -18,6 +18,7 @@ import json
 import logging
 import sys
 import asyncio
+import subprocess
 from importlib import metadata
 from typing import Optional
 
@@ -262,9 +263,17 @@ def cmd_activate(
                 research = True
             if not incognito and data.get("Incognito mode"):
                 incognito = True
-        except (FileNotFoundError, OSError):
-            # Dialog not available – continue with whatever CLI flags gave us
-            pass
+        except (FileNotFoundError, OSError, subprocess.CalledProcessError) as e:
+            # Dialog not available or failed – try clipboard fallback
+            _LOG.debug(f"Dialog failed: {e}")
+            try:
+                import pyperclip
+                clipboard_text = pyperclip.paste()
+                if clipboard_text and clipboard_text.strip():
+                    prompt_text = clipboard_text
+                    click.echo("Using clipboard content as prompt (dialog unavailable)")
+            except Exception:
+                pass
 
     # Auto-generate a nice title (timestamp) when still missing
     auto_generated = False  # Track if we created a placeholder title
@@ -547,3 +556,57 @@ def cmd_group_move(task_name: str, group_name: str) -> None:
         click.echo(f"Moved '{task_name}' → '{group_name}'.")
     except RuntimeError as exc:
         raise click.ClickException(str(exc)) from exc
+
+
+@cli.command("chrome-status")
+def cmd_chrome_status() -> None:
+    """Display whether Chrome is running and if remote debugging is enabled.
+
+    Exit status:
+        0 → Chrome is running with --remote-debugging-port
+        1 → Chrome not running or missing the flag
+    """
+    import sys
+    from llm_burst.constants import CHROME_PROCESS_NAMES
+    from llm_burst.chrome_utils import scan_chrome_processes
+
+    status = scan_chrome_processes(CHROME_PROCESS_NAMES)
+
+    click.echo(f"Chrome running       : {'Yes' if status.running else 'No'}")
+    click.echo(f"Remote debugging flag: {'Yes' if status.remote_debug else 'No'}")
+    click.echo(f"PIDs                 : {', '.join(map(str, status.pids)) or '-'}")
+
+    # Non-zero exit when debugging flag is missing while Chrome is up
+    if status.running and not status.remote_debug:
+        sys.exit(1)
+
+
+@cli.command("chrome-launch")
+def cmd_chrome_launch() -> None:
+    """Force-quit any running Chrome instance and relaunch with remote debugging."""
+    import click
+    from llm_burst.constants import (
+        CHROME_PROCESS_NAMES,
+        CHROME_REMOTE_PORT,
+    )
+    from llm_burst.chrome_utils import (
+        scan_chrome_processes,
+        quit_chrome,
+        get_chrome_profile_dir,
+        launch_chrome_headful,
+    )
+
+    status = scan_chrome_processes(CHROME_PROCESS_NAMES)
+
+    if status.running:
+        click.echo("Quitting existing Chrome instance…")
+        if quit_chrome(status.pids):
+            click.echo("✓ Chrome exited")
+        else:
+            click.echo("⚠️  Failed to quit Chrome – attempting to continue", err=True)
+
+    click.echo("Launching Chrome with --remote-debugging-port…")
+    profile_dir = get_chrome_profile_dir()
+    launch_chrome_headful(CHROME_REMOTE_PORT, profile_dir)
+    click.echo("✓ Chrome launched and listening on port "
+               f"{CHROME_REMOTE_PORT}")

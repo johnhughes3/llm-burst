@@ -161,8 +161,10 @@ window.addTextAndSend = function(messageText, resolve, reject) {
     // Focus the editor
     editor.focus();
     
-    // Clear existing content
-    editor.innerHTML = '';
+    // Clear existing content - use DOM methods instead of innerHTML
+    while (editor.firstChild) {
+      editor.removeChild(editor.firstChild);
+    }
     
     // Split text into paragraphs and add them properly
     const lines = messageText.split('\n');
@@ -236,7 +238,10 @@ window.geminiFollowUpMessage = function(messageText) {
       console.log('Found Gemini editor element');
 
       editor.focus();
-      editor.innerHTML = ''; // Clear existing content
+      // Clear existing content - use DOM methods instead of innerHTML
+      while (editor.firstChild) {
+        editor.removeChild(editor.firstChild);
+      }
 
       // Split text into paragraphs and add them properly
       const lines = messageText.split('\n');
