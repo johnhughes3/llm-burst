@@ -19,12 +19,6 @@ set -euo pipefail
 
 # ---------- helper functions --------------------------------------------------
 
-# Default task name in ICU format: "Fri, Nov 15, 2024 3:45"
-default_task_name() {
-  # Note: BSD date (macOS) understands %-d and %-H for non-padded day and hour.
-  date "+%a, %b %-d, %Y %-H:%M"
-}
-
 # Return clipboard contents or an empty string if pbpaste is unavailable.
 clipboard_contents() {
   if command -v pbpaste >/dev/null 2>&1; then
@@ -44,7 +38,6 @@ fi
 
 # ---------- build prompt ------------------------------------------------------
 
-TASK_NAME=$(default_task_name)
 if [[ -n "${LLMB_DEFAULT_PROMPT:-}" ]]; then
   PROMPT_TEXT="$LLMB_DEFAULT_PROMPT"
 else
@@ -53,17 +46,20 @@ fi
 
 # Invoke swiftDialog.
 #   --json   → print JSON to stdout
-#   --select → dropdowns
-#   --textfield / --textarea → input fields
+#   --checkbox → checkboxes
+#   --textfield → input fields
 set +e  # allow capture of non-zero exit codes
+# Need to escape the prompt text for shell
+ESCAPED_PROMPT=$(printf '%s' "$PROMPT_TEXT" | sed "s/'/'\\\\''/g")
+
 RESPONSE=$("$DIALOG_BIN" \
   --json \
   --title "Start LLM Burst" \
   --width 600 --height 420 \
-  --textfield "Task Name,required,default=$TASK_NAME" \
-  --textarea "Prompt Text,default=$PROMPT_TEXT" \
-  --select "Research mode,values=No|Yes,default=No" \
-  --select "Incognito mode,values=No|Yes,default=No" \
+  --message "Please confirm your prompt from clipboard:" \
+  --textfield "Prompt Text,editor,required,value=$ESCAPED_PROMPT" \
+  --checkbox "Research mode" \
+  --checkbox "Incognito mode" \
 )
 DIALOG_EXIT=$?
 set -e

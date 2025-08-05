@@ -244,21 +244,18 @@ def cmd_activate(
     from llm_burst.browser import BrowserAdapter
 
     # 1️⃣ Gather any missing fields from swiftDialog
-    if session_title is None or (prompt_text is None and not stdin):
+    if prompt_text is None and not stdin:
         try:
             data = prompt_user()
-            session_title = (
-                session_title or data.get("Task Name") or data.get("task_name")
-            )
             prompt_text = (
                 prompt_text
                 or data.get("Prompt Text")
                 or data.get("prompt_text")
                 or data.get("prompt")
             )
-            if not research and data.get("Research") == "Yes":
+            if not research and data.get("Research mode"):
                 research = True
-            if not incognito and data.get("Incognito") == "Yes":
+            if not incognito and data.get("Incognito mode"):
                 incognito = True
         except (FileNotFoundError, OSError):
             # Dialog not available – continue with whatever CLI flags gave us
