@@ -44,8 +44,12 @@ _LOG = logging.getLogger(__name__)
 
 
 def _task_slug(session_title: str, provider: LLMProvider) -> str:
-    """Internal: unique task name used for each provider tab."""
-    return f"{session_title}:{provider.name.lower()}"
+    """Generate stable internal identifier - NEVER rename these."""
+    # Use a stable pattern that won't change even if session_title is renamed
+    import hashlib
+    # Create stable hash from initial session title
+    stable_id = hashlib.md5(f"{session_title}:{provider.name}".encode()).hexdigest()[:8]
+    return f"internal_{provider.name.lower()}_{stable_id}"
 
 
 def _configure_logging(verbose: bool) -> None:
@@ -135,10 +139,11 @@ def _provider_from_str(raw: str) -> LLMProvider:
     help="Read prompt text from STDIN instead of argument.",
 )
 @click.option(
-    "-r",
-    "--reuse",
+    "-n",
+    "--new",
+    "force_new",
     is_flag=True,
-    help="Fail if *task-name* already exists instead of re-creating.",
+    help="Force creation of a new session. Fail if *task-name* already exists.",
 )
 @click.option(
     "-g",
@@ -152,7 +157,7 @@ def cmd_open(
     task_name: Optional[str],
     prompt_text: Optional[str],
     stdin: bool,
-    reuse: bool,
+    force_new: bool,
     group_name: Optional[str],
 ) -> None:
     """Open a new LLM window (or re-attach) and optionally send a prompt."""
@@ -162,7 +167,7 @@ def cmd_open(
     # Merge missing values from swiftDialog prompt when any field absent
     if (
         provider is None
-        or (task_name is None and not reuse)
+        or (task_name is None and not force_new)
         or (prompt_text is None and not stdin)
     ):
         user_data = prompt_user()
@@ -176,17 +181,18 @@ def cmd_open(
     if provider is None:
         raise click.UsageError("provider is required")
 
-    if reuse and task_name is None:
-        raise click.UsageError("--reuse requires --task-name")
+    if force_new and task_name is None:
+        raise click.UsageError("--new requires --task-name")
 
     provider_enum = _provider_from_str(provider)
 
     from llm_burst.state import StateManager
 
     state = StateManager()
-    if reuse and task_name in state.list_all():
+    # Check for existence if --new is specified AND task_name is provided.
+    if force_new and task_name is not None and task_name in state.list_all():
         raise click.ClickException(
-            f"Session '{task_name}' already exists (reuse flag set)."
+            f"Session '{task_name}' already exists (--new flag set)."
         )
 
     # Read prompt text from STDIN if requested
@@ -292,73 +298,95 @@ def cmd_activate(
 
     providers = list(LLMProvider)  # All known providers for now
 
+    # Helper coroutine for concurrent open/prompt
+    async def _open_and_prompt(adapter, task_slug, prov, prompt, research_mode, incognito_mode):
+        """Open a provider window and send prompt."""
+        handle = await adapter.open_window(task_slug, prov)
+        opts = InjectOptions(
+            follow_up=False,
+            research=research_mode,
+            incognito=incognito_mode,
+        )
+        injector = get_injector(prov)
+        await injector(handle.page, prompt, opts)
+        return handle
+
     async def _async_activate() -> tuple[list[str], str]:
         """Open all provider windows and send prompt while BrowserAdapter is alive."""
         # Late import to keep GAI optional
-        from llm_burst.auto_namer import suggest_task_name
+        from llm_burst.auto_namer import suggest_session_name
         
-        opened: list[str] = []
-        state = StateManager()
-        final_title = session_title  # May change after rename
-        suggested_title: str | None = None
+        opened_providers: list[str] = []
         handles: list = []
+        state = StateManager()
+        current_title = session_title
+        suggested_name: str | None = None
 
         # Create or reuse the session record
-        if state.get_session(session_title):
-            click.echo(f"Re-using existing session '{session_title}'")
+        if state.get_session(current_title):
+            click.echo(f"Re-using existing session '{current_title}'")
         else:
-            state.create_session(session_title)
+            state.create_session(current_title)
 
         async with BrowserAdapter() as adapter:
+            # Open windows and send prompts concurrently
+            tasks = []
             for prov in providers:
-                task = _task_slug(session_title, prov)
-                try:
-                    handle = await adapter.open_window(task, prov)
-                    handles.append(handle)
+                # Create stable internal slug for LiveSession based on initial title
+                task_slug = _task_slug(current_title, prov)
+                tasks.append(_open_and_prompt(adapter, task_slug, prov, prompt_text, research, incognito))
 
-                    # Inject the prompt immediately
-                    opts = InjectOptions(
-                        follow_up=False,
-                        research=research,
-                        incognito=incognito,
-                    )
-                    injector = get_injector(prov)
-                    await injector(handle.page, prompt_text, opts)
+            results = await asyncio.gather(*tasks, return_exceptions=True)
 
-                    # Try to obtain a single session-level name suggestion from the first successful provider
-                    if suggested_title is None:
+            # Process results and attempt auto-naming
+            for prov, result in zip(providers, results):
+                if isinstance(result, Exception):
+                    click.echo(f"Failed to open {prov.name}: {result}", err=True)
+                    continue
+
+                handle = result
+                handles.append(handle)
+                opened_providers.append(prov.name.lower())
+
+                # Update state (linking LiveSession to MultiProviderSession)
+                state.add_tab_to_session(
+                    session_title,  # Use the initial title
+                    prov,
+                    handle.live.window_id,
+                    handle.live.target_id,
+                )
+
+                # Attempt to get a name suggestion (only if auto-generated title and not yet suggested)
+                if auto_generated and suggested_name is None:
+                    try:
+                        suggested_name = await suggest_session_name(handle.page, prov)
+                    except Exception:
+                        pass
+
+            # If we used an auto-generated session title and got a suggestion, apply it
+            if auto_generated and suggested_name:
+                # Rename the MultiProviderSession, NOT the LiveSessions
+                if state.rename_session(current_title, suggested_name):
+                    click.echo(f"Session renamed to '{suggested_name}'")
+                    current_title = suggested_name
+
+                    # Update browser tab titles for display purposes
+                    for handle in handles:
                         try:
-                            maybe = await suggest_task_name(handle.page, prov)
-                            if maybe and len(maybe) >= 3:
-                                suggested_title = maybe.split(":", 1)[0].strip()
+                            await set_window_title(handle.page, current_title)
                         except Exception:
                             pass
-
-                    state.add_tab_to_session(
-                        session_title,
-                        prov,
-                        handle.live.window_id,
-                        handle.live.target_id,
-                    )
-                    opened.append(prov.name.lower())
-                except Exception as exc:
-                    click.echo(f"Failed to open {prov.name}: {exc}", err=True)
-
-            # If we used an auto-generated session title, try to improve it using the suggestion
-            if auto_generated and suggested_title:
-                if state.rename_session(final_title, suggested_title):
-                    final_title = suggested_title
-
-            # Update the visible tab/window title for each opened handle (display-only; IDs untouched)
-            for h in handles:
-                try:
-                    await set_window_title(h.page, final_title)
-                except Exception:
-                    pass
+            else:
+                # Ensure initial title is set if not auto-named
+                for handle in handles:
+                    try:
+                        await set_window_title(handle.page, current_title)
+                    except Exception:
+                        pass
 
             # Flush state so that follow-up commands see the new data
             state.persist_now()
-            return opened, final_title
+            return opened_providers, current_title
 
     opened, session_title = asyncio.run(_async_activate())
 
@@ -464,9 +492,9 @@ def cmd_follow_up(
     for prov, tab in sess.tabs.items():
         try:
             send_prompt_by_target_sync(
-                prov,
-                tab.tab_id,
-                prompt_text,
+                prov,  # provider
+                tab.tab_id,  # target_id
+                prompt_text,  # prompt
                 follow_up=True,
             )
         except RuntimeError as exc:

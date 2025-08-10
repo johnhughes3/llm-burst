@@ -9,10 +9,13 @@ synchronous, mirroring the bridge helpers in llm_burst.cli.
 from __future__ import annotations
 
 import asyncio
+import logging
 from typing import Dict
 
 from .browser import BrowserAdapter
 from .state import TabGroup, StateManager
+
+_LOG = logging.getLogger(__name__)
 
 
 # --------------------------------------------------------------------------- #
@@ -71,6 +74,7 @@ def ungroup_target_sync(target_id: str) -> None:
 
 
 async def _async_ungroup_target(target_id: str) -> None:
+    """Remove a tab from its Chrome tab group."""
     async with BrowserAdapter() as adapter:
         cdp = await adapter._get_cdp_connection()
         if not cdp:
@@ -81,7 +85,8 @@ async def _async_ungroup_target(target_id: str) -> None:
             await cdp.send("TabGroups.removeTab", {"tabId": target_id})
         except Exception as exc:
             # Some Chrome builds might not expose removeTab; ignore if it fails softly
-            raise RuntimeError(f"Failed to ungroup tab {target_id}: {exc}") from exc
+            _LOG.warning(f"Failed to ungroup tab {target_id}: {exc}")
+            # Don't raise - continue to clear state even if CDP call fails
 
         # Clear group_id in state for the matching LiveSession
         state = StateManager()

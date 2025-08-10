@@ -136,17 +136,26 @@ def get_injector(provider: LLMProvider):
 
             # Only for initial submission – follow-ups already handled in JS
             if not opts.follow_up:
+                clipboard_success = False
                 try:
                     import pyperclip
 
                     pyperclip.copy(prompt)
+                    clipboard_success = True
                 except Exception:
-                    # Non-fatal – continue without clipboard
+                    # Clipboard failed, we will fall back to keyboard insertion
                     pass
 
                 # Give the browser a brief moment to settle focus
                 await page.wait_for_timeout(100)
-                await page.keyboard.press("Meta+V")
+                
+                if clipboard_success:
+                    await page.keyboard.press("Meta+V")
+                else:
+                    # Fallback: Use Playwright's insert_text (types characters)
+                    # This is slower but works even if clipboard is unavailable.
+                    await page.keyboard.insert_text(prompt)
+                
                 await page.keyboard.press("Enter")
 
         return _claude_inject
