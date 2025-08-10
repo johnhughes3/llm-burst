@@ -127,6 +127,7 @@ def _run_jxa_prompt(clipboard_text: str = "") -> Dict[str, Any] | None:
 
     // Show dialog (0-arg methods are properties in JXA)
     var response = alert.runModal;
+    
     // Accept both modern and legacy "OK" codes; treat others as cancel
     var okCode = 1000; // NSAlertFirstButtonReturn
     

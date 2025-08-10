@@ -172,73 +172,84 @@ def cmd_open(
     gui_prompt: bool,
 ) -> None:
     """Open a new LLM window (or re-attach) and optionally send a prompt."""
-    prune_stale_sessions_sync()
-    from llm_burst.chrome_bootstrap import ensure_remote_debugging  # Added
+    import sys
+    import traceback
+    
+    try:
+        prune_stale_sessions_sync()
+        from llm_burst.chrome_bootstrap import ensure_remote_debugging  # Added
 
-    ensure_remote_debugging()  # Added
+        ensure_remote_debugging()  # Added
 
-    # Merge missing values from swiftDialog prompt when any field absent
-    if (
-        provider is None
-        or (task_name is None and not force_new)
-        or (prompt_text is None and not stdin)
-    ):
-        user_data = prompt_user(gui=gui_prompt)
-        provider = provider or user_data.get("provider")
-        task_name = task_name or user_data.get("task_name") or user_data.get("task")
-        prompt_text = (
-            prompt_text
-            or user_data.get("Prompt Text")
-            or user_data.get("prompt_text")
-            or user_data.get("prompt")
-        )
+        # Merge missing values from swiftDialog prompt when any field absent
+        if (
+            provider is None
+            or (task_name is None and not force_new)
+            or (prompt_text is None and not stdin)
+        ):
+            user_data = prompt_user(gui=gui_prompt)
+            provider = provider or user_data.get("provider")
+            task_name = task_name or user_data.get("task_name") or user_data.get("task")
+            prompt_text = (
+                prompt_text
+                or user_data.get("Prompt Text")
+                or user_data.get("prompt_text")
+                or user_data.get("prompt")
+            )
 
-    # Validation
-    if provider is None:
-        raise click.UsageError("provider is required")
+        # Validation
+        if provider is None:
+            raise click.UsageError("provider is required")
 
-    if force_new and task_name is None:
-        raise click.UsageError("--new requires --task-name")
+        if force_new and task_name is None:
+            raise click.UsageError("--new requires --task-name")
 
-    provider_enum = _provider_from_str(provider)
+        provider_enum = _provider_from_str(provider)
 
-    from llm_burst.state import StateManager
+        from llm_burst.state import StateManager
 
-    state = StateManager()
-    # Check for existence if --new is specified AND task_name is provided.
-    if force_new and task_name is not None and task_name in state.list_all():
-        raise click.ClickException(
-            f"Session '{task_name}' already exists (--new flag set)."
-        )
+        state = StateManager()
+        # Check for existence if --new is specified AND task_name is provided.
+        if force_new and task_name is not None and task_name in state.list_all():
+            raise click.ClickException(
+                f"Session '{task_name}' already exists (--new flag set)."
+            )
 
-    # Read prompt text from STDIN if requested
-    if stdin:
-        prompt_text = sys.stdin.read()
+        # Read prompt text from STDIN if requested
+        if stdin:
+            prompt_text = sys.stdin.read()
 
-    # Open / attach window
-    handle = open_llm_window(task_name, provider_enum)
-    actual_name = handle.live.task_name
-    click.echo(f"Opened window '{actual_name}' → {provider_enum.name}")
+        # Open / attach window
+        handle = open_llm_window(task_name, provider_enum)
+        actual_name = handle.live.task_name
+        click.echo(f"Opened window '{actual_name}' → {provider_enum.name}")
 
-    # Send prompt if provided
-    if prompt_text:
-        send_prompt_sync(handle, prompt_text)
-        click.echo("Prompt sent.")
+        # Send prompt if provided
+        if prompt_text:
+            send_prompt_sync(handle, prompt_text)
+            click.echo("Prompt sent.")
 
-    # Attempt auto-naming when we used a placeholder (no explicit task_name)
-    if task_name is None:
-        new_name = auto_name_sync(handle)
-        if new_name and new_name != actual_name:
-            click.echo(f"Session renamed to '{new_name}'")
-            actual_name = new_name  # ensure group op uses current name
+        # Attempt auto-naming when we used a placeholder (no explicit task_name)
+        if task_name is None:
+            new_name = auto_name_sync(handle)
+            if new_name and new_name != actual_name:
+                click.echo(f"Session renamed to '{new_name}'")
+                actual_name = new_name  # ensure group op uses current name
 
-    # NEW: assign to tab group if requested
-    if group_name:
-        try:
-            move_to_group_sync(actual_name, group_name)
-            click.echo(f"Added '{actual_name}' to group '{group_name}'.")
-        except RuntimeError as exc:
-            click.echo(f"Tab-group failed: {exc}", err=True)
+        # NEW: assign to tab group if requested
+        if group_name:
+            try:
+                move_to_group_sync(actual_name, group_name)
+                click.echo(f"Added '{actual_name}' to group '{group_name}'.")
+            except RuntimeError as exc:
+                click.echo(f"Tab-group failed: {exc}", err=True)
+    except SystemExit as e:
+        print(f"ERROR: SystemExit with code {e.code}", file=sys.stderr)
+        sys.exit(e.code)
+    except Exception as e:
+        print(f"ERROR: Unexpected error in cmd_open: {e}", file=sys.stderr)
+        traceback.print_exc(file=sys.stderr)
+        sys.exit(1)
 
 
 # --------------------------------------------------------------------------- #
