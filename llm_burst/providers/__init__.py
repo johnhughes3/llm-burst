@@ -173,9 +173,9 @@ _PROVIDER_CONFIG: dict[LLMProvider, ProviderConfig] = {
     LLMProvider.CLAUDE: (
         claude.SUBMIT_JS,
         claude.FOLLOWUP_JS,
-        "automateClaudeInteraction({research})",
-        "claudeFollowUpMessage()",
-        True,
+        "automateClaudeInteraction({prompt}, {research})",
+        "claudeFollowUpMessage({prompt})",
+        False,
         ".ProseMirror",
     ),
     LLMProvider.GROK: (

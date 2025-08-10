@@ -83,7 +83,8 @@ def prompt_user(gui: bool | None = None) -> Dict[str, Any]:
     import shutil
     import tempfile
 
-    if not shutil.which("dialog"):
+    dlg = shutil.which("dialog")
+    if not dlg:
         try:
             clipboard_text: str = pyperclip.paste()
             if clipboard_text:
@@ -141,7 +142,7 @@ def prompt_user(gui: bool | None = None) -> Dict[str, Any]:
             json.dump(dialog_config, tmp_config)
             tmp_config_path = tmp_config.name
 
-        # Call dialog CLI directly - no wrapper, no Finder involvement
+        # Call dialog CLI directly using the full path from which()
         # Route stderr to a temp log file so failures can be inspected without
         # printing benign macOS LSOpen (-50) warnings to the terminal.
         with tempfile.NamedTemporaryFile(
@@ -149,7 +150,7 @@ def prompt_user(gui: bool | None = None) -> Dict[str, Any]:
         ) as err_log:
             log_path = err_log.name
             result = subprocess.run(
-                ["dialog", "--jsonfile", tmp_config_path, "--json"],
+                [dlg, "--jsonfile", tmp_config_path, "--json"],
                 stdout=subprocess.PIPE,
                 stderr=err_log,
                 text=True,
