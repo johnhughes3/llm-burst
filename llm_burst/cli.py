@@ -55,9 +55,11 @@ def prompt_user() -> Dict[str, Any]:
     """
     # Check if dialog binary exists first
     import shutil
+    from pathlib import Path
 
-    if not shutil.which("dialog"):
-        raise FileNotFoundError("swiftDialog not installed")
+    # If swiftDialog or the wrapper script is missing, gracefully fall back
+    if not shutil.which("dialog") or not SWIFT_PROMPT_SCRIPT.exists():
+        return {}
 
     # Grab clipboard to pre-seed the dialog (falls back silently)
     try:
@@ -197,6 +199,58 @@ async def _async_send_prompt(
     )
     injector = get_injector(provider)
     await injector(page, prompt, opts)
+
+
+def send_prompt_by_target_sync(
+    provider: LLMProvider,
+    target_id: str,
+    prompt: str,
+    *,
+    follow_up: bool = False,
+    research: bool = False,
+    incognito: bool = False,
+) -> None:
+    """
+    Inject *prompt* into a page identified by *target_id* under the specified *provider*.
+
+    This bypasses name-based lookups entirely and is resilient to display-name changes.
+    """
+    asyncio.run(
+        _async_send_prompt_by_target(
+            provider,
+            target_id,
+            prompt,
+            follow_up=follow_up,
+            research=research,
+            incognito=incognito,
+        )
+    )
+
+
+async def _async_send_prompt_by_target(
+    provider: LLMProvider,
+    target_id: str,
+    prompt: str,
+    *,
+    follow_up: bool = False,
+    research: bool = False,
+    incognito: bool = False,
+) -> None:
+    from .browser import BrowserAdapter
+    from llm_burst.providers import get_injector, InjectOptions
+
+    async with BrowserAdapter() as adapter:
+        page = await adapter._find_page_for_target(target_id)
+        if page is None:
+            raise RuntimeError(f"Could not locate page for target '{target_id}'")
+
+        opts = InjectOptions(
+            follow_up=follow_up,
+            research=research,
+            incognito=incognito,
+        )
+        injector = get_injector(provider)
+        await injector(page, prompt, opts)
 
 
 def get_running_sessions() -> Dict[str, Any]:

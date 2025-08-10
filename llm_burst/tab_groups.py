@@ -30,7 +30,9 @@ async def _async_create_group(name: str, color: str) -> TabGroup:
         else:
             # Spawn a temporary blank window to obtain a windowId
             target_id = await adapter._create_blank_window()
-            cdp = adapter._browser.contexts[0]._connection
+            cdp = await adapter._get_cdp_connection()
+            if not cdp:
+                raise RuntimeError("No CDP connection available")
             res = await cdp.send("Browser.getWindowForTarget", {"targetId": target_id})
             window_id = res["windowId"]
 
@@ -61,3 +63,30 @@ def move_to_group_sync(task_name: str, group_name: str) -> None:
 def list_groups_sync() -> Dict[int, TabGroup]:
     """Return a mapping of group_id → TabGroup."""
     return StateManager().list_groups()
+
+
+def ungroup_target_sync(target_id: str) -> None:
+    """Remove the tab identified by targetId from its Chrome tab group (if any), and update state."""
+    asyncio.run(_async_ungroup_target(target_id))
+
+
+async def _async_ungroup_target(target_id: str) -> None:
+    async with BrowserAdapter() as adapter:
+        cdp = await adapter._get_cdp_connection()
+        if not cdp:
+            raise RuntimeError("No CDP connection available")
+
+        # Use the TabGroups experimental CDP domain to remove tab from its group
+        try:
+            await cdp.send("TabGroups.removeTab", {"tabId": target_id})
+        except Exception as exc:
+            # Some Chrome builds might not expose removeTab; ignore if it fails softly
+            raise RuntimeError(f"Failed to ungroup tab {target_id}: {exc}") from exc
+
+        # Clear group_id in state for the matching LiveSession
+        state = StateManager()
+        for task_name, s in state.list_all().items():
+            if s.target_id == target_id:
+                # assign_session_to_group accepts None at runtime; type is not enforced
+                state.assign_session_to_group(task_name, None)  # type: ignore[arg-type]
+                break

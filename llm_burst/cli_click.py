@@ -247,7 +247,7 @@ def cmd_activate(
 
     from datetime import datetime
     from llm_burst.state import StateManager
-    from llm_burst.browser import BrowserAdapter
+    from llm_burst.browser import BrowserAdapter, set_window_title
 
     # 1️⃣ Gather any missing fields from swiftDialog
     if prompt_text is None and not stdin:
@@ -294,13 +294,14 @@ def cmd_activate(
 
     async def _async_activate() -> tuple[list[str], str]:
         """Open all provider windows and send prompt while BrowserAdapter is alive."""
-        # Late import so test patches are honoured
-        from llm_burst.auto_namer import auto_name_session
+        # Late import to keep GAI optional
+        from llm_burst.auto_namer import suggest_task_name
         
         opened: list[str] = []
         state = StateManager()
         final_title = session_title  # May change after rename
-        first_renamed: str | None = None
+        suggested_title: str | None = None
+        handles: list = []
 
         # Create or reuse the session record
         if state.get_session(session_title):
@@ -313,6 +314,9 @@ def cmd_activate(
                 task = _task_slug(session_title, prov)
                 try:
                     handle = await adapter.open_window(task, prov)
+                    handles.append(handle)
+
+                    # Inject the prompt immediately
                     opts = InjectOptions(
                         follow_up=False,
                         research=research,
@@ -321,10 +325,14 @@ def cmd_activate(
                     injector = get_injector(prov)
                     await injector(handle.page, prompt_text, opts)
 
-                    # Attempt auto-naming for this tab
-                    new_task_name = await auto_name_session(handle.live, handle.page)
-                    if new_task_name and first_renamed is None:
-                        first_renamed = new_task_name
+                    # Try to obtain a single session-level name suggestion from the first successful provider
+                    if suggested_title is None:
+                        try:
+                            maybe = await suggest_task_name(handle.page, prov)
+                            if maybe and len(maybe) >= 3:
+                                suggested_title = maybe.split(":", 1)[0].strip()
+                        except Exception:
+                            pass
 
                     state.add_tab_to_session(
                         session_title,
@@ -336,11 +344,17 @@ def cmd_activate(
                 except Exception as exc:
                     click.echo(f"Failed to open {prov.name}: {exc}", err=True)
 
-            # If we used an auto-generated session title, try to improve it
-            if auto_generated and first_renamed:
-                candidate_title = first_renamed.split(":", 1)[0]
-                if state.rename_session(final_title, candidate_title):
-                    final_title = candidate_title
+            # If we used an auto-generated session title, try to improve it using the suggestion
+            if auto_generated and suggested_title:
+                if state.rename_session(final_title, suggested_title):
+                    final_title = suggested_title
+
+            # Update the visible tab/window title for each opened handle (display-only; IDs untouched)
+            for h in handles:
+                try:
+                    await set_window_title(h.page, final_title)
+                except Exception:
+                    pass
 
             # Flush state so that follow-up commands see the new data
             state.persist_now()
@@ -444,10 +458,17 @@ def cmd_follow_up(
     if not prompt_text or not prompt_text.strip():
         raise click.UsageError("Prompt text is required.")
 
-    for prov in sess.tabs.keys():
-        task = _task_slug(session_title, prov)
+    # Import here to avoid top-level import churn
+    from llm_burst.cli import send_prompt_by_target_sync
+
+    for prov, tab in sess.tabs.items():
         try:
-            send_prompt_sync(task, prompt_text, follow_up=True)
+            send_prompt_by_target_sync(
+                prov,
+                tab.tab_id,
+                prompt_text,
+                follow_up=True,
+            )
         except RuntimeError as exc:
             click.echo(f"{prov.name}: {exc}", err=True)
 
@@ -494,17 +515,21 @@ def cmd_toggle_group(session_title: str | None) -> None:
     if sess is None:
         raise click.ClickException(f"Unknown session '{session_title}'")
 
+    # Import helpers locally
+    from llm_burst.tab_groups import move_target_to_group_sync, ungroup_target_sync
+
     group_name = f"{session_title} Group"
     try:
         if sess.grouped:
-            # Ungroup ➜ special helper removes from group
-            for prov in sess.tabs:
-                move_to_group_sync(_task_slug(session_title, prov), "_ungroup_")
+            # Remove each tab from its group
+            for _, th in sess.tabs.items():
+                ungroup_target_sync(th.tab_id)
             state.set_grouped(session_title, False)
             click.echo(f"Session '{session_title}' un-grouped.")
         else:
-            for prov in sess.tabs:
-                move_to_group_sync(_task_slug(session_title, prov), group_name)
+            # Add each tab to the group, creating it if necessary
+            for prov, th in sess.tabs.items():
+                move_target_to_group_sync(prov, th.tab_id, th.window_id, group_name)
             state.set_grouped(session_title, True)
             click.echo(f"Session '{session_title}' grouped.")
     except RuntimeError as exc:

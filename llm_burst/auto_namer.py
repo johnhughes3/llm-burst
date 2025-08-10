@@ -128,28 +128,36 @@ async def extract_conversation(
         return None
 
     try:
-        # Wait for at least one user message
-        await page.wait_for_selector(selectors["user"], timeout=3000)
+        # Wait for at least one user message (best-effort)
+        try:
+            await page.wait_for_selector(selectors["user"], timeout=3000)
+        except Exception:
+            # Continue even if this wait fails; we'll try a fallback later
+            pass
 
-        # Extract all messages
         messages = []
 
         # Get user messages
-        user_elements = await page.query_selector_all(selectors["user"])
-        for elem in user_elements:
-            text = await elem.inner_text()
-            if text:
-                messages.append(("user", text.strip()))
+        try:
+            user_elements = await page.query_selector_all(selectors["user"])
+            for elem in user_elements:
+                text = await elem.inner_text()
+                if text:
+                    messages.append(("user", text.strip()))
+        except Exception:
+            pass
 
         # Get assistant messages if present
-        assistant_elements = await page.query_selector_all(selectors["assistant"])
-        for elem in assistant_elements:
-            text = await elem.inner_text()
-            if text:
-                messages.append(("assistant", text.strip()))
+        try:
+            assistant_elements = await page.query_selector_all(selectors["assistant"])
+            for elem in assistant_elements:
+                text = await elem.inner_text()
+                if text:
+                    messages.append(("assistant", text.strip()))
+        except Exception:
+            pass
 
-        # Sort by appearance order (assuming DOM order)
-        # Build conversation text
+        # Build conversation text in DOM order (already pushed in appearance order)
         conversation = []
         for role, text in messages:
             if role == "user":
@@ -157,11 +165,26 @@ async def extract_conversation(
             else:
                 conversation.append(f"Assistant: {text}")
 
-        full_text = "\n\n".join(conversation)
+        full_text = "\n\n".join(conversation).strip()
 
-        # If conversation exceeds max_chars, take first half and last half
-        # This preserves both initial context (what the task is about) and
-        # recent context (current focus) for better naming
+        # Fallback when selectors fail or produce no content: take body text
+        if not full_text:
+            try:
+                body_text = (await page.inner_text("body")).strip()
+            except Exception:
+                body_text = ""
+            if body_text:
+                # Keep first and last halves if too long
+                if len(body_text) > max_chars:
+                    half_limit = (max_chars - 10) // 2
+                    full_text = body_text[:half_limit] + "\n\n...\n\n" + body_text[-half_limit:]
+                else:
+                    full_text = body_text
+
+        if not full_text:
+            return None
+
+        # Clamp overly long conversations: take head & tail
         if len(full_text) > max_chars:
             half_limit = (max_chars - 10) // 2  # Reserve 10 chars for separator
             first_part = full_text[:half_limit]
@@ -208,10 +231,49 @@ async def generate_task_name(
     try:
         response = await asyncio.to_thread(model.generate_content, prompt)
 
-        # Parse the JSON response
-        if response.text:
-            task_obj = TaskName.model_validate_json(response.text)
-            return task_obj.task_name
+        # Extract text defensively; google-generativeai responses vary by version
+        raw_text = ""
+        try:
+            if getattr(response, "text", ""):
+                raw_text = response.text  # type: ignore[attr-defined]
+            else:
+                # Try candidates path
+                candidates = getattr(response, "candidates", None)
+                if candidates:
+                    content = getattr(candidates[0], "content", None)
+                    parts = getattr(content, "parts", None)
+                    if parts and len(parts) > 0:
+                        maybe_text = getattr(parts[0], "text", "")
+                        if maybe_text:
+                            raw_text = maybe_text
+        except Exception:
+            raw_text = getattr(response, "text", "") or ""
+
+        # Handle code fences like ```json ... ```
+        if raw_text and raw_text.strip().startswith("```"):
+            import re as _re
+            s = raw_text.strip()
+            s = _re.sub(r"^```(?:json)?\s*", "", s)
+            s = _re.sub(r"\s*```$", "", s)
+            raw_text = s
+
+        # Try strict JSON schema parse
+        if raw_text:
+            try:
+                task_obj = TaskName.model_validate_json(raw_text)
+                return task_obj.task_name
+            except Exception:
+                # Try lenient dict parse
+                try:
+                    import json as _json
+                    data = _json.loads(raw_text)
+                    if isinstance(data, dict) and "task_name" in data and isinstance(data["task_name"], str):
+                        return data["task_name"]
+                except Exception:
+                    # Last resort: pick the first non-empty line as a title-ish string
+                    first_line = raw_text.strip().splitlines()[0].strip().strip('"')
+                    # Ensure it's not absurdly long
+                    return first_line[:80] if first_line else None
 
     except Exception as e:
         _LOG.warning("Gemini API error: %s", e)
@@ -298,6 +360,19 @@ def _is_placeholder_name(name: str) -> bool:
             if suffix.isdigit() or all(c in "0123456789abcdef" for c in suffix.lower()):
                 return True
     return False
+
+
+async def suggest_task_name(page: Page, provider: LLMProvider) -> Optional[str]:
+    """Return a suggested session title derived from the current conversation without mutating any state."""
+    model = _setup_gemini()
+    if not model:
+        return None
+
+    conversation = await extract_conversation(page, provider)
+    if not conversation:
+        return None
+
+    return await generate_task_name(conversation, model)
 
 
 async def set_window_title(page: Page, title: str) -> None:
