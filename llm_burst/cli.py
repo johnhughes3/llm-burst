@@ -40,29 +40,42 @@ def _run_jxa_prompt(clipboard_text: str = "") -> Dict[str, Any] | None:
     ObjC.import('AppKit');
     ObjC.import('Foundation');
 
-    // Ensure NSApplication is initialized and frontmost
-    var app = $.NSApplication.sharedApplication();
-    app.setActivationPolicy($.NSApplicationActivationPolicyAccessory);
-    app.activateIgnoringOtherApps(true);
+    // Ensure NSApplication is initialized and the process is frontmost
+    var app = $.NSApplication.sharedApplication; // accessed as property, not method
+    // Use Regular so the alert can show reliably from CLI
+    if (typeof $.NSApplicationActivationPolicyRegular !== 'undefined') {
+        app.setActivationPolicy($.NSApplicationActivationPolicyRegular);
+    }
+    // Activate the running app (more reliable than NSApp.activate on CLI)
+    if (typeof $.NSRunningApplication !== 'undefined') {
+        var me = $.NSRunningApplication.currentApplication;
+        if (me && me.activateWithOptions) {
+            var opt = (typeof $.NSApplicationActivateIgnoringOtherApps !== 'undefined')
+                ? $.NSApplicationActivateIgnoringOtherApps : 1; // fallback
+            me.activateWithOptions(opt);
+        }
+    } else {
+        app.activateIgnoringOtherApps(true);
+    }
 
     // Read clipboard text from NSPasteboard by default; allow env override
     function readClipboard() {
-        var pb = $.NSPasteboard.generalPasteboard();
-        var s = pb.stringForType($.NSPasteboardTypeString) || pb.stringForType($('public.utf8-plain-text'));
-        return s ? s.js : '';
+        var pb = $.NSPasteboard.generalPasteboard;
+        var s = pb.stringForType($.NSPasteboardTypeString) || pb.stringForType('public.utf8-plain-text');
+        return s ? ObjC.unwrap(s) : '';
     }
     var env = $.NSProcessInfo.processInfo.environment;
     var clipEnv = env.objectForKey('LLM_BURST_CLIPBOARD');
-    var clipboardText = clipEnv ? clipEnv.js : readClipboard();
+    var clipboardText = clipEnv ? ObjC.unwrap(clipEnv) : readClipboard();
 
     // Backward/forward compatible control state constants
     var StateOn = (typeof $.NSControlStateValueOn !== 'undefined') ? $.NSControlStateValueOn : $.NSOnState;
     var StateOff = (typeof $.NSControlStateValueOff !== 'undefined') ? $.NSControlStateValueOff : $.NSOffState;
 
-    // Create alert
-    var alert = $.NSAlert.alloc.init();
-    alert.setMessageText('Start LLM Burst');
-    alert.setInformativeText('Please confirm your prompt from clipboard:\n\nTip: Press ⌘↩ to submit');
+    // Create alert (use property access for alloc and init in JXA)
+    var alert = $.NSAlert.alloc.init;
+    alert.messageText = 'Start LLM Burst';
+    alert.informativeText = 'Please confirm your prompt from clipboard:\n\nTip: Press ⌘↩ to submit';
     alert.addButtonWithTitle('OK');
     alert.addButtonWithTitle('Cancel');
     // Make Cmd+Return trigger OK even when focus is in the text view
@@ -78,39 +91,45 @@ def _run_jxa_prompt(clipboard_text: str = "") -> Dict[str, Any] | None:
     var containerView = $.NSView.alloc.initWithFrame($.NSMakeRect(0, 0, 500, 250));
 
     var scrollView = $.NSScrollView.alloc.initWithFrame($.NSMakeRect(0, 40, 500, 210));
-    scrollView.setHasVerticalScroller(true);
-    scrollView.setHasHorizontalScroller(false);
-    scrollView.setBorderType($.NSBezelBorder);
+    scrollView.hasVerticalScroller = true;
+    scrollView.hasHorizontalScroller = false;
+    scrollView.borderType = $.NSBezelBorder;
 
     var textView = $.NSTextView.alloc.initWithFrame($.NSMakeRect(0, 0, 500, 210));
-    textView.setString($(clipboardText));
-    textView.setEditable(true);
-    textView.setSelectable(true);
-    textView.setRichText(false);
-    textView.setFont($.NSFont.systemFontOfSize(13));
-    scrollView.setDocumentView(textView);
+    textView.string = clipboardText;
+    textView.editable = true;
+    textView.selectable = true;
+    textView.richText = false;
+    textView.font = $.NSFont.systemFontOfSize(13);
+    scrollView.documentView = textView;
 
     // Checkboxes along the bottom
     var researchCheck = $.NSButton.alloc.initWithFrame($.NSMakeRect(0, 14, 200, 18));
     researchCheck.setButtonType($.NSSwitchButton);
-    researchCheck.setTitle('Research mode');
-    researchCheck.setState(StateOff);
+    researchCheck.title = 'Research mode';
+    researchCheck.state = StateOff;
 
     var incognitoCheck = $.NSButton.alloc.initWithFrame($.NSMakeRect(220, 14, 200, 18));
     incognitoCheck.setButtonType($.NSSwitchButton);
-    incognitoCheck.setTitle('Incognito mode');
-    incognitoCheck.setState(StateOff);
+    incognitoCheck.title = 'Incognito mode';
+    incognitoCheck.state = StateOff;
 
     containerView.addSubview(scrollView);
     containerView.addSubview(researchCheck);
     containerView.addSubview(incognitoCheck);
 
     alert.setAccessoryView(containerView);
-    alert.window.setInitialFirstResponder(textView);
+    try {
+        // Some macOS versions require a window before setting first responder
+        alert.layout; // invoke 0-arg method via property access
+        alert.window.setInitialFirstResponder(textView);
+    } catch (e) {}
 
-    // Show dialog
-    var response = alert.runModal();
-    if (response === $.NSAlertSecondButtonReturn) { $.exit(1); }
+    // Show dialog (0-arg methods are properties in JXA)
+    var response = alert.runModal;
+    // Accept both modern and legacy "OK" codes; treat others as cancel
+    var okCode = (typeof $.NSModalResponseOK !== 'undefined') ? $.NSModalResponseOK : $.NSAlertFirstButtonReturn;
+    if (response !== okCode) { $.exit(1); }
 
     // Return JSON result as the script's value
     var result = {
