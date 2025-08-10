@@ -261,6 +261,13 @@ class StateManager:
         """Return the session for *task_name* or ``None`` if absent."""
         return self._sessions.get(task_name)
 
+    def get_by_target_id(self, target_id: str) -> Optional[LiveSession]:
+        """Return the session matching *target_id* or None if absent."""
+        for session in self._sessions.values():
+            if session.target_id == target_id:
+                return session
+        return None
+
     def remove(self, task_name: str) -> None:
         """Delete a session and persist the change."""
         if task_name in self._sessions:
@@ -319,7 +326,7 @@ class StateManager:
         """Return a shallow copy of all known tab groups."""
         return dict(self._groups)
 
-    def assign_session_to_group(self, task_name: str, group_id: int) -> None:
+    def assign_session_to_group(self, task_name: str, group_id: int | None) -> None:
         """Attach an existing session to *group_id* and persist."""
         session = self._sessions.get(task_name)
         if session is None:

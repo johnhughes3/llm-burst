@@ -29,6 +29,7 @@ from .constants import (
     AUTO_NAMING_TIMEOUT,
 )
 from .state import LiveSession, StateManager
+from .browser import set_window_title
 
 _LOG = logging.getLogger(__name__)
 
@@ -433,11 +434,3 @@ async def suggest_session_name(
     except Exception as e:
         _LOG.warning("Name suggestion failed: %s", e)
         return None
-
-
-async def set_window_title(page: Page, title: str) -> None:
-    """Update the browser window/tab title."""
-    try:
-        await page.evaluate(f"document.title = {repr(title)}")
-    except Exception as e:
-        _LOG.debug("Failed to set window title: %s", e)
