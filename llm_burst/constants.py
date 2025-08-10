@@ -17,14 +17,12 @@ import os
 # Absolute path to the root of the project repository.
 PACKAGE_ROOT: Path = Path(__file__).resolve().parent.parent
 
-# Directory that houses executable helper scripts (e.g. the swiftDialog prompt).
-BIN_DIR: Path = PACKAGE_ROOT / "bin"
+# Directory that houses executable helper scripts (removed - now using dialog CLI directly).
+# BIN_DIR: Path = PACKAGE_ROOT / "bin"  # No longer needed
 
-# Full path to the swiftDialog wrapper script created in Stage 1.
-SWIFT_PROMPT_SCRIPT: Path = BIN_DIR / "swift_prompt.sh"
-
-# Full path to the swiftDialog helper script that offers to relaunch Chrome
-SWIFT_CHROME_FIX_SCRIPT: Path = BIN_DIR / "swift_chrome_fix.sh"
+# Scripts removed - now calling swiftDialog CLI directly from Python
+# SWIFT_PROMPT_SCRIPT: Path = BIN_DIR / "swift_prompt.sh"  # Removed
+# SWIFT_CHROME_FIX_SCRIPT: Path = BIN_DIR / "swift_chrome_fix.sh"  # Removed
 
 # --------------------------------------------------------------------------- #
 # User-facing defaults

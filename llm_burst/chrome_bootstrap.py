@@ -35,7 +35,6 @@ from llm_burst.constants import (
     CHROME_PROCESS_NAMES,
     CHROME_REMOTE_PORT,
     PROMPT_CANCEL_EXIT,
-    SWIFT_CHROME_FIX_SCRIPT,
 )
 from llm_burst.chrome_utils import (
     scan_chrome_processes,
