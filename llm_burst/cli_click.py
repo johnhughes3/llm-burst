@@ -324,6 +324,7 @@ def cmd_activate(
 
     # Stdin overrides everything for prompt text
     if stdin:
+        import sys
         prompt_text = sys.stdin.read()
 
     if prompt_text is None or not prompt_text.strip():

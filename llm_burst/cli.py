@@ -38,85 +38,100 @@ def _run_jxa_prompt(clipboard_text: str = "") -> Dict[str, Any] | None:
     """
     jxa_script = '''
     ObjC.import('AppKit');
-    ObjC.import('stdlib');
-    
-    // Activate app to bring dialog to front
-    $.NSApplication.sharedApplication.activateIgnoringOtherApps(true);
-    
-    // Get clipboard text if not provided
-    var clipboardText = arguments[0] || '';
-    if (!clipboardText) {
-        var pb = $.NSPasteboard.generalPasteboard;
-        var clipData = pb.stringForType($.NSPasteboardTypeString) || 
-                       pb.stringForType($('public.utf8-plain-text'));
-        clipboardText = clipData ? clipData.toString() : '';
+    ObjC.import('Foundation');
+
+    // Ensure NSApplication is initialized and frontmost
+    var app = $.NSApplication.sharedApplication();
+    app.setActivationPolicy($.NSApplicationActivationPolicyAccessory);
+    app.activateIgnoringOtherApps(true);
+
+    // Read clipboard text from NSPasteboard by default; allow env override
+    function readClipboard() {
+        var pb = $.NSPasteboard.generalPasteboard();
+        var s = pb.stringForType($.NSPasteboardTypeString) || pb.stringForType($('public.utf8-plain-text'));
+        return s ? s.js : '';
     }
-    
+    var env = $.NSProcessInfo.processInfo.environment;
+    var clipEnv = env.objectForKey('LLM_BURST_CLIPBOARD');
+    var clipboardText = clipEnv ? clipEnv.js : readClipboard();
+
+    // Backward/forward compatible control state constants
+    var StateOn = (typeof $.NSControlStateValueOn !== 'undefined') ? $.NSControlStateValueOn : $.NSOnState;
+    var StateOff = (typeof $.NSControlStateValueOff !== 'undefined') ? $.NSControlStateValueOff : $.NSOffState;
+
     // Create alert
-    var alert = $.NSAlert.alloc.init;
-    alert.messageText = 'Start LLM Burst';
-    alert.informativeText = 'Please confirm your prompt from clipboard:\\n\\nKeyboard shortcuts: Press ⌘↩ (Cmd+Return) to submit';
+    var alert = $.NSAlert.alloc.init();
+    alert.setMessageText('Start LLM Burst');
+    alert.setInformativeText('Please confirm your prompt from clipboard:\n\nTip: Press ⌘↩ to submit');
     alert.addButtonWithTitle('OK');
     alert.addButtonWithTitle('Cancel');
-    
-    // Create text view for multiline input
-    var scrollView = $.NSScrollView.alloc.initWithFrame($.NSMakeRect(0, 0, 450, 200));
-    scrollView.hasVerticalScroller = true;
-    scrollView.hasHorizontalScroller = false;
-    scrollView.borderType = $.NSBezelBorder;
-    
-    var textView = $.NSTextView.alloc.initWithFrame($.NSMakeRect(0, 0, 450, 200));
-    textView.string = clipboardText;
-    textView.editable = true;
-    textView.selectable = true;
-    textView.richText = false;
-    textView.font = $.NSFont.systemFontOfSize(13);
-    
-    scrollView.documentView = textView;
-    
-    // Create checkboxes
-    var containerView = $.NSView.alloc.initWithFrame($.NSMakeRect(0, 0, 450, 250));
-    
-    var researchCheck = $.NSButton.alloc.initWithFrame($.NSMakeRect(0, 210, 200, 18));
+    // Make Cmd+Return trigger OK even when focus is in the text view
+    var okButton = alert.buttons.objectAtIndex(0);
+    if (okButton && okButton.setKeyEquivalent && okButton.setKeyEquivalentModifierMask) {
+        okButton.setKeyEquivalent('\r');
+        if (typeof $.NSEventModifierFlagCommand !== 'undefined') {
+            okButton.setKeyEquivalentModifierMask($.NSEventModifierFlagCommand);
+        }
+    }
+
+    // Accessory view containing a scrollable, editable text view and checkboxes
+    var containerView = $.NSView.alloc.initWithFrame($.NSMakeRect(0, 0, 500, 250));
+
+    var scrollView = $.NSScrollView.alloc.initWithFrame($.NSMakeRect(0, 40, 500, 210));
+    scrollView.setHasVerticalScroller(true);
+    scrollView.setHasHorizontalScroller(false);
+    scrollView.setBorderType($.NSBezelBorder);
+
+    var textView = $.NSTextView.alloc.initWithFrame($.NSMakeRect(0, 0, 500, 210));
+    textView.setString($(clipboardText));
+    textView.setEditable(true);
+    textView.setSelectable(true);
+    textView.setRichText(false);
+    textView.setFont($.NSFont.systemFontOfSize(13));
+    scrollView.setDocumentView(textView);
+
+    // Checkboxes along the bottom
+    var researchCheck = $.NSButton.alloc.initWithFrame($.NSMakeRect(0, 14, 200, 18));
     researchCheck.setButtonType($.NSSwitchButton);
-    researchCheck.title = 'Research mode';
-    researchCheck.state = $.NSOffState;
-    
-    var incognitoCheck = $.NSButton.alloc.initWithFrame($.NSMakeRect(0, 230, 200, 18));
+    researchCheck.setTitle('Research mode');
+    researchCheck.setState(StateOff);
+
+    var incognitoCheck = $.NSButton.alloc.initWithFrame($.NSMakeRect(220, 14, 200, 18));
     incognitoCheck.setButtonType($.NSSwitchButton);
-    incognitoCheck.title = 'Incognito mode';
-    incognitoCheck.state = $.NSOffState;
-    
+    incognitoCheck.setTitle('Incognito mode');
+    incognitoCheck.setState(StateOff);
+
     containerView.addSubview(scrollView);
     containerView.addSubview(researchCheck);
     containerView.addSubview(incognitoCheck);
-    
-    alert.accessoryView = containerView;
-    
+
+    alert.setAccessoryView(containerView);
+    alert.window.setInitialFirstResponder(textView);
+
     // Show dialog
     var response = alert.runModal();
-    
-    if (response === $.NSAlertSecondButtonReturn) {
-        // Cancel button
-        $.exit(1);
-    }
-    
-    // Return JSON result
+    if (response === $.NSAlertSecondButtonReturn) { $.exit(1); }
+
+    // Return JSON result as the script's value
     var result = {
-        "Prompt Text": textView.string.toString(),
-        "Research mode": researchCheck.state === $.NSOnState,
-        "Incognito mode": incognitoCheck.state === $.NSOnState
+        "Prompt Text": ObjC.unwrap(textView.string),
+        "Research mode": (researchCheck.state === StateOn),
+        "Incognito mode": (incognitoCheck.state === StateOn)
     };
-    
-    console.log(JSON.stringify(result));
+    JSON.stringify(result);
     '''
     
     try:
+        env = os.environ.copy()
+        if clipboard_text:
+            env['LLM_BURST_CLIPBOARD'] = clipboard_text
+        
         result = subprocess.run(
-            ["/usr/bin/osascript", "-l", "JavaScript", "-e", jxa_script, "--", clipboard_text],
+            ["/usr/bin/osascript", "-l", "JavaScript", "-e", jxa_script],
             capture_output=True,
             text=True,
-            timeout=300  # 5 minute timeout
+            timeout=300,  # 5 minute timeout
+            env=env
         )
         
         if result.returncode == 0 and result.stdout:
