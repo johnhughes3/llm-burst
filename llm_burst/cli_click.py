@@ -162,6 +162,11 @@ def _provider_from_str(raw: str) -> LLMProvider:
     show_default=True,
     help="Show GUI dialog for missing fields (default: off)",
 )
+@click.option(
+    "--debug",
+    is_flag=True,
+    help="Enable debug logging for troubleshooting",
+)
 def cmd_open(
     provider: Optional[str],
     task_name: Optional[str],
@@ -170,24 +175,49 @@ def cmd_open(
     force_new: bool,
     group_name: Optional[str],
     gui_prompt: bool,
+    debug: bool,
 ) -> None:
     """Open a new LLM window (or re-attach) and optionally send a prompt."""
     import sys
     import traceback
+    import os
+    
+    # Set debug environment variable for child processes
+    if debug:
+        os.environ['LLM_BURST_DEBUG'] = '1'
+        print("DEBUG: Starting cmd_open with:", file=sys.stderr)
+        print(f"  provider={provider}", file=sys.stderr)
+        print(f"  task_name={task_name}", file=sys.stderr)
+        print(f"  prompt_text={prompt_text[:50] if prompt_text else None}", file=sys.stderr)
+        print(f"  gui_prompt={gui_prompt}", file=sys.stderr)
+        print(f"  stdin={stdin}", file=sys.stderr)
     
     try:
+        if debug:
+            print("DEBUG: Pruning stale sessions...", file=sys.stderr)
         prune_stale_sessions_sync()
         from llm_burst.chrome_bootstrap import ensure_remote_debugging  # Added
 
+        if debug:
+            print("DEBUG: Ensuring Chrome remote debugging...", file=sys.stderr)
         ensure_remote_debugging()  # Added
 
         # Merge missing values from swiftDialog prompt when any field absent
-        if (
+        need_dialog = (
             provider is None
             or (task_name is None and not force_new)
             or (prompt_text is None and not stdin)
-        ):
-            user_data = prompt_user(gui=gui_prompt)
+        )
+        
+        if debug:
+            print(f"DEBUG: Need dialog? {need_dialog}", file=sys.stderr)
+            
+        if need_dialog:
+            if debug:
+                print(f"DEBUG: Calling prompt_user(gui={gui_prompt})...", file=sys.stderr)
+            user_data = prompt_user(gui=gui_prompt, debug=debug)
+            if debug:
+                print(f"DEBUG: prompt_user returned: {user_data}", file=sys.stderr)
             provider = provider or user_data.get("provider")
             task_name = task_name or user_data.get("task_name") or user_data.get("task")
             prompt_text = (

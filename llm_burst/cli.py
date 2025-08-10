@@ -30,7 +30,7 @@ from .constants import (
 from .browser import BrowserAdapter, SessionHandle
 
 
-def _run_jxa_prompt(clipboard_text: str = "") -> Dict[str, Any] | None:
+def _run_jxa_prompt(clipboard_text: str = "", debug: bool = False) -> Dict[str, Any] | None:
     """
     Run JXA (JavaScript for Automation) dialog using native macOS AppKit.
     
@@ -146,10 +146,17 @@ def _run_jxa_prompt(clipboard_text: str = "") -> Dict[str, Any] | None:
     JSON.stringify(result);
     '''
     
+    # Check debug mode
+    if debug or os.getenv("LLM_BURST_DEBUG") == "1":
+        debug = True
+    
     try:
         env = os.environ.copy()
         if clipboard_text:
             env['LLM_BURST_CLIPBOARD'] = clipboard_text
+        
+        if debug:
+            print(f"DEBUG: Running osascript with clipboard: {clipboard_text[:50] if clipboard_text else 'None'}...", file=sys.stderr)
         
         result = subprocess.run(
             ["/usr/bin/osascript", "-l", "JavaScript", "-e", jxa_script],
@@ -159,22 +166,35 @@ def _run_jxa_prompt(clipboard_text: str = "") -> Dict[str, Any] | None:
             env=env
         )
         
+        if debug:
+            print(f"DEBUG: osascript returned code: {result.returncode}", file=sys.stderr)
+            print(f"DEBUG: stdout: {result.stdout[:100] if result.stdout else 'None'}", file=sys.stderr)
+            if result.stderr:
+                print(f"DEBUG: stderr: {result.stderr[:200]}", file=sys.stderr)
+        
         if result.returncode == 0 and result.stdout:
-            return json.loads(result.stdout.strip())
+            parsed = json.loads(result.stdout.strip())
+            if debug:
+                print(f"DEBUG: Parsed JSON: {parsed}", file=sys.stderr)
+            return parsed
         elif result.returncode == 1:
             # User cancelled - return special marker
+            if debug:
+                print("DEBUG: Return code 1 - user cancelled", file=sys.stderr)
             return {"__cancelled__": True}
         else:
             # Some other error
             if result.stderr:
                 print(f"JXA dialog error: {result.stderr}", file=sys.stderr)
+            if debug:
+                print(f"DEBUG: Unexpected return code: {result.returncode}", file=sys.stderr)
             return None
     except (subprocess.TimeoutExpired, json.JSONDecodeError, Exception) as e:
         print(f"JXA dialog failed: {e}", file=sys.stderr)
         return None
 
 
-def prompt_user(gui: bool | None = None) -> Dict[str, Any]:
+def prompt_user(gui: bool | None = None, debug: bool = False) -> Dict[str, Any]:
     """
     Launch a native macOS prompt and return the user's input.
 
@@ -193,6 +213,11 @@ def prompt_user(gui: bool | None = None) -> Dict[str, Any]:
     SystemExit
         If the user cancels the dialog.
     """
+    # Check for debug mode
+    if debug or os.getenv("LLM_BURST_DEBUG") == "1":
+        debug = True
+        print(f"DEBUG: prompt_user called with gui={gui}", file=sys.stderr)
+    
     # Decide whether to use GUI prompt
     if gui is None:
         # Default to NO dialog unless explicitly opted-in via env
@@ -201,36 +226,62 @@ def prompt_user(gui: bool | None = None) -> Dict[str, Any]:
             "true",
             "yes",
         }
+        if debug:
+            print(f"DEBUG: gui is None, use_dialog={use_dialog} (from env)", file=sys.stderr)
     else:
         use_dialog = bool(gui)
+        if debug:
+            print(f"DEBUG: gui={gui}, use_dialog={use_dialog}", file=sys.stderr)
 
     # Honour explicit opt-out: skip dialog entirely when requested
     no_dialog = os.getenv("LLM_BURST_NO_DIALOG", "").lower() in {"1", "true", "yes"}
+    if debug:
+        print(f"DEBUG: no_dialog={no_dialog}, use_dialog={use_dialog}", file=sys.stderr)
+        
     if no_dialog or not use_dialog:
+        if debug:
+            print("DEBUG: Skipping dialog, using clipboard", file=sys.stderr)
         try:
             clipboard_text: str = pyperclip.paste()
-        except Exception:
+        except Exception as e:
             clipboard_text = ""
+            if debug:
+                print(f"DEBUG: Failed to get clipboard: {e}", file=sys.stderr)
         if clipboard_text:
+            if debug:
+                print(f"DEBUG: Returning clipboard text: {clipboard_text[:50]}...", file=sys.stderr)
             return {
                 "Prompt Text": clipboard_text,
                 "Research mode": False,
                 "Incognito mode": False,
             }
         # Nothing sensible to return – behave like cancel/missing dialog
+        if debug:
+            print("DEBUG: No clipboard content, returning empty", file=sys.stderr)
         return {}
 
     # Grab clipboard to pre-seed the dialog
     try:
         clipboard_text: str = pyperclip.paste()
-    except Exception:
+        if debug:
+            print(f"DEBUG: Clipboard content: {clipboard_text[:50] if clipboard_text else 'None'}...", file=sys.stderr)
+    except Exception as e:
         clipboard_text = ""
+        if debug:
+            print(f"DEBUG: Failed to get clipboard: {e}", file=sys.stderr)
 
     # Try native JXA dialog first (most reliable on macOS)
-    jxa_result = _run_jxa_prompt(clipboard_text)
+    if debug:
+        print(f"DEBUG: Running JXA dialog...", file=sys.stderr)
+    jxa_result = _run_jxa_prompt(clipboard_text, debug=debug)
+    if debug:
+        print(f"DEBUG: JXA returned: {jxa_result}", file=sys.stderr)
+    
     if jxa_result is not None:
         # Check if user cancelled
         if jxa_result.get("__cancelled__"):
+            if debug:
+                print(f"DEBUG: User cancelled dialog, exiting with code {PROMPT_CANCEL_EXIT}", file=sys.stderr)
             sys.exit(PROMPT_CANCEL_EXIT)
         return jxa_result
     
