@@ -256,29 +256,74 @@ async def _async_send_prompt(
     from .browser import BrowserAdapter
     from llm_burst.providers import get_injector, InjectOptions
 
-    # Resolve provider + page
+    # Determine provider and target
+    page = None
+    provider: LLMProvider | None = None
+    target_id: str | None = None
+
     if isinstance(handle_or_task, SessionHandle):
         provider = handle_or_task.live.provider
-        page = handle_or_task.page
+        target_id = handle_or_task.live.target_id
+        try:
+            if not handle_or_task.page.is_closed():
+                page = handle_or_task.page
+        except Exception:
+            page = None
     else:
         task_name = handle_or_task
         state = StateManager()
         session = state.get(task_name)
         if session is None:
             raise RuntimeError(f"No live session found for task '{task_name}'")
+        provider = session.provider
+        target_id = session.target_id
 
+    # Ensure we have a live Page; rehydrate once if needed
+    if page is None:
+        if target_id is None or provider is None:
+            raise RuntimeError("Missing provider/target for prompt injection")
         async with BrowserAdapter() as adapter:
-            page = await adapter._find_page_for_target(session.target_id)
+            page = await adapter._find_page_for_target(target_id)
             if page is None:
-                raise RuntimeError(f"Could not locate page for task '{task_name}'")
-            provider = session.provider
+                raise RuntimeError(f"Could not locate page for target '{target_id}'")
+            opts = InjectOptions(
+                follow_up=follow_up,
+                research=research,
+                incognito=incognito,
+            )
+            injector = get_injector(provider)
+            await injector(page, prompt, opts)
+            return
 
+    # Verify page still alive just before use
+    try:
+        closed = page.is_closed()
+    except Exception:
+        closed = True
+    if closed:
+        # One rehydrate attempt
+        if target_id is None or provider is None:
+            raise RuntimeError("Page closed and target unknown for rehydration")
+        async with BrowserAdapter() as adapter:
+            new_page = await adapter._find_page_for_target(target_id)
+            if new_page is None:
+                raise RuntimeError(f"Could not locate page for target '{target_id}' after rehydration")
+            opts = InjectOptions(
+                follow_up=follow_up,
+                research=research,
+                incognito=incognito,
+            )
+            injector = get_injector(provider)
+            await injector(new_page, prompt, opts)
+            return
+
+    # Normal path
     opts = InjectOptions(
         follow_up=follow_up,
         research=research,
         incognito=incognito,
     )
-    injector = get_injector(provider)
+    injector = get_injector(provider)  # type: ignore[arg-type]
     await injector(page, prompt, opts)
 
 
@@ -381,16 +426,44 @@ async def _async_close_window(task_name: str) -> bool:
         return await adapter.close_window(task_name)
 
 
+async def _async_auto_name_session(handle: SessionHandle) -> Optional[str]:
+    """Rehydrate page if needed and run auto_namer within a live context."""
+    from .auto_namer import auto_name_session
+    from .browser import BrowserAdapter
+    from .state import StateManager
+
+    page = None
+    try:
+        if not handle.page.is_closed():
+            page = handle.page
+    except Exception:
+        page = None
+
+    if page is None:
+        async with BrowserAdapter() as adapter:
+            page = await adapter._find_page_for_target(handle.live.target_id)
+            if page is None:
+                return None
+            # Refresh live session metadata
+            state = StateManager()
+            sess = state.get(handle.live.task_name)
+            if sess:
+                handle.live = sess
+            return await auto_name_session(handle.live, page)
+
+    # Verify still alive
+    try:
+        if page.is_closed():
+            return await _async_auto_name_session(handle)
+    except Exception:
+        return await _async_auto_name_session(handle)
+
+    return await auto_name_session(handle.live, page)
+
+
 def auto_name_sync(handle: SessionHandle) -> Optional[str]:
     """
     Invoke the asynchronous auto-naming routine for *handle* and wait for
-    completion.
-
-    Returns
-    -------
-    str | None
-        The new task name when a rename occurred, otherwise ``None``.
+    completion. Handles closed page contexts by rehydrating.
     """
-    from .auto_namer import auto_name_session
-
-    return asyncio.run(auto_name_session(handle.live, handle.page))
+    return asyncio.run(_async_auto_name_session(handle))

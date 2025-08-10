@@ -214,7 +214,7 @@ SUBMIT_JS = r"""
         // Dispatch multiple events to ensure the UI registers the change
         const inputEvent = new Event('input', { bubbles: true, cancelable: true });
         const changeEvent = new Event('change', { bubbles: true, cancelable: true });
-        const keyupEvent = new KeyboardEvent('keyup', { bubbles: true, cancelable: true, key: 'a' });
+        const keyupEvent = new KeyboardEvent('keyup', { bubbles: true, cancelable: true, key: ' ' });
         
         editorElement.dispatchEvent(inputEvent);
         editorElement.dispatchEvent(changeEvent);

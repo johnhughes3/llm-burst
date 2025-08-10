@@ -7,7 +7,7 @@
 | **Primary browser**  | **Google Chrome** (stable `tab.id`, tab‑group APIs).  Safari adapter will be added later.                                                                                                                                                  |
 | **UI layer**         | **swiftDialog** CLI (immediate win) → optional SwiftUI sheet later.                                                                                                                                                                        |
 | **Automation API**   | **Playwright for Python** driving Chrome with a non‑headless window.                                                                                                                                                                       |
-| **Layout / tiling**  | Keep Rectangle hot‑keys.  `llm‑burst arrange` simulates the proper keystrokes depending on N windows (2, 3, 4).                                                                                                                            |
+| **Layout / tiling**  | Use Chrome DevTools Protocol to set window bounds. `llm‑burst arrange` positions windows deterministically depending on N windows (2, 3, 4).                                                        |
 | **State store**      | `~/Library/Application Support/llm‑burst/state.json` (one JSON file, no DB).                                                                                                                                                               |
 | **Testing**          | Pytest + Playwright screenshots; every new feature ships with at least one failing test first (red‑green‑refactor).                                                                                                                        |
 | **Delivery cadence** | 6 milestones, each < 1½ days.  The tool is always in a usable state.                                                                                                                                                                       |
@@ -54,7 +54,7 @@ llm-burst/
 | **2** | **Chrome adapter** in AppleScript (temporary) + JSON now records `{browser:"chrome", windowId, tabId}`.  KM macros still orchestrate.                                                                                                                                                                                                                                                                                                                               | `browser.py` (skeleton), `state.py`              | M    |
 | **3** | **llm‑burst CLI (Python + Playwright)** reproduces Activate & Follow‑up end‑to‑end.  KM macros slim down to `do shell script "llm-burst activate"` etc.                                                                                                                                                                                                                                                                                                             | `__main__.py`, `cli.py`, `browser.py`, `sites/*` | L    |
 | **4** | **Auto‑naming** via Gemini Flash.  Adds `title` to JSON and pregenerates default in swiftDialog.                                                                                                                                                                                                                                                                                                                                                                    | `autoname.py`, modify `swift_prompt.sh`          | S    |
-| **5** | **Group / UnGroup** command:<br>• If 4 free windows ⟶ group into one Chrome Tab Group named “📁 Archived Session” and remove them from Rectangle grid.<br>• If the front window is a Tab Group created by the tool ⟶ split back into 4 windows; any tabs **between** known LLM tabs ride along with their left neighbour.<br>Includes Playwright tests that validate: “after toggle‑group, `state.json` window ids are updated & screenshot patterns match sample.” | `layout.py`, tests                               | M    |
+| **5** | **Group / UnGroup** command:<br>• If 4 free windows ⟶ group into one Chrome Tab Group named “📁 Archived Session”.<br>• If the front window is a Tab Group created by the tool ⟶ split back into 4 windows; any tabs **between** known LLM tabs ride along with their left neighbour.<br>Includes Playwright tests that validate: “after toggle‑group, `state.json` window ids are updated.” | `layout.py`, tests                               | M    |
 
 *After Stage 5, old AppleScript is deleted.  SafariAdapter becomes a standing backlog item.*
 
@@ -116,13 +116,11 @@ def selectors_up_to_date(page) -> bool:
 ### 3.4 `layout.py`
 
 ```python
-def arrange(session):  # rectangle tiling
-    n = count_alive_windows(...)
-    trigger_rectangle_hotkeys(n)
+def arrange(max_windows=4):  # CDP tiling
+    arrange_cdp_sync(max_windows)
 
 def group(session):
-    # Uses CDP via Playwright: chrome.tabs.group(...)
-    move_extra_tabs_left_of_each_llm_tab(...)
+    # Uses CDP via Playwright: chrome.tabGroups.*
 
 def ungroup(session):
     # Reverse of group(); respects manual extra tabs
@@ -140,7 +138,7 @@ def ungroup(session):
 | ---------------------------- | -------------------------------------------------------------------------------------------------------------- | ------------------------------------------ |
 | `tests/test_activate.py`     | “activate” opens 4 Chrome tabs, selectors all present, screenshots match `assets/activate_ok.png` at p90 SSIM. | Use Playwright screenshot + `pytest-ssim`. |
 | `tests/test_followup.py`     | After follow‑up, each tab input area is empty and waiting for reply.                                           | DOM assertions.                            |
-| `tests/test_arrange.py`      | On a 1440 × 900 virtual screen, Rectangle grid leaves no overlap.                                              | Use `pyobjc` to read window frames.        |
+| `tests/test_arrange.py`      | Verifies arrange delegates to CDP and respects options.                                                       | Mocks CDP helper; optional pyobjc for manual checks. |
 | `tests/test_toggle_group.py` | Group then ungroup returns to original `state.json`, window ids changed, tabs count preserved.                 | JSON diff check.                           |
 
 Each new PR **must**:

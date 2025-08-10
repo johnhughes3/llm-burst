@@ -16,7 +16,7 @@ The llm-burst implementation has successfully achieved most of the requirements 
 All required commands are implemented:
 - `activate` - Opens 4 LLM windows and sends initial prompt ✅
 - `follow-up` - Sends follow-up messages to existing sessions ✅
-- `arrange` - Tiles windows using Rectangle.app ✅
+- `arrange` - Arranges windows using CDP ✅
 - `toggle-group` - Groups/ungroups Chrome tabs ✅
 - `open` - Opens individual LLM window ✅
 - `stop` - Closes sessions ✅
@@ -53,7 +53,7 @@ All required commands are implemented:
 ### Advanced Features
 - **Auto-naming**: Using Gemini API to generate meaningful task names ✅
 - **Tab Groups**: Chrome tab group creation and management ✅
-- **Rectangle Integration**: Window tiling with fallback to CDP positioning ✅
+- **CDP Arrangement**: Window positioning via Chrome DevTools Protocol ✅
 - **swiftDialog Integration**: User prompts with pre-filled clipboard text ✅
 - **Chrome Bootstrap**: Automatic Chrome relaunch with debugging port ✅
 - **Multi-provider Sessions**: Tracking sessions across all 4 providers ✅

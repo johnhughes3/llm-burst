@@ -5,7 +5,7 @@ This document assesses the current implementation against the original Keyboard 
 ## Coverage vs. Specs
 
 - Activate (⌃⌥R) → `llm-burst activate`
-  - Status: Implemented end-to-end using Playwright and Chrome CDP. Opens provider windows, injects JS, and can auto‑name. Uses Rectangle for layout when multiple windows and not in research mode.
+  - Status: Implemented end-to-end using Playwright and Chrome CDP. Opens provider windows, injects JS, and can auto‑name. Uses CDP-only for optional arrangement when not in research mode.
   - Notes: Auto‑naming currently renames internal per‑tab identifiers, which breaks follow‑up and grouping (see G1).
 
 - Follow‑up (⌃⌥F) → `llm-burst follow-up`
@@ -13,8 +13,8 @@ This document assesses the current implementation against the original Keyboard 
   - Notes: Depends on name-based lookups; breaks after auto‑naming that changes per‑tab names (see G1).
 
 - Arrange (⌃⌥W) → `llm-burst arrange`
-  - Status: Implemented via Rectangle CLI or AppleScript keystroke fallback; CDP-based fallback exists (`layout_manual.py`).
-  - Notes: Looks good; minor hardening suggestions in R6.
+  - Status: Implemented via CDP window bounds (`layout_manual.py`). No external window manager required.
+  - Notes: Prefer CDP for portability; no macOS permissions needed.
 
 - Group/UnGroup (⌃⌥G) → `llm-burst toggle-group`
   - Status: Partial. Grouping is implemented via a tab-groups API; ungroup behavior is not implemented (placeholder `_ungroup_` name is passed but not handled).
@@ -24,9 +24,9 @@ This document assesses the current implementation against the original Keyboard 
   - Status: Implemented (idempotent), with dialog/console prompt.
   - Notes: Helper scripts referenced but not present in repo (see G5).
 
-- swiftDialog prompt wrapper
-  - Status: `prompt_user()` expects `bin/swift_prompt.sh`; integrates clipboard default; console fallbacks exist elsewhere.
-  - Notes: Script file missing (see G5).
+- swiftDialog prompt
+  - Status: `prompt_user()` calls the `dialog` CLI directly with clipboard fallback; console fallbacks exist.
+  - Notes: Suppresses benign macOS LSOpen (-50) warnings.
 
 - Sites JavaScript (providers)
   - Status: Injector scaffolding present; assumes `llm_burst.sites.*` modules provide `SUBMIT_JS`/`FOLLOWUP_JS` with defined entrypoints.
@@ -148,8 +148,10 @@ R4. Clipboard fallbacks
 R5. Tests
 - Add/restore tests outlined in `docs/specs.md`, at least as smoke tests for this repo: activation selector presence, follow-up routing by targetId, group/ungroup state round-trips, and auto-namer suggestion path.
 
-R6. Rectangle detection and timing
-- Detect `rectangle-cli` reliably and add small adaptive waits per action to reduce race conditions on slower machines.
+R6. CDP arrangement robustness
+- Ensure macOS NSScreen geometry conversion to top-left origin is correct.
+- Add small inter-move delays to reduce race conditions on slower machines.
+- Mock CDP in tests to avoid platform dependencies.
 
 ## Proposed Implementation Sequence
 

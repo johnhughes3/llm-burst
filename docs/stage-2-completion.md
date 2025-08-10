@@ -35,7 +35,7 @@ Stage 2 implementation successfully created a Chrome adapter with Playwright CDP
 - Connects to existing Chrome or launches new instance
 - Uses CDP `Browser.createTarget` for new windows
 - Tracks both CDP targetId and Chrome windowId
-- Enables future Rectangle.app integration
+- Provides windowId for CDP-based arrangement
 
 ### Robust Session Management
 - Persists window metadata across invocations
@@ -85,7 +85,7 @@ Stage 2 provides the foundation for:
 - **Stage 3**: Click CLI interface to orchestrate multiple providers
 - **Stage 4**: Auto-naming with Gemini API
 - **Stage 5**: Chrome tab grouping
-- **Stage 6**: Rectangle.app window positioning
+- **Stage 6**: CDP window arrangement
 
 ## Technical Decisions
 

@@ -1,137 +1,102 @@
 """Claude site automation JavaScript selectors and functions."""
 
 SUBMIT_JS = """
-window.automateClaudeInteraction = function(messageText, enableResearch) {
-  return new Promise((resolve, reject) => {
-    try {
-        // Check for login page
-        if (document.querySelector('input[type="email"]') || document.title.toLowerCase().includes('sign in')) {
-            return reject('Login page detected. Please log in to Claude first.');
-        }
+(function() {
+window.automateClaudeInteraction = function(enableResearchStr) {
+  const enableResearch = enableResearchStr === 'Yes';
+  console.log('Starting Claude automation' + (enableResearch ? ' with Research enabled' : ''));
+  
+  let automationChain = Promise.resolve();
 
-        const editorElement = document.querySelector('.ProseMirror');
-        if (!editorElement) {
-          console.error('Claude editor element not found');
-          return reject('Editor element not found');
-        }
-        editorElement.focus();
-        editorElement.innerHTML = ''; // Clear
+  // Check for login page first
+  automationChain = automationChain.then(() => {
+    return new Promise((resolve, reject) => {
+      if (document.querySelector('input[type="email"]') ||
+          document.querySelector('form[action*="login"]') ||
+          document.title.toLowerCase().includes('log in') ||
+          document.title.toLowerCase().includes('sign up')) {
+        reject('Login page detected. Please log in to Claude first.');
+      } else {
+        resolve();
+      }
+    });
+  });
 
-        const lines = messageText.split('\n');
-        lines.forEach(line => {
-          const p = document.createElement('p');
-          p.textContent = line || '\u00A0';
-          editorElement.appendChild(p);
-        });
-
-        const inputEvent = new Event('input', { bubbles: true });
-        editorElement.dispatchEvent(inputEvent);
-
-        setTimeout(() => {
-          const sendButton = document.querySelector('button[data-testid="send-button"]');
-          if (!sendButton) {
-            // Fallback for different versions
-            const alternativeButton = document.querySelector('button[aria-label="Send message"]');
-            if(!alternativeButton) {
-                return reject('Send button not found');
-            }
-            if (alternativeButton.disabled) {
-                return reject('Send button is disabled');
-            }
-            alternativeButton.click();
-            resolve();
+  // Step 1: Enable research mode if requested
+  if (enableResearch) {
+    automationChain = automationChain.then(() => {
+      return new Promise((resolve) => {
+        try {
+          const allButtons = Array.from(document.querySelectorAll('button'));
+          const researchButton = allButtons.find(b => (b.textContent || '').includes('Research'));
+          if (researchButton) {
+            researchButton.click();
+            setTimeout(resolve, 500);
             return;
           }
-          if (sendButton.disabled) {
-            return reject('Send button is disabled');
+          const betaTags = Array.from(document.querySelectorAll('.uppercase'));
+          const parentBtn = (betaTags.find(t => (t.textContent || '').includes('beta')) || {}).closest?.('button');
+          if (parentBtn) {
+            parentBtn.click();
+            setTimeout(resolve, 500);
+            return;
           }
-          sendButton.click();
-          resolve();
-        }, 500);
-    } catch (error) {
-        console.error(`Error in automateClaudeInteraction: ${error}`);
-        reject(`Error adding text or sending: ${error}`);
-    }
-  });
-}
-"""
+        } catch (e) {
+          console.log('Research toggle failed, continuing:', e);
+        }
+        resolve();
+      });
+    });
+  }
 
-FOLLOWUP_JS = r"""
-window.claudeFollowUpMessage = function(messageText) {
-  return new Promise((resolve, reject) => {
-    try {
-        // Find the ProseMirror element
-        const editorElement = document.querySelector('.ProseMirror');
-        if (!editorElement) {
-          console.error('Claude editor element not found');
+  // Step 2: Focus the input area (then let llm-burst handle the paste)
+  automationChain = automationChain.then(() => {
+    return new Promise((resolve, reject) => {
+      try {
+        const editor = document.querySelector('.ProseMirror');
+        if (!editor) {
           reject('Editor element not found');
           return;
         }
-        editorElement.focus();
-        editorElement.innerHTML = ''; // Clear
-        // Split text by line breaks and create proper paragraph elements
-        const lines = messageText.split('\n');
-        lines.forEach(line => {
-          const p = document.createElement('p');
-          p.textContent = line || '\u00A0'; // Use nbsp for empty lines
-          editorElement.appendChild(p);
-        });
-        console.log('Follow-up text added as individual paragraphs');
-        // Dispatch input event
-        const inputEvent = new Event('input', { bubbles: true });
-        editorElement.dispatchEvent(inputEvent);
-        console.log('Input event dispatched');
-        // Wait for send button (existing logic is fine)
-        setTimeout(() => {
-          const sendButton = document.querySelector('button[aria-label="Send message"]');
-          if (!sendButton) {
-            reject('Send button not found');
-            return;
-          }
-          if (sendButton.disabled) {
-             // Adding a retry mechanism similar to Gemini's for robustness
-             console.log('Claude send button disabled, retrying...');
-             setTimeout(() => {
-                 if (sendButton.disabled) {
-                     reject('Send button still disabled after retry');
-                     return;
-                 }
-                 sendButton.click();
-                 console.log('Follow-up message sent successfully after retry');
-                 
-                 // Scroll to bottom after 1 second
-                 setTimeout(() => {
-                   window.scrollTo({
-                     top: document.documentElement.scrollHeight,
-                     behavior: 'smooth'
-                   });
-                   console.log('Scrolled to bottom of page');
-                 }, 1000);
-                 
-                 resolve();
-             }, 500); // Wait another 500ms
-             return;
-          }
-          sendButton.click();
-          console.log('Follow-up message sent successfully');
-          
-          // Scroll to bottom after 1 second
-          setTimeout(() => {
-            window.scrollTo({
-              top: document.documentElement.scrollHeight,
-              behavior: 'smooth'
-            });
-            console.log('Scrolled to bottom of page');
-          }, 1000);
-          
-          resolve();
-        }, 500); // Initial timeout
+        editor.focus();
+        editor.innerHTML = '';
+        resolve();
+      } catch (err) {
+        reject(`Error focusing input area: ${err}`);
+      }
+    });
+  }).catch(error => {
+    console.error('Automation failed:', error);
+    return Promise.reject(error);
+  });
+
+  return automationChain;
+}
+})();
+"""
+
+FOLLOWUP_JS = r"""
+(function() {
+window.claudeFollowUpMessage = function() {
+  return new Promise((resolve, reject) => {
+    try {
+      const editorElement = document.querySelector('.ProseMirror');
+      if (!editorElement) {
+        reject('Editor element not found');
+        return;
+      }
+      editorElement.focus();
+      editorElement.innerHTML = '';
+      try {
+        window.scrollTo({ top: document.documentElement.scrollHeight, behavior: 'smooth' });
+      } catch (e) { /* no-op */ }
+      resolve();
     } catch (error) {
-        console.error(`Error in claudeFollowUpMessage: ${error}`);
-        reject(`Error adding text or sending: ${error}`);
+      reject(`Error preparing for follow-up: ${error}`);
     }
   });
 }
+})();
 """
 
 

@@ -136,7 +136,7 @@ Optional environment variables:
 ## Next Steps
 Stage 4 provides the foundation for:
 - **Stage 5**: Chrome tab grouping for organization
-- **Stage 6**: Rectangle.app window positioning
+- **Stage 6**: CDP window arrangement
 
 ## Files Modified/Created
 - Created: `llm_burst/auto_namer.py` (218 lines)

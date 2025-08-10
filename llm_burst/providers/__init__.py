@@ -12,8 +12,10 @@ for both *activate* and *follow-up* commands.
 from __future__ import annotations
 import json
 from dataclasses import dataclass
+import asyncio
+import sys
 
-from playwright.async_api import Page
+from playwright.async_api import Page, TimeoutError as PlaywrightTimeoutError
 
 from llm_burst.constants import LLMProvider
 from llm_burst.sites import chatgpt, claude, gemini, grok
@@ -43,37 +45,56 @@ def _build_injector(
     followup_js: str | None,
     submit_tpl: str,
     follow_tpl: str | None,
+    use_paste: bool = False,
+    wait_for_selector: str | None = None,
 ):
     """
     Build a coroutine that injects SUBMIT or FOLLOW-UP JavaScript into the page
-    and invokes the correct entry-point.
+    and invokes the correct entry-point, optionally using a paste-and-enter
+    strategy after JS preparation.
 
     Placeholders accepted in the call templates:
         {prompt}     – JSON-encoded prompt text
-        {research}   – \"'Yes'\" / \"'No'\"
-        {incognito}  – \"'Yes'\" / \"'No'\"
+        {research}   – "'Yes'" / "'No'"
+        {incognito}  – "'Yes'" / "'No'"
     """
 
     async def _inject(page: Page, prompt: str, opts: "InjectOptions") -> None:  # noqa: D401
+        # Wait for a critical selector if provided (robust readiness)
+        if wait_for_selector:
+            try:
+                await page.wait_for_selector(wait_for_selector, timeout=15000)
+            except PlaywrightTimeoutError:
+                raise RuntimeError(f"Timeout waiting for selector: {wait_for_selector}")
+
         # Select script & template
         if opts.follow_up and followup_js and follow_tpl:
             js_src, call_tpl = followup_js, follow_tpl
         else:
             js_src, call_tpl = submit_js, submit_tpl
 
-        # Load helper functions (wrapped in IIFE to prevent conflicts)
-        await page.evaluate(f"(function() {{ {js_src} }})()")
+        if use_paste:
+            await _paste_and_enter(page, prompt, opts, js_src, call_tpl)
+        else:
+            await _inject_js(page, prompt, opts, js_src, call_tpl)
 
-        # Build call expression
-        call_expr = call_tpl.format(
-            prompt=json.dumps(prompt),
-            research="'Yes'" if opts.research else "'No'",
-            incognito="'Yes'" if opts.incognito else "'No'",
-        )
+    return _inject
 
-        # Execute with error reporting - return a result object
-        result = await page.evaluate(
-            f"""(async () => {{
+
+async def _inject_js(page: Page, prompt: str, opts: "InjectOptions", js_src: str, call_tpl: str) -> None:
+    # Load helper functions (wrapped in IIFE to prevent conflicts)
+    await page.evaluate(f"(function() {{ {js_src} }})()")
+
+    # Build call expression
+    call_expr = call_tpl.format(
+        prompt=json.dumps(prompt),
+        research="'Yes'" if opts.research else "'No'",
+        incognito="'Yes'" if opts.incognito else "'No'",
+    )
+
+    # Execute with error reporting - return a result object
+    result = await page.evaluate(
+        f"""(async () => {{
                 try {{
                     const r = await {call_expr};
                     return {{ success: true, result: r }};
@@ -86,49 +107,80 @@ def _build_injector(
                     }};
                 }}
             }})()"""
+    )
+
+    if result and not result.get('success'):
+        error_msg = result.get('error', 'Unknown JavaScript error')
+        stack = result.get('stack', '')
+        raise RuntimeError(
+            f"Provider JS injection failed: {error_msg}\n"
+            f"Stack trace:\n{stack}"
         )
 
-        # Check if JS execution failed and raise Python exception
-        if result and not result.get('success'):
-            error_msg = result.get('error', 'Unknown JavaScript error')
-            stack = result.get('stack', '')
-            raise RuntimeError(
-                f"Provider JS injection failed: {error_msg}\n"
-                f"Stack trace:\n{stack}"
-            )
 
-    return _inject
+async def _paste_and_enter(page: Page, prompt: str, opts: "InjectOptions", js_src: str, call_tpl: str) -> None:
+    # Prepare the page via JS (e.g. focus editor, optional research)
+    await _inject_js(page, prompt, opts, js_src, call_tpl)
+
+    # Bring to front and paste prompt via system clipboard
+    try:
+        await page.bring_to_front()
+    except Exception:
+        pass
+
+    try:
+        import pyperclip  # local import to avoid hard dependency at import time
+        pyperclip.copy(prompt)
+    except Exception:
+        # Fallback: type the prompt directly if clipboard fails
+        await page.keyboard.insert_text(prompt)
+    else:
+        modifier = "Meta" if sys.platform == "darwin" else "Control"
+        await page.keyboard.press(f"{modifier}+V")
+
+    # Small delay then submit
+    await asyncio.sleep(0.5)
+    await page.keyboard.press("Enter")
 
 
 # --------------------------------------------------------------------------- #
 # Registry                                                                     #
 # --------------------------------------------------------------------------- #
 
-# Provider ➜ (SUBMIT_JS, FOLLOWUP_JS, submit_call_tpl, follow_call_tpl)
-_PROVIDER_CONFIG: dict[LLMProvider, tuple[str, str | None, str, str | None]] = {
+# Provider ➜ (SUBMIT_JS, FOLLOWUP_JS, submit_call_tpl, follow_call_tpl, use_paste, wait_for_selector)
+ProviderConfig = tuple[str, str | None, str, str | None, bool, str | None]
+_PROVIDER_CONFIG: dict[LLMProvider, ProviderConfig] = {
     LLMProvider.CHATGPT: (
         chatgpt.SUBMIT_JS,
         chatgpt.FOLLOWUP_JS,
         "automateOpenAIChat({prompt}, {research}, {incognito})",
         "chatGPTFollowUpMessage({prompt})",
+        False,
+        "#prompt-textarea, .ProseMirror",
     ),
     LLMProvider.GEMINI: (
         gemini.SUBMIT_JS,
         gemini.FOLLOWUP_JS,
         "automateGeminiChat({prompt}, {research})",
         "geminiFollowUpMessage({prompt})",
+        False,
+        ".ql-editor",
     ),
     LLMProvider.CLAUDE: (
         claude.SUBMIT_JS,
         claude.FOLLOWUP_JS,
-        "automateClaudeInteraction({prompt}, {research})",
-        "claudeFollowUpMessage({prompt})",
+        "automateClaudeInteraction({research})",
+        "claudeFollowUpMessage()",
+        True,
+        ".ProseMirror",
     ),
     LLMProvider.GROK: (
         grok.SUBMIT_JS,
         grok.FOLLOWUP_JS,
         "automateGrokChat({prompt}, {research}, {incognito})",
         "grokFollowUpMessage({prompt})",
+        False,
+        'textarea[aria-label="Ask Grok anything"], [contenteditable="true"]',
     ),
 }
 
@@ -147,10 +199,4 @@ def get_injector(provider: LLMProvider):
     except KeyError as exc:
         raise KeyError(f"Unknown provider: {provider}") from exc
 
-    base_injector = _build_injector(*cfg)
-
-    # Claude JS handles insertion and submission directly
-    if provider is LLMProvider.CLAUDE:
-        return base_injector
-
-    return base_injector
+    return _build_injector(*cfg)

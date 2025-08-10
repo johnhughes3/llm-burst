@@ -1,43 +1,31 @@
-# Stage 6 Completion - Window Positioning with Rectangle.app
+# Stage 6 Completion - Window Arrangement via CDP
 
 ## Overview
 
-Stage 6 implements automatic window tiling via Rectangle.app, enabling the `llm-burst arrange` command to position ungrouped Chrome windows into a predictable 2/3/4-pane grid.
+Stage 6 implements automatic window arrangement using Chrome DevTools Protocol (CDP), enabling the `llm-burst arrange` command to position ungrouped Chrome windows into a predictable 2/3/4-pane grid without any external window manager.
 
 ## Completed: 2025-08-03
 
 ### Implementation Summary
 
-Added comprehensive Rectangle.app integration to automatically arrange LLM browser windows using native macOS window management.
+Added a CDP-based arrangement helper to position LLM browser windows by setting window bounds directly.
 
 ### Key Components
 
-#### 1. **Rectangle Action System** (`constants.py`)
-- `RectangleAction` enum defining window positioning actions
-- `RECTANGLE_LAYOUTS` mapping window counts to layout configurations
-- `RECTANGLE_KEY_BINDINGS` for keyboard shortcut definitions
-
-#### 2. **Rectangle Interface** (`rectangle.py`)
-- Dual-mode execution: prefers `rectangle-cli` if available
-- AppleScript fallback for keyboard shortcut simulation
-- Platform-specific safety checks (macOS only)
-
-#### 3. **Layout Management** (`layout.py`)
-- `arrange()` function to tile ungrouped windows
-- Window focusing via AppleScript
-- Deterministic ordering by window ID
+#### 1. **Layout Management** (`layout.py`)
+- `arrange()` function delegating to CDP arrangement helper
+- Deterministic ordering by window ID inside the helper
 - Respects max_windows parameter (default 4)
 
-#### 4. **CLI Integration** (`cli_click.py`)
+#### 2. **CLI Integration** (`cli_click.py`)
 - New `arrange` command with `--max-windows` option
 - Error handling and user feedback
 
 ### Technical Decisions
 
-1. **Rectangle CLI Priority**: Checks for `rectangle-cli` first for speed and reliability
-2. **Keyboard Fallback**: Uses AppleScript to simulate Rectangle shortcuts when CLI unavailable
-3. **Grouped Sessions Exclusion**: Only arranges ungrouped windows to preserve tab group metaphor
-4. **Deterministic Ordering**: Sorts by window_id to ensure consistent positioning
+1. **CDP-Only**: Avoids external window managers and macOS permissions
+2. **Grouped Sessions Exclusion**: Only arranges ungrouped windows to preserve tab group metaphor
+3. **Deterministic Ordering**: Sorts by window_id to ensure consistent positioning
 
 ### Layout Configurations
 
@@ -50,10 +38,8 @@ Added comprehensive Rectangle.app integration to automatically arrange LLM brows
 
 ### Testing
 
-Created comprehensive test suite (`test_arrange.py`) covering:
-- Empty session handling
-- 2, 3, and 4-window arrangements
-- Grouped session exclusion
+Created test coverage (`test_arrange.py`) covering:
+- CDP helper invocation
 - Max windows parameter
 - Error handling
 - CLI command integration
@@ -76,25 +62,19 @@ llm-burst arrange -m 6
 ### Files Modified/Created
 
 - **Modified**:
-  - `llm_burst/constants.py` - Added Rectangle enums and mappings
   - `llm_burst/cli_click.py` - Added arrange command
-  - `tests/test_arrange.py` - Replaced with Stage 6 tests
-
-- **Created**:
-  - `llm_burst/rectangle.py` - Rectangle.app interface layer
-  - `llm_burst/layout.py` - Window arrangement logic
+  - `tests/test_arrange.py` - Updated for CDP arrangement
+  - `llm_burst/layout.py` - CDP-only window arrangement logic
 
 ### Dependencies
 
-No new dependencies required. Rectangle.app must be installed on the user's system, but the implementation gracefully handles its absence with error messages.
+No new dependencies required.
 
 ### Edge Cases Handled
 
-1. **No Rectangle.app**: Returns clear error message
-2. **No Sessions**: Silent no-op
-3. **All Grouped**: Silent no-op
-4. **Custom Key Bindings**: Future support via environment variables
-5. **Non-macOS Platforms**: Raises RuntimeError with platform message
+1. **No Sessions**: Silent no-op
+2. **All Grouped**: Silent no-op
+3. **Non-macOS Platforms**: Uses default screen geometry fallback
 
 ### Integration Points
 
@@ -127,7 +107,7 @@ uv run pytest tests/test_arrange.py -v
 # Test CLI command
 uv run llm-burst arrange --help
 
-# Manual test (requires Chrome windows and Rectangle.app)
+# Manual test (requires Chrome windows)
 uv run llm-burst open "Test 1" --provider claude
 uv run llm-burst open "Test 2" --provider gemini
 uv run llm-burst arrange
