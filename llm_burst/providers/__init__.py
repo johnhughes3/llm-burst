@@ -71,10 +71,31 @@ def _build_injector(
             incognito="'Yes'" if opts.incognito else "'No'",
         )
 
-        # Execute inside async IIFE to await any internal promises
-        await page.evaluate(
-            f"(async () => {{ try {{ await {call_expr}; }} catch(e) {{ console.error(e); }} }})()"
+        # Execute with error reporting - return a result object
+        result = await page.evaluate(
+            f"""(async () => {{
+                try {{
+                    const r = await {call_expr};
+                    return {{ success: true, result: r }};
+                }} catch(e) {{
+                    console.error('LLM injection error:', e);
+                    return {{
+                        success: false,
+                        error: String(e),
+                        stack: e.stack || 'No stack trace available'
+                    }};
+                }}
+            }})()"""
         )
+
+        # Check if JS execution failed and raise Python exception
+        if result and not result.get('success'):
+            error_msg = result.get('error', 'Unknown JavaScript error')
+            stack = result.get('stack', '')
+            raise RuntimeError(
+                f"Provider JS injection failed: {error_msg}\n"
+                f"Stack trace:\n{stack}"
+            )
 
     return _inject
 
@@ -136,6 +157,13 @@ def get_injector(provider: LLMProvider):
 
             # Only for initial submission – follow-ups already handled in JS
             if not opts.follow_up:
+                # Ensure the page has focus before keystrokes
+                try:
+                    await page.bring_to_front()
+                except Exception:
+                    # Some browser contexts don't support bring_to_front
+                    pass
+
                 clipboard_success = False
                 try:
                     import pyperclip
@@ -146,7 +174,7 @@ def get_injector(provider: LLMProvider):
                     # Clipboard failed, we will fall back to keyboard insertion
                     pass
 
-                # Give the browser a brief moment to settle focus
+                # Give the browser a longer moment to settle focus
                 await page.wait_for_timeout(300)
                 
                 if clipboard_success:
@@ -156,6 +184,7 @@ def get_injector(provider: LLMProvider):
                     # This is slower but works even if clipboard is unavailable.
                     await page.keyboard.insert_text(prompt)
                 
+                # Wait for paste to process before sending Enter
                 await page.wait_for_timeout(300)
                 await page.keyboard.press("Enter")
 

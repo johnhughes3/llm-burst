@@ -34,7 +34,7 @@ from .browser import BrowserAdapter, SessionHandle
 
 def prompt_user() -> Dict[str, Any]:
     """
-    Launch the swiftDialog prompt wrapper and return the user's input.
+    Launch the swiftDialog prompt and return the user's input.
 
     Returns
     -------
@@ -43,21 +43,16 @@ def prompt_user() -> Dict[str, Any]:
 
     Side Effects
     ------------
-    " If the user cancels (non-zero exit code) the current process terminates
+    - If the user cancels (non-zero exit code) the current process terminates
       with PROMPT_CANCEL_EXIT.
-    " Any stderr emitted by the shell script is forwarded to this program's
+    - Any stderr emitted by the shell script is forwarded to this program's
       stderr to aid debugging.
 
     Raises
     ------
     FileNotFoundError
-        If swiftDialog is not installed or script not found.
+        If swiftDialog is not installed.
     """
-    # Check if dialog binary exists first
-    import shutil
-    from pathlib import Path
-    import logging
-
     # Honour explicit opt-out: skip dialog entirely when requested
     no_dialog = os.getenv("LLM_BURST_NO_DIALOG", "").lower() in {"1", "true", "yes"}
     if no_dialog:
@@ -74,17 +69,14 @@ def prompt_user() -> Dict[str, Any]:
         # Nothing sensible to return – behave like cancel/missing dialog
         return {}
 
-    # Try the safe wrapper first if it exists
-    safe_script = SWIFT_PROMPT_SCRIPT.parent / "swift_prompt_safe.sh"
-    script_to_use = safe_script if safe_script.exists() else SWIFT_PROMPT_SCRIPT
-
-    # If swiftDialog or the wrapper script is missing, gracefully fall back
-    if not shutil.which("dialog") or not script_to_use.exists():
-        # Use clipboard content as fallback
+    # Check if dialog binary exists first
+    import shutil
+    import tempfile
+    if not shutil.which("dialog"):
         try:
             clipboard_text: str = pyperclip.paste()
             if clipboard_text:
-                logging.info("Using clipboard content as fallback (swiftDialog not available)")
+                print("Using clipboard content as fallback (swiftDialog not available)", file=sys.stderr)
                 return {
                     "Prompt Text": clipboard_text,
                     "Research mode": False,
@@ -100,16 +92,51 @@ def prompt_user() -> Dict[str, Any]:
     except Exception:
         clipboard_text = ""
 
-    env = os.environ.copy()
-    env["LLMB_DEFAULT_PROMPT"] = clipboard_text
+    dialog_config = {
+      "title": "Start LLM Burst",
+      "width": 600,
+      "height": 420,
+      "message": "Please confirm your prompt from clipboard:\n\n**Keyboard shortcuts:** Press ⌘↩ (Cmd+Return) to submit",
+      "messagefont": "size=14",
+      "textfield": [
+        {
+          "title": "Prompt Text",
+          "editor": True,
+          "required": True,
+          "value": clipboard_text
+        }
+      ],
+      "checkbox": [
+        {"label": "Research mode", "checked": False},
+        {"label": "Incognito mode", "checked": False}
+      ],
+      "button1text": "OK",
+      "button1action": "return",
+      "button2text": "Cancel",
+      "hidetimerbar": True,
+      "moveable": True
+    }
 
-    # Invoke the prompt wrapper; capture output for filtering
-    result = subprocess.run(
-        [str(script_to_use)],
-        capture_output=True,
-        text=True,
-        env=env,
-    )
+    # Create temp config file with proper cleanup
+    tmp_config_path = None
+    try:
+        with tempfile.NamedTemporaryFile(mode="w", delete=False, suffix=".json") as tmp_config:
+            json.dump(dialog_config, tmp_config)
+            tmp_config_path = tmp_config.name
+
+        # Call dialog CLI directly - no wrapper, no Finder involvement
+        result = subprocess.run(
+            ["dialog", "--jsonfile", tmp_config_path, "--json"],
+            capture_output=True,
+            text=True,
+        )
+    finally:
+        # Always clean up temp file, even if subprocess fails
+        if tmp_config_path and os.path.exists(tmp_config_path):
+            try:
+                os.unlink(tmp_config_path)
+            except Exception:
+                pass
 
     # Only log meaningful errors, not the Finder -50 or safe-wrapper fallback notice
     if (
@@ -121,7 +148,7 @@ def prompt_user() -> Dict[str, Any]:
         sys.stderr.write(result.stderr)
 
     if result.returncode != PROMPT_OK_EXIT:
-        # User cancelled or an error occurred inside the shell script.
+        # User cancelled or an error occurred.
         sys.exit(PROMPT_CANCEL_EXIT)
 
     try:
