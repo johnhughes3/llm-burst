@@ -13,9 +13,8 @@ import asyncio
 import os
 import pytest
 from pathlib import Path
-from unittest.mock import patch, AsyncMock
 
-from playwright.async_api import Page, Error as PlaywrightError
+from playwright.async_api import Error as PlaywrightError
 
 from llm_burst.browser import BrowserAdapter, SessionHandle
 from llm_burst.constants import LLMProvider, LLM_URLS
@@ -33,18 +32,18 @@ async def browser_session():
     # Skip if browser tests are not enabled
     if not os.environ.get("ENABLE_BROWSER_TESTS"):
         pytest.skip("Browser tests disabled. Set ENABLE_BROWSER_TESTS=1 to run.")
-    
+
     async with BrowserAdapter() as adapter:
         # Open a ChatGPT window using the real adapter
         # This connects to an existing Chrome instance with remote debugging enabled
         handle = await adapter.open_window("test-chatgpt", LLMProvider.CHATGPT)
-        
+
         # Enable console logging for debugging
         handle.page.on("console", lambda msg: print(f"Browser console: {msg.text}"))
         handle.page.on("pageerror", lambda err: print(f"Browser error: {err}"))
-        
+
         yield handle
-        
+
         # Clean up - close the window
         await adapter.close_window("test-chatgpt")
 
@@ -57,10 +56,10 @@ async def test_chatgpt_submission_selectors(browser_session: SessionHandle):
     # But ensure we're on the right page
     if page.url != LLM_URLS[LLMProvider.CHATGPT]:
         await page.goto(LLM_URLS[LLMProvider.CHATGPT], wait_until="networkidle")
-    
+
     # Wait for page to load
     await asyncio.sleep(2)
-    
+
     # Debug: Check what selectors are actually present
     debug_info = await page.evaluate("""
         () => {
@@ -119,7 +118,7 @@ async def test_chatgpt_submission_selectors(browser_session: SessionHandle):
             return results;
         }
     """)
-    
+
     print("Debug info from ChatGPT page:")
     print(f"  ProseMirror found: {debug_info['proseMirror']}")
     print(f"  prompt-textarea found: {debug_info['promptTextarea']}")
@@ -129,7 +128,7 @@ async def test_chatgpt_submission_selectors(browser_session: SessionHandle):
     print(f"  Any contenteditable found: {debug_info['anyContentEditable']}")
     print(f"  Alternative selectors: {debug_info['alternativeSelectors']}")
     print(f"  Potential send buttons: {debug_info['potentialSendButtons']}")
-    
+
     # Check if selectors are valid
     result = await selectors_up_to_date(page)
     assert result, "ChatGPT selectors are outdated - UI may have changed"
@@ -142,26 +141,26 @@ async def test_chatgpt_prompt_submission(browser_session: SessionHandle):
     # The page should already be at ChatGPT URL
     if page.url != LLM_URLS[LLMProvider.CHATGPT]:
         await page.goto(LLM_URLS[LLMProvider.CHATGPT], wait_until="domcontentloaded")
-    
+
     # Wait for initial page load
     await asyncio.sleep(3)
-    
+
     # Get the injector for ChatGPT
     injector = get_injector(LLMProvider.CHATGPT)
-    
+
     # Create injection options (no research or incognito for basic test)
     opts = InjectOptions(follow_up=False, research=False, incognito=False)
-    
+
     # Test prompt
     test_prompt = "Hello, world! This is a test message."
-    
+
     # Inject and submit the prompt
     try:
         await injector(page, test_prompt, opts)
-        
+
         # Wait for submission to process
         await asyncio.sleep(2)
-        
+
         # Check that the prompt was submitted (it should appear in the chat)
         # After submission, the message appears in the conversation area
         prompt_visible = await page.evaluate("""
@@ -172,26 +171,26 @@ async def test_chatgpt_prompt_submission(browser_session: SessionHandle):
                 return pageText.includes('Hello, world! This is a test message.');
             }
         """)
-        
+
         assert prompt_visible, "Prompt was not successfully submitted to ChatGPT"
-        
+
         # Wait a bit more for response to start
         await asyncio.sleep(3)
-        
+
         # Take screenshot for verification
         screenshot_dir = Path("tests/assets/screenshots")
         screenshot_dir.mkdir(parents=True, exist_ok=True)
-        
+
         screenshot_path = screenshot_dir / "chatgpt_submission_latest.png"
         await page.screenshot(path=str(screenshot_path), full_page=False)
-        
+
         print(f"Screenshot saved to: {screenshot_path}")
-        
+
         # Verify ChatGPT has started responding or shows an error message
         # Since we're not logged in, we might get an error or login prompt
         # But the submission itself should have worked
         print("Submission completed successfully!")
-        
+
     except PlaywrightError as e:
         # Take error screenshot
         screenshot_dir = Path("tests/assets/screenshots")
@@ -209,26 +208,26 @@ async def test_chatgpt_research_mode(browser_session: SessionHandle):
     # The page should already be at ChatGPT URL
     if page.url != LLM_URLS[LLMProvider.CHATGPT]:
         await page.goto(LLM_URLS[LLMProvider.CHATGPT], wait_until="domcontentloaded")
-    
+
     # Wait for initial page load
     await asyncio.sleep(3)
-    
+
     # Get the injector
     injector = get_injector(LLMProvider.CHATGPT)
-    
+
     # Create injection options with research mode
     opts = InjectOptions(follow_up=False, research=True, incognito=False)
-    
+
     # Test prompt
     test_prompt = "What is the latest news about AI?"
-    
+
     try:
         # Inject and submit with research mode
         await injector(page, test_prompt, opts)
-        
+
         # Wait for submission
         await asyncio.sleep(3)
-        
+
         # Check if research mode was activated (Tools button should show selection)
         research_active = await page.evaluate("""
             () => {
@@ -242,32 +241,34 @@ async def test_chatgpt_research_mode(browser_session: SessionHandle):
                        toolsButton.getAttribute('aria-expanded') === 'false';
             }
         """)
-        
+
         # Take screenshot
         screenshot_dir = Path("tests/assets/screenshots")
         screenshot_dir.mkdir(parents=True, exist_ok=True)
         screenshot_path = screenshot_dir / "chatgpt_research_mode.png"
         await page.screenshot(path=str(screenshot_path), full_page=False)
-        
+
         # Note: Research mode activation is optional - UI may not always show it
-        print(f"Research mode {'activated' if research_active else 'may not be available'}")
-        
+        print(
+            f"Research mode {'activated' if research_active else 'may not be available'}"
+        )
+
     except PlaywrightError as e:
         print(f"Research mode test warning: {e}")
         # Research mode is optional, so we don't fail the test
 
 
-@pytest.mark.asyncio 
+@pytest.mark.asyncio
 async def test_chatgpt_incognito_mode(browser_session: SessionHandle):
     """Test submitting a prompt with incognito mode enabled."""
     page = browser_session.page
     # The page should already be at ChatGPT URL
     if page.url != LLM_URLS[LLMProvider.CHATGPT]:
         await page.goto(LLM_URLS[LLMProvider.CHATGPT], wait_until="domcontentloaded")
-    
+
     # Wait for initial page load
     await asyncio.sleep(3)
-    
+
     # Check if temporary chat button exists
     temp_button_exists = await page.evaluate("""
         () => {
@@ -280,34 +281,34 @@ async def test_chatgpt_incognito_mode(browser_session: SessionHandle):
             return false;
         }
     """)
-    
+
     if not temp_button_exists:
         pytest.skip("Temporary chat button not available - may require login")
-    
+
     # Get the injector
     injector = get_injector(LLMProvider.CHATGPT)
-    
+
     # Create injection options with incognito mode
     opts = InjectOptions(follow_up=False, research=False, incognito=True)
-    
+
     # Test prompt
     test_prompt = "Test message in incognito mode"
-    
+
     try:
         # Inject and submit with incognito mode
         await injector(page, test_prompt, opts)
-        
+
         # Wait for submission
         await asyncio.sleep(3)
-        
+
         # Take screenshot
         screenshot_dir = Path("tests/assets/screenshots")
         screenshot_dir.mkdir(parents=True, exist_ok=True)
         screenshot_path = screenshot_dir / "chatgpt_incognito_mode.png"
         await page.screenshot(path=str(screenshot_path), full_page=False)
-        
+
         print("Incognito mode test completed")
-        
+
     except PlaywrightError as e:
         print(f"Incognito mode test warning: {e}")
         # Incognito mode is optional, so we don't fail the test

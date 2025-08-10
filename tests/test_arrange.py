@@ -8,9 +8,8 @@ Tests verify that the arrange command:
 """
 
 import pytest
-from unittest.mock import patch, call
+from unittest.mock import patch
 
-from llm_burst.constants import LLMProvider
 from llm_burst.layout import arrange
 
 pytestmark = pytest.mark.unit
@@ -20,6 +19,7 @@ pytestmark = pytest.mark.unit
 def temp_state_file(tmp_path):
     """Create a temporary state file for testing."""
     from llm_burst.state import StateManager
+
     state_file = tmp_path / "test_state.json"
     with patch("llm_burst.state.STATE_FILE", state_file):
         StateManager._instance = None

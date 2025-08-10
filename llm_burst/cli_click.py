@@ -49,6 +49,7 @@ def _task_slug(session_title: str, provider: LLMProvider) -> str:
     """Generate stable internal identifier - NEVER rename these."""
     # Use a stable pattern that won't change even if session_title is renamed
     import hashlib
+
     # Create stable hash from initial session title
     stable_id = hashlib.md5(f"{session_title}:{provider.name}".encode()).hexdigest()[:8]
     return f"internal_{provider.name.lower()}_{stable_id}"
@@ -173,6 +174,7 @@ def cmd_open(
     """Open a new LLM window (or re-attach) and optionally send a prompt."""
     prune_stale_sessions_sync()
     from llm_burst.chrome_bootstrap import ensure_remote_debugging  # Added
+
     ensure_remote_debugging()  # Added
 
     # Merge missing values from swiftDialog prompt when any field absent
@@ -185,7 +187,10 @@ def cmd_open(
         provider = provider or user_data.get("provider")
         task_name = task_name or user_data.get("task_name") or user_data.get("task")
         prompt_text = (
-            prompt_text or user_data.get("prompt_text") or user_data.get("prompt")
+            prompt_text
+            or user_data.get("Prompt Text")
+            or user_data.get("prompt_text")
+            or user_data.get("prompt")
         )
 
     # Validation
@@ -277,6 +282,7 @@ def cmd_activate(
     """Open 4 LLM tabs and send the same prompt (⌃⌥R replacement)."""
     prune_stale_sessions_sync()
     from llm_burst.chrome_bootstrap import ensure_remote_debugging  # Added
+
     ensure_remote_debugging()  # Added
 
     from datetime import datetime
@@ -302,6 +308,7 @@ def cmd_activate(
             _LOG.debug(f"Dialog failed: {e}")
             try:
                 import pyperclip
+
                 clipboard_text = pyperclip.paste()
                 if clipboard_text and clipboard_text.strip():
                     prompt_text = clipboard_text
@@ -327,7 +334,9 @@ def cmd_activate(
     providers = list(LLMProvider)  # All known providers for now
 
     # Helper coroutine for concurrent open/prompt
-    async def _open_and_prompt(adapter, task_slug, prov, prompt, research_mode, incognito_mode):
+    async def _open_and_prompt(
+        adapter, task_slug, prov, prompt, research_mode, incognito_mode
+    ):
         """Open a provider window and send prompt."""
         handle = await adapter.open_window(task_slug, prov)
         opts = InjectOptions(
@@ -343,7 +352,7 @@ def cmd_activate(
         """Open all provider windows and send prompt while BrowserAdapter is alive."""
         # Late import to keep GAI optional
         from llm_burst.auto_namer import suggest_session_name
-        
+
         opened_providers: list[str] = []
         handles: list = []
         state = StateManager()
@@ -362,7 +371,11 @@ def cmd_activate(
             for prov in providers:
                 # Create stable internal slug for LiveSession based on initial title
                 task_slug = _task_slug(current_title, prov)
-                tasks.append(_open_and_prompt(adapter, task_slug, prov, prompt_text, research, incognito))
+                tasks.append(
+                    _open_and_prompt(
+                        adapter, task_slug, prov, prompt_text, research, incognito
+                    )
+                )
 
             results = await asyncio.gather(*tasks, return_exceptions=True)
 
@@ -677,8 +690,8 @@ def cmd_chrome_status() -> None:
     click.echo(f"Remote debugging flag: {'Yes' if status.remote_debug else 'No'}")
     click.echo(f"PIDs                 : {', '.join(map(str, status.pids)) or '-'}")
 
-    # Non-zero exit when debugging flag is missing while Chrome is up
-    if status.running and not status.remote_debug:
+    # Exit 0 only when Chrome is running with the flag; 1 otherwise
+    if not status.running or (status.running and not status.remote_debug):
         sys.exit(1)
 
 
@@ -686,6 +699,7 @@ def cmd_chrome_status() -> None:
 def cmd_chrome_launch() -> None:
     """Force-quit any running Chrome instance and relaunch with remote debugging."""
     import click
+    from pathlib import Path
     from llm_burst.constants import (
         CHROME_PROCESS_NAMES,
         CHROME_REMOTE_PORT,
@@ -708,6 +722,5 @@ def cmd_chrome_launch() -> None:
 
     click.echo("Launching Chrome with --remote-debugging-port…")
     profile_dir = get_chrome_profile_dir()
-    launch_chrome_headful(CHROME_REMOTE_PORT, profile_dir)
-    click.echo("✓ Chrome launched and listening on port "
-               f"{CHROME_REMOTE_PORT}")
+    launch_chrome_headful(CHROME_REMOTE_PORT, Path(profile_dir))
+    click.echo(f"✓ Chrome launched and listening on port {CHROME_REMOTE_PORT}")

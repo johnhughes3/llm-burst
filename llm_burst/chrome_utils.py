@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 from typing import NamedTuple, Iterable
+from pathlib import Path
 import os
 import subprocess
 import re
@@ -180,7 +181,7 @@ def relaunch_chrome_with_flag(port: int) -> subprocess.Popen[str]:
     )
 
 
-def launch_chrome_headful(port: int, profile_dir: "Path"):  # noqa: D401
+def launch_chrome_headful(port: int, profile_dir: Path):  # noqa: D401
     """
     Start a *head-ful* Google Chrome instance listening on *port* and using
     *profile_dir* as the user-data directory.

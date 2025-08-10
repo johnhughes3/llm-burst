@@ -290,17 +290,17 @@ window.geminiFollowUpMessage = function(messageText) {
 """
 
 
-def selectors_up_to_date(page) -> bool:
+async def selectors_up_to_date(page) -> bool:
     """Quick test to verify Gemini UI hasn't changed."""
     try:
         # Check for key selectors
-        result = page.evaluate("""
+        result = await page.evaluate("""
             () => {
                 const editor = document.querySelector('.ql-editor');
                 const sendButton = document.querySelector('button.send-button');
                 return editor !== null && sendButton !== null;
             }
         """)
-        return result
+        return bool(result)
     except Exception:
         return False

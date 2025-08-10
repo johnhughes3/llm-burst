@@ -176,12 +176,12 @@ async def test_gemini_selectors_in_real_session():
             await browser.close()
 
             # Verify selectors exist
-            assert selectors_check.get(
-                "editor"
-            ), "Editor selector '.ql-editor' not found"
-            assert selectors_check.get(
-                "sendButton"
-            ), "Send button selector 'button.send-button' not found"
+            assert selectors_check.get("editor"), (
+                "Editor selector '.ql-editor' not found"
+            )
+            assert selectors_check.get("sendButton"), (
+                "Send button selector 'button.send-button' not found"
+            )
 
     finally:
         # Clean up test session

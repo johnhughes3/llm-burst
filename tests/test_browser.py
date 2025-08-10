@@ -121,7 +121,7 @@ async def test_open_window_creates_new_window(temp_state_file):
     """Test that open_window creates a new browser window and tracks it."""
     # Ensure clean state
     StateManager._instance = None
-    
+
     # Ensure no existing session for this test
     state = StateManager()
     if state.get("Test-Task"):
@@ -176,11 +176,10 @@ async def test_open_window_creates_new_window(temp_state_file):
 
         # Mock new_cdp_session to return different sessions based on the page
         async def new_cdp_session(page):
-            
             if page is mock_initial_page:
                 # This is for _get_cdp_connection, return the main session
                 return mock_session
-            elif hasattr(page, '_target_id') and page._target_id == "test-target-id":
+            elif hasattr(page, "_target_id") and page._target_id == "test-target-id":
                 # This is our target page for _find_page_for_target
                 # Check by _target_id attribute since object identity might not be preserved
                 page_session = AsyncMock()

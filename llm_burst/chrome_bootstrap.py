@@ -26,21 +26,18 @@ import shutil
 import subprocess
 import sys
 import time
-from pathlib import Path
-from typing import Optional
 
 from llm_burst.constants import (
     AUTO_RELAUNCH_CHROME_ENV,
-    CHROME_EXECUTABLE,
     CHROME_PROCESS_NAMES,
     CHROME_REMOTE_PORT,
     PROMPT_CANCEL_EXIT,
 )
+from pathlib import Path
 from llm_burst.chrome_utils import (
     scan_chrome_processes,
     quit_chrome,
     get_chrome_profile_dir,
-    build_launch_args,
     launch_chrome_headful,
 )
 
@@ -143,7 +140,7 @@ def ensure_remote_debugging() -> None:
     print("Relaunching Chrome with remote debugging…")
     profile_dir = get_chrome_profile_dir()
     # profile_dir is a string from get_chrome_profile_dir
-    launch_chrome_headful(CHROME_REMOTE_PORT, profile_dir)
+    launch_chrome_headful(CHROME_REMOTE_PORT, Path(profile_dir))
 
     # Give Chrome a chance to bind the websocket endpoint.
     time.sleep(3)

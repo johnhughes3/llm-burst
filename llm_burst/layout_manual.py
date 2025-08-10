@@ -20,7 +20,7 @@ def _get_screen_dimensions() -> tuple[int, int, int, int]:
             screens = NSScreen.screens()
             if not screens:
                 raise Exception("No screens found")
-            
+
             primary_screen = screens[0]
             frame = primary_screen.visibleFrame()
             full_frame = primary_screen.frame()
@@ -87,8 +87,8 @@ async def arrange_via_cdp(max_windows: int = 4) -> None:
         _LOG.info("No ungrouped sessions to arrange")
         return
 
-    # Limit to max_windows
-    sessions = sessions[:max_windows]
+    # Order newest first by window id, then take the N most recent
+    ordered_sessions = sorted(sessions, key=lambda s: s.window_id)[-max_windows:]
 
     # Get screen dimensions dynamically (x, y, width, height)
     screen_x, screen_y, screen_width, screen_height = _get_screen_dimensions()
@@ -103,12 +103,22 @@ async def arrange_via_cdp(max_windows: int = 4) -> None:
         ],
         3: [
             (screen_x, screen_y, screen_width // 2, screen_height // 2),
-            (screen_x + screen_width // 2, screen_y, screen_width // 2, screen_height // 2),
+            (
+                screen_x + screen_width // 2,
+                screen_y,
+                screen_width // 2,
+                screen_height // 2,
+            ),
             (screen_x, screen_y + screen_height // 2, screen_width, screen_height // 2),
         ],
         4: [
             (screen_x, screen_y, screen_width // 2, screen_height // 2),
-            (screen_x + screen_width // 2, screen_y, screen_width // 2, screen_height // 2),
+            (
+                screen_x + screen_width // 2,
+                screen_y,
+                screen_width // 2,
+                screen_height // 2,
+            ),
             (
                 screen_x,
                 screen_y + screen_height // 2,
@@ -124,13 +134,10 @@ async def arrange_via_cdp(max_windows: int = 4) -> None:
         ],
     }
 
-    layout = layouts.get(len(sessions))
+    layout = layouts.get(len(ordered_sessions))
     if not layout:
-        _LOG.warning(f"No layout defined for {len(sessions)} windows")
+        _LOG.warning(f"No layout defined for {len(ordered_sessions)} windows")
         return
-
-    # Sort sessions for consistent ordering
-    ordered_sessions = sorted(sessions, key=lambda s: s.window_id)
 
     async with BrowserAdapter() as adapter:
         cdp = await adapter._get_cdp_connection()

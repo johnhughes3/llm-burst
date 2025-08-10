@@ -379,10 +379,10 @@ async def selectors_up_to_date(page) -> bool:
                 return editor !== null;
             }
         """)
-        
+
         if not editor_check:
             return False
-        
+
         # Type some text to make send button appear
         await page.evaluate("""
             () => {
@@ -395,10 +395,10 @@ async def selectors_up_to_date(page) -> bool:
                 }
             }
         """)
-        
+
         # Wait a moment for UI to update
         await page.wait_for_timeout(500)
-        
+
         # Now check for send button
         button_check = await page.evaluate("""
             () => {
@@ -406,7 +406,7 @@ async def selectors_up_to_date(page) -> bool:
                 return sendButton !== null && !sendButton.disabled;
             }
         """)
-        
+
         # Clear the text we added
         await page.evaluate("""
             () => {
@@ -418,7 +418,7 @@ async def selectors_up_to_date(page) -> bool:
                 }
             }
         """)
-        
+
         return editor_check and button_check
     except Exception:
         return False

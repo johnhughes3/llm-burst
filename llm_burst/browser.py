@@ -33,7 +33,6 @@ from .chrome_utils import (
     scan_chrome_processes,
     quit_chrome,
     get_chrome_profile_dir,
-    build_launch_args,
 )
 from .constants import (
     LLMProvider,
@@ -145,22 +144,34 @@ class BrowserAdapter:
         try:
             # Target.getTargets returns info about all pages, workers, etc.
             targets_response = await cdp.send("Target.getTargets")
-            live_target_ids = {t["targetId"] for t in targets_response.get("targetInfos", []) if t.get("type") == "page"}
+            live_target_ids = {
+                t["targetId"]
+                for t in targets_response.get("targetInfos", [])
+                if t.get("type") == "page"
+            }
         except Exception as e:
             import logging
-            logging.getLogger(__name__).error("Failed to retrieve live targets via CDP: %s", e)
+
+            logging.getLogger(__name__).error(
+                "Failed to retrieve live targets via CDP: %s", e
+            )
             return 0
 
         # 2. Compare with stored state and prune
         pruned_count = 0
         import logging
+
         _LOG = logging.getLogger(__name__)
 
         # Prune LiveSessions (v1/per-tab)
         all_sessions = self._state.list_all()
         for task_name, session in all_sessions.items():
             if session.target_id not in live_target_ids:
-                _LOG.info("Pruning stale LiveSession: %s (target %s)", task_name, session.target_id)
+                _LOG.info(
+                    "Pruning stale LiveSession: %s (target %s)",
+                    task_name,
+                    session.target_id,
+                )
                 self._state.remove(task_name)
                 pruned_count += 1
 
@@ -172,11 +183,19 @@ class BrowserAdapter:
                 if tab_handle.tab_id in live_target_ids:
                     alive_tabs[provider] = tab_handle
                 else:
-                     _LOG.info("Pruning stale tab in MultiProviderSession %s: %s (target %s)", session_title, provider.name, tab_handle.tab_id)
+                    _LOG.info(
+                        "Pruning stale tab in MultiProviderSession %s: %s (target %s)",
+                        session_title,
+                        provider.name,
+                        tab_handle.tab_id,
+                    )
 
             if not alive_tabs:
                 # If no tabs remain for this session, remove the whole session
-                _LOG.info("Pruning stale MultiProviderSession: %s (no live tabs)", session_title)
+                _LOG.info(
+                    "Pruning stale MultiProviderSession: %s (no live tabs)",
+                    session_title,
+                )
                 self._state.remove_session(session_title)
             elif len(alive_tabs) != len(multi_session.tabs):
                 # Update session with only alive tabs
@@ -348,13 +367,14 @@ class BrowserAdapter:
             return  # already launched by this adapter
 
         # Resolve the user-data directory we will pass to Chrome.
-        from .chrome_utils import launch_chrome_headful, get_chrome_profile_dir
+        from pathlib import Path
+        from .chrome_utils import launch_chrome_headful
 
         profile_dir = get_chrome_profile_dir()
         self._user_data_dir = profile_dir  # Remember for potential cleanup
 
         # Delegate actual spawn to shared helper
-        self._chrome_proc = launch_chrome_headful(CHROME_REMOTE_PORT, profile_dir)
+        self._chrome_proc = launch_chrome_headful(CHROME_REMOTE_PORT, Path(profile_dir))
 
     async def _wait_for_cdp(self, ws_endpoint: str) -> None:
         """Poll until the CDP websocket becomes reachable or time out."""

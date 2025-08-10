@@ -375,7 +375,9 @@ class StateManager:
             del self._multi_sessions[title]
             self._persist()
 
-    def update_session_tabs(self, title: str, tabs: Dict[LLMProvider, TabHandle]) -> None:
+    def update_session_tabs(
+        self, title: str, tabs: Dict[LLMProvider, TabHandle]
+    ) -> None:
         """Update the tabs of a multi-provider session."""
         sess = self._multi_sessions.get(title)
         if sess:

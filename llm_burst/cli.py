@@ -55,7 +55,11 @@ def prompt_user(gui: bool | None = None) -> Dict[str, Any]:
     # Decide whether to use GUI prompt
     if gui is None:
         # Default to NO dialog unless explicitly opted-in via env
-        use_dialog = os.getenv("LLM_BURST_USE_DIALOG", "").lower() in {"1", "true", "yes"}
+        use_dialog = os.getenv("LLM_BURST_USE_DIALOG", "").lower() in {
+            "1",
+            "true",
+            "yes",
+        }
     else:
         use_dialog = bool(gui)
 
@@ -78,15 +82,19 @@ def prompt_user(gui: bool | None = None) -> Dict[str, Any]:
     # Check if dialog binary exists first
     import shutil
     import tempfile
+
     if not shutil.which("dialog"):
         try:
             clipboard_text: str = pyperclip.paste()
             if clipboard_text:
-                print("Using clipboard content as fallback (swiftDialog not available)", file=sys.stderr)
+                print(
+                    "Using clipboard content as fallback (swiftDialog not available)",
+                    file=sys.stderr,
+                )
                 return {
                     "Prompt Text": clipboard_text,
                     "Research mode": False,
-                    "Incognito mode": False
+                    "Incognito mode": False,
                 }
         except Exception:
             pass
@@ -99,45 +107,53 @@ def prompt_user(gui: bool | None = None) -> Dict[str, Any]:
         clipboard_text = ""
 
     dialog_config = {
-      "title": "Start LLM Burst",
-      "width": 600,
-      "height": 420,
-      "message": "Please confirm your prompt from clipboard:\n\n**Keyboard shortcuts:** Press ⌘↩ (Cmd+Return) to submit",
-      "messagefont": "size=14",
-      "textfield": [
-        {
-          "title": "Prompt Text",
-          "editor": True,
-          "required": True,
-          "value": clipboard_text
-        }
-      ],
-      "checkbox": [
-        {"label": "Research mode", "checked": False},
-        {"label": "Incognito mode", "checked": False}
-      ],
-      "button1text": "OK",
-      "button1action": "return",
-      "button2text": "Cancel",
-      "hidetimerbar": True,
-      "moveable": True
+        "title": "Start LLM Burst",
+        "width": 600,
+        "height": 420,
+        "message": "Please confirm your prompt from clipboard:\n\n**Keyboard shortcuts:** Press ⌘↩ (Cmd+Return) to submit",
+        "messagefont": "size=14",
+        "textfield": [
+            {
+                "title": "Prompt Text",
+                "editor": True,
+                "required": True,
+                "value": clipboard_text,
+            }
+        ],
+        "checkbox": [
+            {"label": "Research mode", "checked": False},
+            {"label": "Incognito mode", "checked": False},
+        ],
+        "button1text": "OK",
+        "button1action": "return",
+        "button2text": "Cancel",
+        "hidetimerbar": True,
+        "moveable": True,
     }
 
     # Create temp config file with proper cleanup
     tmp_config_path = None
+    log_path: str | None = None
     try:
-        with tempfile.NamedTemporaryFile(mode="w", delete=False, suffix=".json") as tmp_config:
+        with tempfile.NamedTemporaryFile(
+            mode="w", delete=False, suffix=".json"
+        ) as tmp_config:
             json.dump(dialog_config, tmp_config)
             tmp_config_path = tmp_config.name
 
         # Call dialog CLI directly - no wrapper, no Finder involvement
-        # Suppress stderr to prevent macOS -50 error alerts
-        result = subprocess.run(
-            ["dialog", "--jsonfile", tmp_config_path, "--json"],
-            stdout=subprocess.PIPE,
-            stderr=subprocess.DEVNULL,
-            text=True,
-        )
+        # Route stderr to a temp log file so failures can be inspected without
+        # printing benign macOS LSOpen (-50) warnings to the terminal.
+        with tempfile.NamedTemporaryFile(
+            mode="w", delete=False, suffix=".log", prefix="llm-burst-dialog-"
+        ) as err_log:
+            log_path = err_log.name
+            result = subprocess.run(
+                ["dialog", "--jsonfile", tmp_config_path, "--json"],
+                stdout=subprocess.PIPE,
+                stderr=err_log,
+                text=True,
+            )
     finally:
         # Always clean up temp file, even if subprocess fails
         if tmp_config_path and os.path.exists(tmp_config_path):
@@ -146,7 +162,18 @@ def prompt_user(gui: bool | None = None) -> Dict[str, Any]:
             except Exception:
                 pass
 
-    # Stderr logging removed as stderr is now suppressed
+    # If the dialog failed, keep the stderr log and surface the path.
+    # Otherwise, only keep it when explicitly requested via env.
+    keep_log = os.getenv("LLM_BURST_DEBUG_DIALOG", "").lower() in {"1", "true", "yes"}
+    if result.returncode != PROMPT_OK_EXIT and log_path:
+        sys.stderr.write(
+            f"swiftDialog failed (exit {result.returncode}); stderr saved to {log_path}\n"
+        )
+    elif log_path and not keep_log:
+        try:
+            os.unlink(log_path)
+        except Exception:
+            pass
 
     if result.returncode != PROMPT_OK_EXIT:
         # User cancelled or an error occurred.
@@ -158,6 +185,8 @@ def prompt_user(gui: bool | None = None) -> Dict[str, Any]:
         # Malformed JSON is treated as an error / cancel.
         sys.stderr.write(f"Failed to parse JSON from swiftDialog: {exc}\n")
         sys.stderr.write(f"Raw output was: {repr(result.stdout)}\n")
+        if log_path and os.path.exists(log_path):
+            sys.stderr.write(f"swiftDialog stderr saved to {log_path}\n")
         sys.exit(PROMPT_CANCEL_EXIT)
 
 
@@ -165,12 +194,14 @@ def prune_stale_sessions_sync() -> int:
     """Synchronous wrapper to prune stale sessions."""
     # Ensure Chrome is ready (idempotent)
     from llm_burst.chrome_bootstrap import ensure_remote_debugging
+
     ensure_remote_debugging()
     return asyncio.run(_async_prune_stale_sessions())
 
 
 async def _async_prune_stale_sessions() -> int:
     from .browser import BrowserAdapter
+
     async with BrowserAdapter() as adapter:
         return await adapter.prune_stale_sessions()
 
@@ -194,6 +225,7 @@ def open_llm_window(task_name: str, provider: LLMProvider) -> SessionHandle:
     """
     # Ensure Chrome is ready (idempotent)
     from llm_burst.chrome_bootstrap import ensure_remote_debugging
+
     ensure_remote_debugging()
 
     # Generate placeholder if caller supplied no explicit name
@@ -307,7 +339,9 @@ async def _async_send_prompt(
         async with BrowserAdapter() as adapter:
             new_page = await adapter._find_page_for_target(target_id)
             if new_page is None:
-                raise RuntimeError(f"Could not locate page for target '{target_id}' after rehydration")
+                raise RuntimeError(
+                    f"Could not locate page for target '{target_id}' after rehydration"
+                )
             opts = InjectOptions(
                 follow_up=follow_up,
                 research=research,

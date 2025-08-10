@@ -178,7 +178,9 @@ async def extract_conversation(
                 # Keep first and last halves if too long
                 if len(body_text) > max_chars:
                     half_limit = (max_chars - 10) // 2
-                    full_text = body_text[:half_limit] + "\n\n...\n\n" + body_text[-half_limit:]
+                    full_text = (
+                        body_text[:half_limit] + "\n\n...\n\n" + body_text[-half_limit:]
+                    )
                 else:
                     full_text = body_text
 
@@ -234,39 +236,39 @@ async def generate_task_name(
 
         # Robustly extract text from response - handling various API response formats
         raw_text = None
-        
+
         # Method 1: Direct text attribute
-        if hasattr(response, 'text') and response.text:
+        if hasattr(response, "text") and response.text:
             raw_text = response.text
-        
+
         # Method 2: Via candidates structure (newer API versions)
-        if not raw_text and hasattr(response, 'candidates') and response.candidates:
+        if not raw_text and hasattr(response, "candidates") and response.candidates:
             try:
                 # Navigate the nested structure safely
                 for candidate in response.candidates:
-                    if hasattr(candidate, 'content') and candidate.content:
+                    if hasattr(candidate, "content") and candidate.content:
                         content = candidate.content
-                        if hasattr(content, 'parts') and content.parts:
+                        if hasattr(content, "parts") and content.parts:
                             for part in content.parts:
-                                if hasattr(part, 'text') and part.text:
+                                if hasattr(part, "text") and part.text:
                                     raw_text = part.text
                                     break
                     if raw_text:
                         break
             except Exception as e:
                 _LOG.debug(f"Failed to extract from candidates: {e}")
-        
+
         # Method 3: Try to extract via dict access (some API versions)
         if not raw_text:
             try:
-                if hasattr(response, '_result') and response._result:
-                    if 'candidates' in response._result:
-                        candidates = response._result['candidates']
+                if hasattr(response, "_result") and response._result:
+                    if "candidates" in response._result:
+                        candidates = response._result["candidates"]
                         if candidates and len(candidates) > 0:
-                            content = candidates[0].get('content', {})
-                            parts = content.get('parts', [])
+                            content = candidates[0].get("content", {})
+                            parts = content.get("parts", [])
                             if parts and len(parts) > 0:
-                                raw_text = parts[0].get('text', '')
+                                raw_text = parts[0].get("text", "")
             except Exception:
                 pass
 
@@ -278,10 +280,11 @@ async def generate_task_name(
         if raw_text.strip().startswith("```"):
             # Remove markdown code fences
             import re
+
             cleaned = raw_text.strip()
             # Match ```json or just ```
-            cleaned = re.sub(r'^```(?:json)?\s*\n?', '', cleaned)
-            cleaned = re.sub(r'\n?```\s*$', '', cleaned)
+            cleaned = re.sub(r"^```(?:json)?\s*\n?", "", cleaned)
+            cleaned = re.sub(r"\n?```\s*$", "", cleaned)
             raw_text = cleaned.strip()
 
         # Parse the response
@@ -292,10 +295,11 @@ async def generate_task_name(
                 return task_obj.task_name
             except Exception as e:
                 _LOG.debug(f"Pydantic validation failed: {e}")
-            
+
             # Method 2: Try basic JSON parsing
             try:
                 import json
+
                 data = json.loads(raw_text)
                 if isinstance(data, dict) and "task_name" in data:
                     name = data["task_name"]
@@ -303,14 +307,14 @@ async def generate_task_name(
                         return name.strip()
             except json.JSONDecodeError as e:
                 _LOG.debug(f"JSON parsing failed: {e}")
-            
+
             # Method 3: Extract from plain text response
             try:
                 # If it's just a plain string, use it directly
                 lines = raw_text.strip().splitlines()
                 if lines:
                     # Take first non-empty line, remove quotes
-                    first_line = lines[0].strip().strip('"\'')
+                    first_line = lines[0].strip().strip("\"'")
                     if len(first_line) >= 3 and len(first_line) <= 80:
                         return first_line
             except Exception:
@@ -421,7 +425,7 @@ async def suggest_session_name(
 ) -> Optional[str]:
     """
     Extract conversation and suggest a name using Gemini API, without mutating state.
-    
+
     This is an alias for suggest_task_name with optional timeout support.
     Returns the suggested name or None if generation fails or API is not configured.
     """

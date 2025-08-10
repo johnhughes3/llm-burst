@@ -100,11 +100,11 @@ window.claudeFollowUpMessage = function() {
 """
 
 
-def selectors_up_to_date(page) -> bool:
+async def selectors_up_to_date(page) -> bool:
     """Quick test to verify Claude UI hasn't changed."""
     try:
         # Check for key selectors
-        result = page.evaluate(
+        result = await page.evaluate(
             """
             () => {
                 const editor = document.querySelector('.ProseMirror');

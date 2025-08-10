@@ -81,7 +81,9 @@ def _build_injector(
     return _inject
 
 
-async def _inject_js(page: Page, prompt: str, opts: "InjectOptions", js_src: str, call_tpl: str) -> None:
+async def _inject_js(
+    page: Page, prompt: str, opts: "InjectOptions", js_src: str, call_tpl: str
+) -> None:
     # Load helper functions (wrapped in IIFE to prevent conflicts)
     await page.evaluate(f"(function() {{ {js_src} }})()")
 
@@ -109,16 +111,17 @@ async def _inject_js(page: Page, prompt: str, opts: "InjectOptions", js_src: str
             }})()"""
     )
 
-    if result and not result.get('success'):
-        error_msg = result.get('error', 'Unknown JavaScript error')
-        stack = result.get('stack', '')
+    if result and not result.get("success"):
+        error_msg = result.get("error", "Unknown JavaScript error")
+        stack = result.get("stack", "")
         raise RuntimeError(
-            f"Provider JS injection failed: {error_msg}\n"
-            f"Stack trace:\n{stack}"
+            f"Provider JS injection failed: {error_msg}\nStack trace:\n{stack}"
         )
 
 
-async def _paste_and_enter(page: Page, prompt: str, opts: "InjectOptions", js_src: str, call_tpl: str) -> None:
+async def _paste_and_enter(
+    page: Page, prompt: str, opts: "InjectOptions", js_src: str, call_tpl: str
+) -> None:
     # Prepare the page via JS (e.g. focus editor, optional research)
     await _inject_js(page, prompt, opts, js_src, call_tpl)
 
@@ -130,6 +133,7 @@ async def _paste_and_enter(page: Page, prompt: str, opts: "InjectOptions", js_sr
 
     try:
         import pyperclip  # local import to avoid hard dependency at import time
+
         pyperclip.copy(prompt)
     except Exception:
         # Fallback: type the prompt directly if clipboard fails
