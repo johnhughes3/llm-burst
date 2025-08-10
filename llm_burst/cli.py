@@ -24,7 +24,6 @@ from typing import Any, Dict, Union, Optional
 from uuid import uuid4
 
 from .constants import (
-    SWIFT_PROMPT_SCRIPT,
     PROMPT_OK_EXIT,
     PROMPT_CANCEL_EXIT,
     LLMProvider,
@@ -32,7 +31,7 @@ from .constants import (
 from .browser import BrowserAdapter, SessionHandle
 
 
-def prompt_user() -> Dict[str, Any]:
+def prompt_user(gui: bool | None = None) -> Dict[str, Any]:
     """
     Launch the swiftDialog prompt and return the user's input.
 
@@ -53,9 +52,16 @@ def prompt_user() -> Dict[str, Any]:
     FileNotFoundError
         If swiftDialog is not installed.
     """
+    # Decide whether to use GUI prompt
+    if gui is None:
+        # Default to NO dialog unless explicitly opted-in via env
+        use_dialog = os.getenv("LLM_BURST_USE_DIALOG", "").lower() in {"1", "true", "yes"}
+    else:
+        use_dialog = bool(gui)
+
     # Honour explicit opt-out: skip dialog entirely when requested
     no_dialog = os.getenv("LLM_BURST_NO_DIALOG", "").lower() in {"1", "true", "yes"}
-    if no_dialog:
+    if no_dialog or not use_dialog:
         try:
             clipboard_text: str = pyperclip.paste()
         except Exception:

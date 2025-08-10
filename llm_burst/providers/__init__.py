@@ -121,7 +121,7 @@ _PROVIDER_CONFIG: dict[LLMProvider, tuple[str, str | None, str, str | None]] = {
     LLMProvider.CLAUDE: (
         claude.SUBMIT_JS,
         claude.FOLLOWUP_JS,
-        "automateClaudeInteraction({research})",
+        "automateClaudeInteraction({prompt}, {research})",
         "claudeFollowUpMessage({prompt})",
     ),
     LLMProvider.GROK: (
@@ -149,45 +149,8 @@ def get_injector(provider: LLMProvider):
 
     base_injector = _build_injector(*cfg)
 
-    # Special behaviour for Claude: after JS focuses the editor, paste + send.
+    # Claude JS handles insertion and submission directly
     if provider is LLMProvider.CLAUDE:
-
-        async def _claude_inject(page: Page, prompt: str, opts: "InjectOptions") -> None:  # noqa: D401
-            await base_injector(page, prompt, opts)
-
-            # Only for initial submission – follow-ups already handled in JS
-            if not opts.follow_up:
-                # Ensure the page has focus before keystrokes
-                try:
-                    await page.bring_to_front()
-                except Exception:
-                    # Some browser contexts don't support bring_to_front
-                    pass
-
-                clipboard_success = False
-                try:
-                    import pyperclip
-
-                    pyperclip.copy(prompt)
-                    clipboard_success = True
-                except Exception:
-                    # Clipboard failed, we will fall back to keyboard insertion
-                    pass
-
-                # Give the browser a longer moment to settle focus
-                await page.wait_for_timeout(300)
-                
-                if clipboard_success:
-                    await page.keyboard.press("Meta+V")
-                else:
-                    # Fallback: Use Playwright's insert_text (types characters)
-                    # This is slower but works even if clipboard is unavailable.
-                    await page.keyboard.insert_text(prompt)
-                
-                # Wait for paste to process before sending Enter
-                await page.wait_for_timeout(300)
-                await page.keyboard.press("Enter")
-
-        return _claude_inject
+        return base_injector
 
     return base_injector

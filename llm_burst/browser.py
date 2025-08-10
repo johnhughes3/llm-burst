@@ -213,7 +213,7 @@ class BrowserAdapter:
         if page is None:  # pragma: no cover
             raise RuntimeError("Failed to obtain Playwright Page for new window")
 
-        # 2. Navigate to the LLM landing URL.
+        # 2. Navigate to the LLM landing URL. Avoid 'networkidle' which can hang on dynamic sites.
         await page.goto(LLM_URLS[provider], wait_until="load")
 
         # 3. Determine chrome windowId for Rectangle integration.

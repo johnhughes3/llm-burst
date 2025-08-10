@@ -6,7 +6,7 @@ A tool for burst processing with LLMs - orchestrating multiple AI chat sessions 
 
 `llm-burst` replaces complex Keyboard Maestro macros with a simple Python CLI tool that:
 - Opens and manages multiple LLM chat sessions (Gemini, Claude, ChatGPT, Grok)
-- Arranges windows using Rectangle hotkeys
+- Optional window arrangement via Chrome DevTools (CDP)
 - Supports tab grouping in Chrome
 - Maintains state across sessions
 
@@ -41,7 +41,7 @@ A tool for burst processing with LLMs - orchestrating multiple AI chat sessions 
 
 ## Prerequisites
 
-- macOS (for swiftDialog and Rectangle integration)
+- macOS (for swiftDialog GUI prompt)
 - Python 3.11+
 - swiftDialog: `brew install swiftdialog`
 - Chrome browser

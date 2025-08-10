@@ -1,126 +1,56 @@
 """Claude site automation JavaScript selectors and functions."""
 
 SUBMIT_JS = """
-window.tryFind = function(selector, description) {
+window.automateClaudeInteraction = function(messageText, enableResearch) {
+  return new Promise((resolve, reject) => {
     try {
-        const element = document.querySelector(selector);
-        if (!element) {
-            console.warn(`${description} not found with selector: ${selector}`);
-            return null;
+        // Check for login page
+        if (document.querySelector('input[type="email"]') || document.title.toLowerCase().includes('sign in')) {
+            return reject('Login page detected. Please log in to Claude first.');
         }
-        return element;
-    } catch (error) {
-        console.error(`Error finding ${description}: ${error.message}`);
-        return null;
-    }
-}
 
-window.automateClaudeInteraction = function(enableResearch) {
-  console.log('Starting Claude automation' + (enableResearch ? ' with Research enabled' : ''));
-  
-  let automationChain = Promise.resolve();
-  
-  // Step 1: Enable research mode if requested
-  if (enableResearch) {
-    automationChain = automationChain.then(() => {
-      return enableResearchMode();
-    }).then(() => {
-      console.log('Research mode enabled');
-    });
-  }
-  
-  // Step 2: Focus the input area (then let Keyboard Maestro handle the paste)
-  automationChain = automationChain.then(() => {
-    return focusInputArea();
-  }).then(() => {
-    console.log('Input area focused - ready for Keyboard Maestro paste');
-  }).catch(error => {
-    console.error('Automation failed:', error);
-  });
-}
+        const editorElement = document.querySelector('.ProseMirror');
+        if (!editorElement) {
+          console.error('Claude editor element not found');
+          return reject('Editor element not found');
+        }
+        editorElement.focus();
+        editorElement.innerHTML = ''; // Clear
 
-window.enableResearchMode = function() {
-  return new Promise((resolve, reject) => {
-    try {
-      console.log('Attempting to enable Research mode...');
-      
-      // Method 1: Find by text content
-      const allButtons = Array.from(document.querySelectorAll('button'));
-      const researchButton = allButtons.find(button => 
-        button.textContent.includes('Research')
-      );
-      
-      if (researchButton) {
-        console.log('Research button found, clicking...');
-        researchButton.click();
-        setTimeout(resolve, 500);
-        return;
-      }
-      
-      // Method 2: Try finding by the beta tag
-      const betaTags = Array.from(document.querySelectorAll('.uppercase'));
-      const researchBetaParent = betaTags.find(tag => 
-        tag.textContent.includes('beta')
-      )?.closest('button');
-      
-      if (researchBetaParent) {
-        console.log('Research button found via beta tag, clicking...');
-        researchBetaParent.click();
-        setTimeout(resolve, 500);
-        return;
-      }
-      
-      reject('Research button not found');
-    } catch (error) {
-      reject(`Error enabling research mode: ${error}`);
-    }
-  });
-}
+        const lines = messageText.split('\n');
+        lines.forEach(line => {
+          const p = document.createElement('p');
+          p.textContent = line || '\u00A0';
+          editorElement.appendChild(p);
+        });
 
-window.focusInputArea = function() {
-  return new Promise((resolve, reject) => {
-    try {
-      // Check if we're on a login page first
-      if (window.location.href.includes('login') || window.location.href.includes('sign')) {
-        console.warn('Authentication required - on login page');
-        reject('Authentication required - please log in to Claude first');
-        return;
-      }
-      
-      const editor = tryFind('.ProseMirror', 'Claude editor');
-      if (!editor) {
-        // Try alternative selectors for the input area
-        const alternativeSelectors = [
-          '[contenteditable="true"]',
-          'div[role="textbox"]',
-          'textarea[placeholder*="Message"]',
-          'textarea[placeholder*="Type"]',
-          'div.prose'
-        ];
-        
-        let foundElement = null;
-        for (const selector of alternativeSelectors) {
-          foundElement = tryFind(selector, `Alternative input (${selector})`);
-          if (foundElement) {
-            console.log(`Found alternative input element: ${selector}`);
-            foundElement.focus();
-            console.log('Alternative input focused - ready for paste');
+        const inputEvent = new Event('input', { bubbles: true });
+        editorElement.dispatchEvent(inputEvent);
+
+        setTimeout(() => {
+          const sendButton = document.querySelector('button[data-testid="send-button"]');
+          if (!sendButton) {
+            // Fallback for different versions
+            const alternativeButton = document.querySelector('button[aria-label="Send message"]');
+            if(!alternativeButton) {
+                return reject('Send button not found');
+            }
+            if (alternativeButton.disabled) {
+                return reject('Send button is disabled');
+            }
+            alternativeButton.click();
             resolve();
             return;
           }
-        }
-        
-        reject('Editor element not found - Claude UI may have changed');
-        return;
-      }
-      
-      console.log('Found editor, focusing it for paste...');
-      editor.focus();
-      console.log('Editor focused - ready for paste');
-      resolve();
-      
+          if (sendButton.disabled) {
+            return reject('Send button is disabled');
+          }
+          sendButton.click();
+          resolve();
+        }, 500);
     } catch (error) {
-      reject(`Error focusing input area: ${error}`);
+        console.error(`Error in automateClaudeInteraction: ${error}`);
+        reject(`Error adding text or sending: ${error}`);
     }
   });
 }

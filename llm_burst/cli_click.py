@@ -154,6 +154,12 @@ def _provider_from_str(raw: str) -> LLMProvider:
     type=str,
     help="Chrome tab-group name.",
 )
+@click.option(
+    "--gui-prompt/--no-gui-prompt",
+    default=False,
+    show_default=True,
+    help="Show GUI dialog for missing fields (default: off)",
+)
 def cmd_open(
     provider: Optional[str],
     task_name: Optional[str],
@@ -161,8 +167,10 @@ def cmd_open(
     stdin: bool,
     force_new: bool,
     group_name: Optional[str],
+    gui_prompt: bool,
 ) -> None:
     """Open a new LLM window (or re-attach) and optionally send a prompt."""
+    prune_stale_sessions_sync()
     from llm_burst.chrome_bootstrap import ensure_remote_debugging  # Added
     ensure_remote_debugging()  # Added
 
@@ -172,7 +180,7 @@ def cmd_open(
         or (task_name is None and not force_new)
         or (prompt_text is None and not stdin)
     ):
-        user_data = prompt_user()
+        user_data = prompt_user(gui=gui_prompt)
         provider = provider or user_data.get("provider")
         task_name = task_name or user_data.get("task_name") or user_data.get("task")
         prompt_text = (
@@ -242,14 +250,31 @@ def cmd_open(
 @click.option("-s", "--stdin", is_flag=True, help="Read prompt text from STDIN.")
 @click.option("-r", "--research", is_flag=True, help="Enable research/deep mode.")
 @click.option("-i", "--incognito", is_flag=True, help="Enable incognito/private mode.")
+@click.option(
+    "-l",
+    "--layout",
+    type=click.Choice(["cdp", "none"], case_sensitive=False),
+    default=lambda: os.getenv("LLM_BURST_LAYOUT", "cdp"),
+    show_default=True,
+    help="Window arrangement strategy after activation.",
+)
+@click.option(
+    "--gui-prompt/--no-gui-prompt",
+    default=False,
+    show_default=True,
+    help="Show GUI dialog for missing fields (default: off)",
+)
 def cmd_activate(
     session_title: str | None,
     prompt_text: str | None,
     stdin: bool,
     research: bool,
     incognito: bool,
+    layout: str,
+    gui_prompt: bool,
 ) -> None:
     """Open 4 LLM tabs and send the same prompt (⌃⌥R replacement)."""
+    prune_stale_sessions_sync()
     from llm_burst.chrome_bootstrap import ensure_remote_debugging  # Added
     ensure_remote_debugging()  # Added
 
@@ -260,7 +285,7 @@ def cmd_activate(
     # 1️⃣ Gather any missing fields from swiftDialog
     if prompt_text is None and not stdin:
         try:
-            data = prompt_user()
+            data = prompt_user(gui=gui_prompt)
             prompt_text = (
                 prompt_text
                 or data.get("Prompt Text")
@@ -395,7 +420,7 @@ def cmd_activate(
     click.echo(f"✓ Session '{session_title}' activated with {len(opened)} provider(s)")
 
     # Arrange windows unless research mode is requested
-    if not research and len(opened) > 1:
+    if not research and len(opened) > 1 and layout.lower() != "none":
         try:
             from llm_burst.layout import arrange
 
@@ -441,8 +466,14 @@ def cmd_stop(task_names: tuple[str, ...], stop_all: bool) -> None:
 @click.option("-t", "--title", "session_title", type=str, help="Session title.")
 @click.option("-m", "--prompt-text", type=str, help="Prompt text for follow-up.")
 @click.option("-s", "--stdin", is_flag=True, help="Read prompt from STDIN.")
+@click.option(
+    "--gui-prompt/--no-gui-prompt",
+    default=False,
+    show_default=True,
+    help="Show GUI dialog for missing fields (default: off)",
+)
 def cmd_follow_up(
-    session_title: str | None, prompt_text: str | None, stdin: bool
+    session_title: str | None, prompt_text: str | None, stdin: bool, gui_prompt: bool
 ) -> None:
     """Send a follow-up prompt to every provider tab in the session."""
     prune_stale_sessions_sync()
@@ -485,7 +516,7 @@ def cmd_follow_up(
     if stdin:
         prompt_text = sys.stdin.read()
     if prompt_text is None:
-        data = prompt_user()
+        data = prompt_user(gui=gui_prompt)
         prompt_text = data.get("Prompt Text") or data.get("prompt")
     if not prompt_text or not prompt_text.strip():
         raise click.UsageError("Prompt text is required.")
@@ -516,9 +547,20 @@ def cmd_follow_up(
     show_default=True,
     help="Maximum number of windows to arrange.",
 )
-def cmd_arrange(max_windows: int) -> None:
-    """Arrange ungrouped LLM windows into a grid via Rectangle.app."""
+@click.option(
+    "-l",
+    "--layout",
+    type=click.Choice(["cdp", "none"], case_sensitive=False),
+    default=lambda: os.getenv("LLM_BURST_LAYOUT", "cdp"),
+    show_default=True,
+    help="Window arrangement strategy.",
+)
+def cmd_arrange(max_windows: int, layout: str) -> None:
+    """Arrange ungrouped LLM windows into a grid via Chrome CDP."""
     prune_stale_sessions_sync()
+    if layout.lower() == "none":
+        click.echo("Layout disabled (layout=none). Skipping arrangement.")
+        return
     try:
         from llm_burst.layout import arrange
 

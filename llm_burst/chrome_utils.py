@@ -81,39 +81,27 @@ def quit_chrome(pids: Iterable[int]) -> bool:
     if not pids:
         return True
 
-    # First try graceful quit via AppleScript
+    # Graceful quit without AppleScript to avoid macOS alerts/errors.
     try:
-        subprocess.run(
-            ["osascript", "-e", 'tell application "Google Chrome" to quit'],
-            capture_output=True,
-            check=False,  # Don't raise on non-zero exit
-            timeout=5,
-        )
-
-        # Give Chrome more time to quit gracefully with large profiles
-        time.sleep(3)
-
-        # Check if processes are still running and force kill if needed
+        # First attempt: SIGTERM then SIGKILL if still running.
         for pid in pids:
             try:
-                os.kill(pid, 0)  # Check if process exists
-                # Still running, try SIGTERM
-                os.kill(pid, 15)
-                time.sleep(1)
-                # Check again and force kill if still running
-                try:
-                    os.kill(pid, 0)
-                    os.kill(pid, 9)  # SIGKILL
-                except ProcessLookupError:
-                    pass
+                os.kill(pid, 15)  # SIGTERM
             except ProcessLookupError:
-                pass  # Already gone, good
-
-        # Wait a bit more to ensure profile is released
+                pass
         time.sleep(2)
-        return True
 
-    except (subprocess.SubprocessError, OSError):
+        # Escalate to SIGKILL where needed
+        for pid in pids:
+            try:
+                os.kill(pid, 0)
+                os.kill(pid, 9)  # SIGKILL
+            except ProcessLookupError:
+                pass
+
+        time.sleep(1)
+        return True
+    except OSError:
         return False
 
 
