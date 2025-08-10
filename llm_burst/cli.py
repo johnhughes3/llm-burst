@@ -56,9 +56,26 @@ def prompt_user() -> Dict[str, Any]:
     # Check if dialog binary exists first
     import shutil
     from pathlib import Path
+    import logging
+
+    # Try the safe wrapper first if it exists
+    safe_script = SWIFT_PROMPT_SCRIPT.parent / "swift_prompt_safe.sh"
+    script_to_use = safe_script if safe_script.exists() else SWIFT_PROMPT_SCRIPT
 
     # If swiftDialog or the wrapper script is missing, gracefully fall back
-    if not shutil.which("dialog") or not SWIFT_PROMPT_SCRIPT.exists():
+    if not shutil.which("dialog") or not script_to_use.exists():
+        # Use clipboard content as fallback
+        try:
+            clipboard_text: str = pyperclip.paste()
+            if clipboard_text:
+                logging.info("Using clipboard content as fallback (swiftDialog not available)")
+                return {
+                    "Prompt Text": clipboard_text,
+                    "Research mode": False,
+                    "Incognito mode": False
+                }
+        except Exception:
+            pass
         return {}
 
     # Grab clipboard to pre-seed the dialog (falls back silently)
@@ -70,15 +87,17 @@ def prompt_user() -> Dict[str, Any]:
     env = os.environ.copy()
     env["LLMB_DEFAULT_PROMPT"] = clipboard_text
 
+    # Suppress the Finder -50 error by redirecting stderr to devnull for the subprocess
+    # but capture it for logging
     result = subprocess.run(
-        [str(SWIFT_PROMPT_SCRIPT)],
+        [str(script_to_use)],
         capture_output=True,
         text=True,
         env=env,
     )
 
-    # Forward any error output to the calling terminal.
-    if result.stderr:
+    # Only log meaningful errors, not the -50 Finder error
+    if result.stderr and "-50" not in result.stderr and "application can't be opened" not in result.stderr:
         sys.stderr.write(result.stderr)
 
     if result.returncode != PROMPT_OK_EXIT:

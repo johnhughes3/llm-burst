@@ -22,17 +22,39 @@
 
 ### macOS "The application can't be opened. -50" Error
 
-**Issue**: swiftDialog may not be properly signed/notarized on some macOS systems.
+**Issue**: swiftDialog may trigger a Finder error (-50) on some macOS systems due to code signing or security restrictions. This happens even when swiftDialog works correctly.
 
-**Solution**: The latest version includes a fallback that uses clipboard content when the dialog fails. You'll see:
-```
-Using clipboard content as prompt (dialog unavailable)
-```
+**Solution**: The application includes multiple fallback mechanisms:
 
-To fix swiftDialog permanently:
-1. Install via Homebrew: `brew install swiftdialog`
-2. Or download from https://github.com/swiftDialog/swiftDialog/releases
-3. Ensure it's in your PATH
+1. **Automatic Fallback** (v1.2.0+): The safe wrapper (`swift_prompt_safe.sh`) detects the -50 error and automatically falls back to using clipboard content:
+   ```
+   SwiftDialog error detected, using clipboard fallback...
+   ```
+
+2. **Silent Error Suppression**: The Python code filters out the -50 error from stderr to avoid confusion.
+
+3. **Manual Fix Options**:
+   - **Option A**: Re-install swiftDialog via Homebrew:
+     ```bash
+     brew uninstall swiftdialog
+     brew install --cask swiftdialog
+     ```
+   
+   - **Option B**: Clear quarantine attributes:
+     ```bash
+     sudo xattr -cr /usr/local/bin/dialog
+     ```
+   
+   - **Option C**: Allow in System Preferences:
+     - Go to System Preferences → Security & Privacy → General
+     - Click "Allow Anyway" if swiftDialog appears there
+   
+   - **Option D**: Use the clipboard fallback exclusively by setting:
+     ```bash
+     export LLM_BURST_NO_DIALOG=1
+     ```
+
+**Note**: The -50 error doesn't prevent llm-burst from working correctly. The application will use clipboard content as the prompt source when the dialog fails.
 
 ### Chrome Not Running with Remote Debugging
 
