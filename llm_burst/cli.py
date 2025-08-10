@@ -24,33 +24,134 @@ from typing import Any, Dict, Union, Optional
 from uuid import uuid4
 
 from .constants import (
-    PROMPT_OK_EXIT,
     PROMPT_CANCEL_EXIT,
     LLMProvider,
 )
 from .browser import BrowserAdapter, SessionHandle
 
 
+def _run_jxa_prompt(clipboard_text: str = "") -> Dict[str, Any] | None:
+    """
+    Run JXA (JavaScript for Automation) dialog using native macOS AppKit.
+    
+    Returns dict with prompt data on success, None on failure/cancel.
+    """
+    jxa_script = '''
+    ObjC.import('AppKit');
+    ObjC.import('stdlib');
+    
+    // Activate app to bring dialog to front
+    $.NSApplication.sharedApplication.activateIgnoringOtherApps(true);
+    
+    // Get clipboard text if not provided
+    var clipboardText = arguments[0] || '';
+    if (!clipboardText) {
+        var pb = $.NSPasteboard.generalPasteboard;
+        var clipData = pb.stringForType($.NSPasteboardTypeString) || 
+                       pb.stringForType($('public.utf8-plain-text'));
+        clipboardText = clipData ? clipData.toString() : '';
+    }
+    
+    // Create alert
+    var alert = $.NSAlert.alloc.init;
+    alert.messageText = 'Start LLM Burst';
+    alert.informativeText = 'Please confirm your prompt from clipboard:\\n\\nKeyboard shortcuts: Press ⌘↩ (Cmd+Return) to submit';
+    alert.addButtonWithTitle('OK');
+    alert.addButtonWithTitle('Cancel');
+    
+    // Create text view for multiline input
+    var scrollView = $.NSScrollView.alloc.initWithFrame($.NSMakeRect(0, 0, 450, 200));
+    scrollView.hasVerticalScroller = true;
+    scrollView.hasHorizontalScroller = false;
+    scrollView.borderType = $.NSBezelBorder;
+    
+    var textView = $.NSTextView.alloc.initWithFrame($.NSMakeRect(0, 0, 450, 200));
+    textView.string = clipboardText;
+    textView.editable = true;
+    textView.selectable = true;
+    textView.richText = false;
+    textView.font = $.NSFont.systemFontOfSize(13);
+    
+    scrollView.documentView = textView;
+    
+    // Create checkboxes
+    var containerView = $.NSView.alloc.initWithFrame($.NSMakeRect(0, 0, 450, 250));
+    
+    var researchCheck = $.NSButton.alloc.initWithFrame($.NSMakeRect(0, 210, 200, 18));
+    researchCheck.setButtonType($.NSSwitchButton);
+    researchCheck.title = 'Research mode';
+    researchCheck.state = $.NSOffState;
+    
+    var incognitoCheck = $.NSButton.alloc.initWithFrame($.NSMakeRect(0, 230, 200, 18));
+    incognitoCheck.setButtonType($.NSSwitchButton);
+    incognitoCheck.title = 'Incognito mode';
+    incognitoCheck.state = $.NSOffState;
+    
+    containerView.addSubview(scrollView);
+    containerView.addSubview(researchCheck);
+    containerView.addSubview(incognitoCheck);
+    
+    alert.accessoryView = containerView;
+    
+    // Show dialog
+    var response = alert.runModal();
+    
+    if (response === $.NSAlertSecondButtonReturn) {
+        // Cancel button
+        $.exit(1);
+    }
+    
+    // Return JSON result
+    var result = {
+        "Prompt Text": textView.string.toString(),
+        "Research mode": researchCheck.state === $.NSOnState,
+        "Incognito mode": incognitoCheck.state === $.NSOnState
+    };
+    
+    console.log(JSON.stringify(result));
+    '''
+    
+    try:
+        result = subprocess.run(
+            ["/usr/bin/osascript", "-l", "JavaScript", "-e", jxa_script, "--", clipboard_text],
+            capture_output=True,
+            text=True,
+            timeout=300  # 5 minute timeout
+        )
+        
+        if result.returncode == 0 and result.stdout:
+            return json.loads(result.stdout.strip())
+        elif result.returncode == 1:
+            # User cancelled - return special marker
+            return {"__cancelled__": True}
+        else:
+            # Some other error
+            if result.stderr:
+                print(f"JXA dialog error: {result.stderr}", file=sys.stderr)
+            return None
+    except (subprocess.TimeoutExpired, json.JSONDecodeError, Exception) as e:
+        print(f"JXA dialog failed: {e}", file=sys.stderr)
+        return None
+
+
 def prompt_user(gui: bool | None = None) -> Dict[str, Any]:
     """
-    Launch the swiftDialog prompt and return the user's input.
+    Launch a native macOS prompt and return the user's input.
 
     Returns
     -------
     dict
-        The JSON data produced by swiftDialog, parsed into a dictionary.
+        The JSON data with user input, parsed into a dictionary.
 
     Side Effects
     ------------
     - If the user cancels (non-zero exit code) the current process terminates
       with PROMPT_CANCEL_EXIT.
-    - Any stderr emitted by the shell script is forwarded to this program's
-      stderr to aid debugging.
 
     Raises
     ------
-    FileNotFoundError
-        If swiftDialog is not installed.
+    SystemExit
+        If the user cancels the dialog.
     """
     # Decide whether to use GUI prompt
     if gui is None:
@@ -79,116 +180,34 @@ def prompt_user(gui: bool | None = None) -> Dict[str, Any]:
         # Nothing sensible to return – behave like cancel/missing dialog
         return {}
 
-    # Check if dialog binary exists first
-    import shutil
-    import tempfile
-
-    dlg = shutil.which("dialog")
-    if not dlg:
-        try:
-            clipboard_text: str = pyperclip.paste()
-            if clipboard_text:
-                print(
-                    "Using clipboard content as fallback (swiftDialog not available)",
-                    file=sys.stderr,
-                )
-                return {
-                    "Prompt Text": clipboard_text,
-                    "Research mode": False,
-                    "Incognito mode": False,
-                }
-        except Exception:
-            pass
-        return {}
-
-    # Grab clipboard to pre-seed the dialog (falls back silently)
+    # Grab clipboard to pre-seed the dialog
     try:
         clipboard_text: str = pyperclip.paste()
     except Exception:
         clipboard_text = ""
 
-    dialog_config = {
-        "title": "Start LLM Burst",
-        "width": 600,
-        "height": 420,
-        "message": "Please confirm your prompt from clipboard:\n\n**Keyboard shortcuts:** Press ⌘↩ (Cmd+Return) to submit",
-        "messagefont": "size=14",
-        "textfield": [
-            {
-                "title": "Prompt Text",
-                "editor": True,
-                "required": True,
-                "value": clipboard_text,
-            }
-        ],
-        "checkbox": [
-            {"label": "Research mode", "checked": False},
-            {"label": "Incognito mode", "checked": False},
-        ],
-        "button1text": "OK",
-        "button1action": "return",
-        "button2text": "Cancel",
-        "hidetimerbar": True,
-        "moveable": True,
-    }
-
-    # Create temp config file with proper cleanup
-    tmp_config_path = None
-    log_path: str | None = None
-    try:
-        with tempfile.NamedTemporaryFile(
-            mode="w", delete=False, suffix=".json"
-        ) as tmp_config:
-            json.dump(dialog_config, tmp_config)
-            tmp_config_path = tmp_config.name
-
-        # Call dialog CLI directly using the full path from which()
-        # Route stderr to a temp log file so failures can be inspected without
-        # printing benign macOS LSOpen (-50) warnings to the terminal.
-        with tempfile.NamedTemporaryFile(
-            mode="w", delete=False, suffix=".log", prefix="llm-burst-dialog-"
-        ) as err_log:
-            log_path = err_log.name
-            result = subprocess.run(
-                [dlg, "--jsonfile", tmp_config_path, "--json"],
-                stdout=subprocess.PIPE,
-                stderr=err_log,
-                text=True,
-            )
-    finally:
-        # Always clean up temp file, even if subprocess fails
-        if tmp_config_path and os.path.exists(tmp_config_path):
-            try:
-                os.unlink(tmp_config_path)
-            except Exception:
-                pass
-
-    # If the dialog failed, keep the stderr log and surface the path.
-    # Otherwise, only keep it when explicitly requested via env.
-    keep_log = os.getenv("LLM_BURST_DEBUG_DIALOG", "").lower() in {"1", "true", "yes"}
-    if result.returncode != PROMPT_OK_EXIT and log_path:
-        sys.stderr.write(
-            f"swiftDialog failed (exit {result.returncode}); stderr saved to {log_path}\n"
+    # Try native JXA dialog first (most reliable on macOS)
+    jxa_result = _run_jxa_prompt(clipboard_text)
+    if jxa_result is not None:
+        # Check if user cancelled
+        if jxa_result.get("__cancelled__"):
+            sys.exit(PROMPT_CANCEL_EXIT)
+        return jxa_result
+    
+    # JXA failed - fall back to clipboard if available
+    if clipboard_text:
+        print(
+            "Using clipboard content as fallback (native dialog unavailable)",
+            file=sys.stderr,
         )
-    elif log_path and not keep_log:
-        try:
-            os.unlink(log_path)
-        except Exception:
-            pass
-
-    if result.returncode != PROMPT_OK_EXIT:
-        # User cancelled or an error occurred.
-        sys.exit(PROMPT_CANCEL_EXIT)
-
-    try:
-        return json.loads(result.stdout)
-    except json.JSONDecodeError as exc:
-        # Malformed JSON is treated as an error / cancel.
-        sys.stderr.write(f"Failed to parse JSON from swiftDialog: {exc}\n")
-        sys.stderr.write(f"Raw output was: {repr(result.stdout)}\n")
-        if log_path and os.path.exists(log_path):
-            sys.stderr.write(f"swiftDialog stderr saved to {log_path}\n")
-        sys.exit(PROMPT_CANCEL_EXIT)
+        return {
+            "Prompt Text": clipboard_text,
+            "Research mode": False,
+            "Incognito mode": False,
+        }
+    
+    # No clipboard content and dialog failed - treat as cancel
+    sys.exit(PROMPT_CANCEL_EXIT)
 
 
 def prune_stale_sessions_sync() -> int:
@@ -230,7 +249,7 @@ def open_llm_window(task_name: str, provider: LLMProvider) -> SessionHandle:
     ensure_remote_debugging()
 
     # Generate placeholder if caller supplied no explicit name
-    if task_name is None:  # type: ignore[arg-type]
+    if task_name is None:
         task_name = _generate_placeholder(provider)
 
     return asyncio.run(_async_open_window(task_name, provider))
