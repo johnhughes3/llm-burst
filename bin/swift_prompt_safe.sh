@@ -24,6 +24,23 @@ clipboard_contents() {
   fi
 }
 
+# ---------- honour env toggle -------------------------------------------------
+
+# When LLM_BURST_NO_DIALOG is set (1/true/yes), skip swiftDialog entirely and
+# return clipboard-based JSON so the Python CLI can proceed non-interactively.
+NO_DIALOG=${LLM_BURST_NO_DIALOG:-}
+if [[ "$NO_DIALOG" == "1" || "$NO_DIALOG" == "true" || "$NO_DIALOG" == "TRUE" || "$NO_DIALOG" == "yes" || "$NO_DIALOG" == "YES" ]]; then
+  PROMPT_TEXT=$(clipboard_contents)
+  cat <<EOF
+{
+  "Prompt Text": $(printf '%s' "$PROMPT_TEXT" | jq -Rs .),
+  "Research mode": false,
+  "Incognito mode": false
+}
+EOF
+  exit 0
+fi
+
 # ---------- dependency check --------------------------------------------------
 
 DIALOG_BIN=$(command -v dialog || true)
@@ -39,34 +56,6 @@ if [[ -n "${LLMB_DEFAULT_PROMPT:-}" ]]; then
 else
   PROMPT_TEXT=$(clipboard_contents)
 fi
-
-# ---------- Test if swiftDialog actually works -------------------------------
-
-# Try a simple test dialog to see if we get the -50 error
-TEST_RESULT=$(mktemp)
-set +e
-"$DIALOG_BIN" --title "Test" --message "Testing" --button1text "OK" --hidetimerbar --json 2>"$TEST_RESULT" 1>/dev/null
-TEST_EXIT=$?
-set -e
-
-# Check if we got the -50 error
-if grep -q "application can't be opened" "$TEST_RESULT" 2>/dev/null || grep -q "\-50" "$TEST_RESULT" 2>/dev/null; then
-  rm -f "$TEST_RESULT"
-  
-  # swiftDialog is broken, use fallback
-  echo "SwiftDialog error detected, using clipboard fallback..." >&2
-  
-  # Output a minimal JSON response using clipboard content
-  cat <<EOF
-{
-  "Prompt Text": $(printf '%s' "$PROMPT_TEXT" | jq -Rs .),
-  "Research mode": false,
-  "Incognito mode": false
-}
-EOF
-  exit 0
-fi
-rm -f "$TEST_RESULT"
 
 # ---------- Normal swiftDialog operation -------------------------------------
 

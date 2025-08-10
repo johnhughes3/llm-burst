@@ -369,6 +369,19 @@ class StateManager:
     def list_sessions(self) -> Dict[str, MultiProviderSession]:
         return dict(self._multi_sessions)
 
+    def remove_session(self, title: str) -> None:
+        """Remove a multi-provider session."""
+        if title in self._multi_sessions:
+            del self._multi_sessions[title]
+            self._persist()
+
+    def update_session_tabs(self, title: str, tabs: Dict[LLMProvider, TabHandle]) -> None:
+        """Update the tabs of a multi-provider session."""
+        sess = self._multi_sessions.get(title)
+        if sess:
+            sess.tabs = tabs
+            self._persist()
+
     def set_grouped(self, title: str, grouped: bool) -> None:
         sess = self._multi_sessions.get(title)
         if sess:

@@ -58,6 +58,22 @@ def prompt_user() -> Dict[str, Any]:
     from pathlib import Path
     import logging
 
+    # Honour explicit opt-out: skip dialog entirely when requested
+    no_dialog = os.getenv("LLM_BURST_NO_DIALOG", "").lower() in {"1", "true", "yes"}
+    if no_dialog:
+        try:
+            clipboard_text: str = pyperclip.paste()
+        except Exception:
+            clipboard_text = ""
+        if clipboard_text:
+            return {
+                "Prompt Text": clipboard_text,
+                "Research mode": False,
+                "Incognito mode": False,
+            }
+        # Nothing sensible to return – behave like cancel/missing dialog
+        return {}
+
     # Try the safe wrapper first if it exists
     safe_script = SWIFT_PROMPT_SCRIPT.parent / "swift_prompt_safe.sh"
     script_to_use = safe_script if safe_script.exists() else SWIFT_PROMPT_SCRIPT
@@ -87,8 +103,7 @@ def prompt_user() -> Dict[str, Any]:
     env = os.environ.copy()
     env["LLMB_DEFAULT_PROMPT"] = clipboard_text
 
-    # Suppress the Finder -50 error by redirecting stderr to devnull for the subprocess
-    # but capture it for logging
+    # Invoke the prompt wrapper; capture output for filtering
     result = subprocess.run(
         [str(script_to_use)],
         capture_output=True,
@@ -96,8 +111,13 @@ def prompt_user() -> Dict[str, Any]:
         env=env,
     )
 
-    # Only log meaningful errors, not the -50 Finder error
-    if result.stderr and "-50" not in result.stderr and "application can't be opened" not in result.stderr:
+    # Only log meaningful errors, not the Finder -50 or safe-wrapper fallback notice
+    if (
+        result.stderr
+        and "-50" not in result.stderr
+        and "application can't be opened" not in result.stderr
+        and "SwiftDialog error detected" not in result.stderr
+    ):
         sys.stderr.write(result.stderr)
 
     if result.returncode != PROMPT_OK_EXIT:
@@ -111,6 +131,20 @@ def prompt_user() -> Dict[str, Any]:
         sys.stderr.write(f"Failed to parse JSON from swiftDialog: {exc}\n")
         sys.stderr.write(f"Raw output was: {repr(result.stdout)}\n")
         sys.exit(PROMPT_CANCEL_EXIT)
+
+
+def prune_stale_sessions_sync() -> int:
+    """Synchronous wrapper to prune stale sessions."""
+    # Ensure Chrome is ready (idempotent)
+    from llm_burst.chrome_bootstrap import ensure_remote_debugging
+    ensure_remote_debugging()
+    return asyncio.run(_async_prune_stale_sessions())
+
+
+async def _async_prune_stale_sessions() -> int:
+    from .browser import BrowserAdapter
+    async with BrowserAdapter() as adapter:
+        return await adapter.prune_stale_sessions()
 
 
 # --------------------------------------------------------------------------- #

@@ -86,9 +86,11 @@ def arrange(max_windows: int = 4) -> None:
         for sess, action in zip(ordered_sessions, layout):
             _LOG.debug("-> %s with window_id=%s", action, sess.window_id)
             _focus_window(sess.window_id)
+            # Wait for window to focus
+            time.sleep(0.3)
             rectangle_perform(action)
             # Slight delay ensures Rectangle processes the shortcut before focus changes
-            time.sleep(0.08)
+            time.sleep(0.3)
     except Exception as exc:
         # Fall back to CDP-based arrangement
         _LOG.warning("Rectangle failed (%s), trying CDP-based arrangement", exc)

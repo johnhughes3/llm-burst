@@ -57,7 +57,7 @@ def _show_relaunch_dialog() -> bool:
     Return True when the user confirms the relaunch, False otherwise.
 
     Preference order:
-    1. `swift_chrome_fix.sh` (swiftDialog GUI)
+    1. swiftDialog CLI (`dialog`)
     2. Interactive console fallback
     """
     # Honour non-interactive / auto mode
@@ -65,14 +65,31 @@ def _show_relaunch_dialog() -> bool:
     if auto_env in {"1", "true", "yes"}:
         return True
 
-    # GUI path when `dialog` is available
-    if shutil.which("dialog"):
+    # GUI path when `dialog` is available – call swiftDialog CLI directly
+    dlg = shutil.which("dialog")
+    if dlg:
         try:
-            res = subprocess.run([str(SWIFT_CHROME_FIX_SCRIPT)])
+            msg = (
+                "llm-burst needs to restart Google Chrome with remote debugging "
+                f"(port {CHROME_REMOTE_PORT}). Incognito windows will be lost."
+            )
+            res = subprocess.run(
+                [
+                    dlg,
+                    "--json",
+                    "--title",
+                    "Enable Chrome Remote Debugging",
+                    "--message",
+                    msg,
+                    "--button1text",
+                    "Relaunch",
+                    "--button1action",
+                    "return",
+                    "--button2text",
+                    "Cancel",
+                ]
+            )
             return res.returncode == 0
-        except FileNotFoundError:
-            # Script missing – fall back to console
-            pass
         except Exception:
             # Any runtime failure => fall back to console prompt
             pass

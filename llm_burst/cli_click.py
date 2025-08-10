@@ -38,6 +38,7 @@ from llm_burst.cli import (
     close_llm_window_sync,
     prompt_user,
     auto_name_sync,  # Added
+    prune_stale_sessions_sync,
 )
 
 _LOG = logging.getLogger(__name__)
@@ -87,6 +88,7 @@ def cli(ctx: click.Context, verbose: bool) -> None:  # noqa: D401  (Click demand
 )
 def cmd_list(output: str) -> None:
     """List running LLM sessions."""
+    prune_stale_sessions_sync()
     sessions = get_running_sessions()
 
     if output == "json":
@@ -414,6 +416,7 @@ def cmd_activate(
 @click.option("-a", "--all", "stop_all", is_flag=True, help="Stop all sessions.")
 def cmd_stop(task_names: tuple[str, ...], stop_all: bool) -> None:
     """Close one or more running LLM windows."""
+    prune_stale_sessions_sync()
     sessions = get_running_sessions()
     if stop_all:
         targets = list(sessions.keys())
@@ -442,6 +445,7 @@ def cmd_follow_up(
     session_title: str | None, prompt_text: str | None, stdin: bool
 ) -> None:
     """Send a follow-up prompt to every provider tab in the session."""
+    prune_stale_sessions_sync()
     from llm_burst.state import StateManager
 
     state = StateManager()
@@ -514,6 +518,7 @@ def cmd_follow_up(
 )
 def cmd_arrange(max_windows: int) -> None:
     """Arrange ungrouped LLM windows into a grid via Rectangle.app."""
+    prune_stale_sessions_sync()
     try:
         from llm_burst.layout import arrange
 

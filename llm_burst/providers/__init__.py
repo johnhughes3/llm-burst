@@ -147,7 +147,7 @@ def get_injector(provider: LLMProvider):
                     pass
 
                 # Give the browser a brief moment to settle focus
-                await page.wait_for_timeout(100)
+                await page.wait_for_timeout(300)
                 
                 if clipboard_success:
                     await page.keyboard.press("Meta+V")
@@ -156,6 +156,7 @@ def get_injector(provider: LLMProvider):
                     # This is slower but works even if clipboard is unavailable.
                     await page.keyboard.insert_text(prompt)
                 
+                await page.wait_for_timeout(300)
                 await page.keyboard.press("Enter")
 
         return _claude_inject

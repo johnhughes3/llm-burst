@@ -126,6 +126,67 @@ class BrowserAdapter:
 
     # ---------------- Public API ---------------- #
 
+    async def prune_stale_sessions(self) -> int:
+        """
+        Identify and remove sessions from state that no longer have corresponding
+        browser windows/tabs open.
+
+        Returns the number of sessions/tabs pruned.
+        """
+        await self._ensure_connection()
+        if not self._browser:
+            return 0
+
+        # 1. Get all live target IDs from Chrome via CDP
+        cdp = await self._get_cdp_connection()
+        if not cdp:
+            return 0
+
+        try:
+            # Target.getTargets returns info about all pages, workers, etc.
+            targets_response = await cdp.send("Target.getTargets")
+            live_target_ids = {t["targetId"] for t in targets_response.get("targetInfos", []) if t.get("type") == "page"}
+        except Exception as e:
+            import logging
+            logging.getLogger(__name__).error("Failed to retrieve live targets via CDP: %s", e)
+            return 0
+
+        # 2. Compare with stored state and prune
+        pruned_count = 0
+        import logging
+        _LOG = logging.getLogger(__name__)
+
+        # Prune LiveSessions (v1/per-tab)
+        all_sessions = self._state.list_all()
+        for task_name, session in all_sessions.items():
+            if session.target_id not in live_target_ids:
+                _LOG.info("Pruning stale LiveSession: %s (target %s)", task_name, session.target_id)
+                self._state.remove(task_name)
+                pruned_count += 1
+
+        # Prune MultiProviderSessions (v2/session-level)
+        all_multi_sessions = self._state.list_sessions()
+        for session_title, multi_session in all_multi_sessions.items():
+            alive_tabs = {}
+            for provider, tab_handle in multi_session.tabs.items():
+                if tab_handle.tab_id in live_target_ids:
+                    alive_tabs[provider] = tab_handle
+                else:
+                     _LOG.info("Pruning stale tab in MultiProviderSession %s: %s (target %s)", session_title, provider.name, tab_handle.tab_id)
+
+            if not alive_tabs:
+                # If no tabs remain for this session, remove the whole session
+                _LOG.info("Pruning stale MultiProviderSession: %s (no live tabs)", session_title)
+                self._state.remove_session(session_title)
+            elif len(alive_tabs) != len(multi_session.tabs):
+                # Update session with only alive tabs
+                self._state.update_session_tabs(session_title, alive_tabs)
+
+        if pruned_count > 0:
+            self._state.persist_now()
+
+        return pruned_count
+
     async def open_window(
         self,
         task_name: str,
@@ -153,7 +214,7 @@ class BrowserAdapter:
             raise RuntimeError("Failed to obtain Playwright Page for new window")
 
         # 2. Navigate to the LLM landing URL.
-        await page.goto(LLM_URLS[provider], wait_until="domcontentloaded")
+        await page.goto(LLM_URLS[provider], wait_until="load")
 
         # 3. Determine chrome windowId for Rectangle integration.
         cdp = await self._get_cdp_connection()
