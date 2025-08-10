@@ -60,7 +60,7 @@ class LLMProvider(Enum):
 LLM_URLS: Final[dict[LLMProvider, str]] = {
     LLMProvider.GEMINI: "https://gemini.google.com/app",
     LLMProvider.CLAUDE: "https://claude.ai/new",
-    LLMProvider.CHATGPT: "https://chatgpt.com/?model=o3-pro",
+    LLMProvider.CHATGPT: "https://chatgpt.com/?model=gpt-5-pro",
     LLMProvider.GROK: "https://grok.com",
 }
 
