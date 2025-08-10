@@ -12,28 +12,8 @@ AppleScript paths and macOS permission prompts. This module exposes a single
 from __future__ import annotations
 
 import logging
-import subprocess
-import sys
-import time
-from typing import List
-
-from .state import StateManager, LiveSession
 
 _LOG = logging.getLogger(__name__)
-
-
-# --------------------------------------------------------------------------- #
-# macOS-specific window helpers                                               #
-# --------------------------------------------------------------------------- #
-
-def _focus_window(window_id: int) -> None:
-    """Deprecated: window focusing is no longer performed via AppleScript."""
-    raise RuntimeError("Window focusing via AppleScript has been removed")
-
-
-def _ungrouped_sessions(state: StateManager) -> List[LiveSession]:
-    """Return live sessions that are *not* inside a Chrome tab-group."""
-    return [s for s in state.list_all().values() if s.group_id is None]
 
 
 # --------------------------------------------------------------------------- #

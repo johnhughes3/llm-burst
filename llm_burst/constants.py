@@ -17,21 +17,10 @@ import os
 # Absolute path to the root of the project repository.
 PACKAGE_ROOT: Path = Path(__file__).resolve().parent.parent
 
-# Directory that houses executable helper scripts (removed - now using dialog CLI directly).
-# BIN_DIR: Path = PACKAGE_ROOT / "bin"  # No longer needed
-
-# Scripts removed - now calling swiftDialog CLI directly from Python
-# SWIFT_PROMPT_SCRIPT: Path = BIN_DIR / "swift_prompt.sh"  # Removed
-# SWIFT_CHROME_FIX_SCRIPT: Path = BIN_DIR / "swift_chrome_fix.sh"  # Removed
 
 # --------------------------------------------------------------------------- #
 # User-facing defaults
 # --------------------------------------------------------------------------- #
-
-# ICU-style date-time pattern used by the original Keyboard Maestro macro:
-#   %ICUDateTime%EEE, MMM d, yyyy h:mm%
-# The equivalent BSD/gnu-date pattern is used inside the shell script.
-KM_DATE_ICU_FORMAT: str = "%a, %b %-d, %Y %-H:%M"
 
 # --------------------------------------------------------------------------- #
 # Normalised exit codes for the prompt wrapper
