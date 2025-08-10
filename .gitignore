@@ -39,8 +39,5 @@ dist/
 state.json
 *.lock
 
-# Reference materials (temporary)
-reference/
-
 # Temporary documentation and planning
 docs/tmp/

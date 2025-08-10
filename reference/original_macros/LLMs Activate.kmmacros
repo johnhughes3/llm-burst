@@ -1,0 +1,2419 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<!DOCTYPE plist PUBLIC "-//Apple//DTD PLIST 1.0//EN" "http://www.apple.com/DTDs/PropertyList-1.0.dtd">
+<plist version="1.0">
+<array>
+	<dict>
+		<key>Activate</key>
+		<string>Normal</string>
+		<key>CreationDate</key>
+		<real>766205513.29118598</real>
+		<key>Macros</key>
+		<array>
+			<dict>
+				<key>Actions</key>
+				<array>
+					<dict>
+						<key>ActionUID</key>
+						<integer>3028</integer>
+						<key>MacroActionType</key>
+						<string>Comment</string>
+						<key>StyledText</key>
+						<data>
+						cnRmZAAAAAADAAAAAgAAAAcAAABU
+						WFQucnRmAQAAAC6YAAAAKwAAAAEA
+						AACQAAAAe1xydGYxXGFuc2lcYW5z
+						aWNwZzEyNTJcY29jb2FydGYyODIy
+						Clxjb2NvYXRleHRzY2FsaW5nMFxj
+						b2NvYXBsYXRmb3JtMHtcZm9udHRi
+						bH0Ke1xjb2xvcnRibDtccmVkMjU1
+						XGdyZWVuMjU1XGJsdWUyNTU7fQp7
+						XCpcZXhwYW5kZWRjb2xvcnRibDs7
+						fQp9AQAAACMAAAABAAAABwAAAFRY
+						VC5ydGYQAAAAv0D8Z7YBAAAAAAAA
+						AAAAAA==
+						</data>
+						<key>Title</key>
+						<string>Prompt Set Up</string>
+					</dict>
+					<dict>
+						<key>ActionUID</key>
+						<integer>2200</integer>
+						<key>MacroActionType</key>
+						<string>SetVariableToText</string>
+						<key>Text</key>
+						<string>%SystemClipboard%
+%|%</string>
+						<key>Variable</key>
+						<string>PromptText</string>
+					</dict>
+					<dict>
+						<key>ActionUID</key>
+						<integer>2618</integer>
+						<key>MacroActionType</key>
+						<string>SetVariableToText</string>
+						<key>Text</key>
+						<string>%ICUDateTime%EEE, MMM d, yyyy h:mm%</string>
+						<key>Variable</key>
+						<string>TaskName</string>
+					</dict>
+					<dict>
+						<key>ActionUID</key>
+						<integer>2201</integer>
+						<key>Buttons</key>
+						<array>
+							<dict>
+								<key>Button</key>
+								<string>OK</string>
+							</dict>
+							<dict>
+								<key>Button</key>
+								<string>Cancel</string>
+								<key>Cancel</key>
+								<true/>
+							</dict>
+						</array>
+						<key>MacroActionType</key>
+						<string>PromptForUserInput</string>
+						<key>Prompt</key>
+						<string>Please confirm your prompt.</string>
+						<key>TimeOutAbortsMacro</key>
+						<true/>
+						<key>Title</key>
+						<string>4 LLM Setup</string>
+						<key>Variables</key>
+						<array>
+							<dict>
+								<key>Default</key>
+								<string>%ICUDateTime%EEE, MMM d, yyyy h:mm% </string>
+								<key>Type</key>
+								<string>Automatic</string>
+								<key>Variable</key>
+								<string>TaskName</string>
+							</dict>
+							<dict>
+								<key>Default</key>
+								<string>%SystemClipboard%</string>
+								<key>Type</key>
+								<string>Automatic</string>
+								<key>Variable</key>
+								<string>PromptText</string>
+							</dict>
+							<dict>
+								<key>Default</key>
+								<string>No|Yes</string>
+								<key>Type</key>
+								<string>Menu</string>
+								<key>Variable</key>
+								<string>Research</string>
+							</dict>
+							<dict>
+								<key>Default</key>
+								<string>No|Yes</string>
+								<key>Type</key>
+								<string>Automatic</string>
+								<key>Variable</key>
+								<string>Incognito</string>
+							</dict>
+						</array>
+					</dict>
+					<dict>
+						<key>ActionUID</key>
+						<integer>13333</integer>
+						<key>JustDisplay</key>
+						<false/>
+						<key>MacroActionType</key>
+						<string>SetClipboardToText</string>
+						<key>StyledText</key>
+						<data>
+						cnRmZAAAAAADAAAAAgAAAAcAAABU
+						WFQucnRmAQAAAC6WAQAAKwAAAAEA
+						AACOAQAAe1xydGYxXGFuc2lcYW5z
+						aWNwZzEyNTJcY29jb2FydGYyODIy
+						Clxjb2NvYXRleHRzY2FsaW5nMFxj
+						b2NvYXBsYXRmb3JtMHtcZm9udHRi
+						bFxmMFxmc3dpc3NcZmNoYXJzZXQw
+						IEhlbHZldGljYTt9CntcY29sb3J0
+						Ymw7XHJlZDI1NVxncmVlbjI1NVxi
+						bHVlMjU1O1xyZWQwXGdyZWVuMFxi
+						bHVlMDt9CntcKlxleHBhbmRlZGNv
+						bG9ydGJsOztcY3NzcmdiXGMwXGMw
+						XGMwXGM4NDcwNlxjbmFtZSBjb250
+						cm9sVGV4dENvbG9yO30KXHBhcmRc
+						dHg1NjBcdHgxMTIwXHR4MTY4MFx0
+						eDIyNDBcdHgyODAwXHR4MzM2MFx0
+						eDM5MjBcdHg0NDgwXHR4NTA0MFx0
+						eDU2MDBcdHg2MTYwXHR4NjcyMFxw
+						YXJkaXJuYXR1cmFsXHBhcnRpZ2h0
+						ZW5mYWN0b3IwCgpcZjBcZnMyNiBc
+						Y2YyICVWYXJpYWJsZSVQcm9tcHRU
+						ZXh0JX0BAAAAIwAAAAEAAAAHAAAA
+						VFhULnJ0ZhAAAADlUR5otgEAAAAA
+						AAAAAAAA
+						</data>
+						<key>Text</key>
+						<string>%Variable%PromptText%</string>
+					</dict>
+					<dict>
+						<key>ActionUID</key>
+						<integer>3029</integer>
+						<key>MacroActionType</key>
+						<string>Comment</string>
+						<key>StyledText</key>
+						<data>
+						cnRmZAAAAAADAAAAAgAAAAcAAABU
+						WFQucnRmAQAAAC6YAAAAKwAAAAEA
+						AACQAAAAe1xydGYxXGFuc2lcYW5z
+						aWNwZzEyNTJcY29jb2FydGYyODIy
+						Clxjb2NvYXRleHRzY2FsaW5nMFxj
+						b2NvYXBsYXRmb3JtMHtcZm9udHRi
+						bH0Ke1xjb2xvcnRibDtccmVkMjU1
+						XGdyZWVuMjU1XGJsdWUyNTU7fQp7
+						XCpcZXhwYW5kZWRjb2xvcnRibDs7
+						fQp9AQAAACMAAAABAAAABwAAAFRY
+						VC5ydGYQAAAAv0D8Z7YBAAAAAAAA
+						AAAAAA==
+						</data>
+						<key>Title</key>
+						<string>Open Four Browser Windows and Load Chatbots</string>
+					</dict>
+					<dict>
+						<key>ActionUID</key>
+						<integer>2202</integer>
+						<key>DisplayKind</key>
+						<string>None</string>
+						<key>HonourFailureSettings</key>
+						<true/>
+						<key>IncludeStdErr</key>
+						<false/>
+						<key>IncludedVariables</key>
+						<array>
+							<string>9999</string>
+						</array>
+						<key>MacroActionType</key>
+						<string>ExecuteAppleScript</string>
+						<key>NotifyOnFailure</key>
+						<false/>
+						<key>Path</key>
+						<string></string>
+						<key>StopOnFailure</key>
+						<false/>
+						<key>Text</key>
+						<string>tell application "Safari"
+    make new document
+    set URL of document 1 to "https://gemini.google.com/app"
+    activate
+end tell</string>
+						<key>TimeOutAbortsMacro</key>
+						<true/>
+						<key>TrimResults</key>
+						<true/>
+						<key>TrimResultsNew</key>
+						<true/>
+						<key>UseText</key>
+						<true/>
+					</dict>
+					<dict>
+						<key>ActionUID</key>
+						<integer>2613</integer>
+						<key>DisplayKind</key>
+						<string>Variable</string>
+						<key>HonourFailureSettings</key>
+						<true/>
+						<key>IncludeStdErr</key>
+						<false/>
+						<key>IncludedVariables</key>
+						<array>
+							<string>9999</string>
+						</array>
+						<key>MacroActionType</key>
+						<string>ExecuteAppleScript</string>
+						<key>Path</key>
+						<string></string>
+						<key>Text</key>
+						<string>tell application "Safari"
+    set windowID to id of front window
+    return windowID
+end tell</string>
+						<key>TimeOutAbortsMacro</key>
+						<true/>
+						<key>TrimResults</key>
+						<true/>
+						<key>TrimResultsNew</key>
+						<true/>
+						<key>UseText</key>
+						<true/>
+						<key>Variable</key>
+						<string>GeminiWindowID</string>
+					</dict>
+					<dict>
+						<key>ActionUID</key>
+						<integer>2204</integer>
+						<key>KeyCode</key>
+						<integer>2</integer>
+						<key>MacroActionType</key>
+						<string>SimulateKeystroke</string>
+						<key>Modifiers</key>
+						<integer>6144</integer>
+						<key>ReleaseAll</key>
+						<false/>
+						<key>TargetApplication</key>
+						<dict/>
+						<key>TargetingType</key>
+						<string>Front</string>
+					</dict>
+					<dict>
+						<key>ActionUID</key>
+						<integer>2205</integer>
+						<key>DisplayKind</key>
+						<string>None</string>
+						<key>HonourFailureSettings</key>
+						<true/>
+						<key>IncludeStdErr</key>
+						<false/>
+						<key>IncludedVariables</key>
+						<array>
+							<string>9999</string>
+						</array>
+						<key>MacroActionType</key>
+						<string>ExecuteAppleScript</string>
+						<key>NotifyOnFailure</key>
+						<false/>
+						<key>Path</key>
+						<string></string>
+						<key>StopOnFailure</key>
+						<false/>
+						<key>Text</key>
+						<string>tell application "Safari"
+    make new document
+    set URL of document 1 to "https://claude.ai/new"
+    activate
+end tell</string>
+						<key>TimeOutAbortsMacro</key>
+						<true/>
+						<key>TrimResults</key>
+						<true/>
+						<key>TrimResultsNew</key>
+						<true/>
+						<key>UseText</key>
+						<true/>
+					</dict>
+					<dict>
+						<key>ActionUID</key>
+						<integer>2614</integer>
+						<key>DisplayKind</key>
+						<string>Variable</string>
+						<key>HonourFailureSettings</key>
+						<true/>
+						<key>IncludeStdErr</key>
+						<false/>
+						<key>IncludedVariables</key>
+						<array>
+							<string>9999</string>
+						</array>
+						<key>MacroActionType</key>
+						<string>ExecuteAppleScript</string>
+						<key>Path</key>
+						<string></string>
+						<key>Text</key>
+						<string>tell application "Safari"
+    set windowID to id of front window
+    return windowID
+end tell</string>
+						<key>TimeOutAbortsMacro</key>
+						<true/>
+						<key>TrimResults</key>
+						<true/>
+						<key>TrimResultsNew</key>
+						<true/>
+						<key>UseText</key>
+						<true/>
+						<key>Variable</key>
+						<string>ClaudeWindowID</string>
+					</dict>
+					<dict>
+						<key>ActionUID</key>
+						<integer>2207</integer>
+						<key>KeyCode</key>
+						<integer>3</integer>
+						<key>MacroActionType</key>
+						<string>SimulateKeystroke</string>
+						<key>Modifiers</key>
+						<integer>6144</integer>
+						<key>ReleaseAll</key>
+						<false/>
+						<key>TargetApplication</key>
+						<dict/>
+						<key>TargetingType</key>
+						<string>Front</string>
+					</dict>
+					<dict>
+						<key>ActionUID</key>
+						<integer>2208</integer>
+						<key>DisplayKind</key>
+						<string>None</string>
+						<key>HonourFailureSettings</key>
+						<true/>
+						<key>IncludeStdErr</key>
+						<false/>
+						<key>IncludedVariables</key>
+						<array>
+							<string>9999</string>
+						</array>
+						<key>MacroActionType</key>
+						<string>ExecuteAppleScript</string>
+						<key>NotifyOnFailure</key>
+						<false/>
+						<key>Path</key>
+						<string></string>
+						<key>StopOnFailure</key>
+						<false/>
+						<key>Text</key>
+						<string>tell application "Safari"	make new document	set URL of document 1 to "https://chatgpt.com/?model=o3-pro"	activateend tell</string>
+						<key>TimeOutAbortsMacro</key>
+						<true/>
+						<key>TrimResults</key>
+						<true/>
+						<key>TrimResultsNew</key>
+						<true/>
+						<key>UseText</key>
+						<true/>
+					</dict>
+					<dict>
+						<key>ActionUID</key>
+						<integer>2615</integer>
+						<key>DisplayKind</key>
+						<string>Variable</string>
+						<key>HonourFailureSettings</key>
+						<true/>
+						<key>IncludeStdErr</key>
+						<false/>
+						<key>IncludedVariables</key>
+						<array>
+							<string>9999</string>
+						</array>
+						<key>MacroActionType</key>
+						<string>ExecuteAppleScript</string>
+						<key>Path</key>
+						<string></string>
+						<key>Text</key>
+						<string>tell application "Safari"
+    set windowID to id of front window
+    return windowID
+end tell</string>
+						<key>TimeOutAbortsMacro</key>
+						<true/>
+						<key>TrimResults</key>
+						<true/>
+						<key>TrimResultsNew</key>
+						<true/>
+						<key>UseText</key>
+						<true/>
+						<key>Variable</key>
+						<string>ChatGPTWindowID</string>
+					</dict>
+					<dict>
+						<key>ActionUID</key>
+						<integer>2210</integer>
+						<key>KeyCode</key>
+						<integer>5</integer>
+						<key>MacroActionType</key>
+						<string>SimulateKeystroke</string>
+						<key>Modifiers</key>
+						<integer>6144</integer>
+						<key>ReleaseAll</key>
+						<false/>
+						<key>TargetApplication</key>
+						<dict/>
+						<key>TargetingType</key>
+						<string>Front</string>
+					</dict>
+					<dict>
+						<key>ActionUID</key>
+						<integer>2211</integer>
+						<key>DisplayKind</key>
+						<string>None</string>
+						<key>HonourFailureSettings</key>
+						<true/>
+						<key>IncludeStdErr</key>
+						<false/>
+						<key>IncludedVariables</key>
+						<array>
+							<string>9999</string>
+						</array>
+						<key>MacroActionType</key>
+						<string>ExecuteAppleScript</string>
+						<key>NotifyOnFailure</key>
+						<false/>
+						<key>Path</key>
+						<string></string>
+						<key>StopOnFailure</key>
+						<false/>
+						<key>Text</key>
+						<string>tell application "Safari"
+    make new document
+    set URL of document 1 to "https://grok.com"
+    activate
+end tell</string>
+						<key>TimeOutAbortsMacro</key>
+						<true/>
+						<key>TrimResults</key>
+						<true/>
+						<key>TrimResultsNew</key>
+						<true/>
+						<key>UseText</key>
+						<true/>
+					</dict>
+					<dict>
+						<key>ActionUID</key>
+						<integer>2616</integer>
+						<key>DisplayKind</key>
+						<string>Variable</string>
+						<key>HonourFailureSettings</key>
+						<true/>
+						<key>IncludeStdErr</key>
+						<false/>
+						<key>IncludedVariables</key>
+						<array>
+							<string>9999</string>
+						</array>
+						<key>MacroActionType</key>
+						<string>ExecuteAppleScript</string>
+						<key>Path</key>
+						<string></string>
+						<key>Text</key>
+						<string>tell application "Safari"
+    set windowID to id of front window
+    return windowID
+end tell</string>
+						<key>TimeOutAbortsMacro</key>
+						<true/>
+						<key>TrimResults</key>
+						<true/>
+						<key>TrimResultsNew</key>
+						<true/>
+						<key>UseText</key>
+						<true/>
+						<key>Variable</key>
+						<string>GrokWindowID</string>
+					</dict>
+					<dict>
+						<key>ActionUID</key>
+						<integer>2213</integer>
+						<key>KeyCode</key>
+						<integer>40</integer>
+						<key>MacroActionType</key>
+						<string>SimulateKeystroke</string>
+						<key>Modifiers</key>
+						<integer>6144</integer>
+						<key>ReleaseAll</key>
+						<false/>
+						<key>TargetApplication</key>
+						<dict/>
+						<key>TargetingType</key>
+						<string>Front</string>
+					</dict>
+					<dict>
+						<key>ActionUID</key>
+						<integer>3030</integer>
+						<key>MacroActionType</key>
+						<string>Comment</string>
+						<key>StyledText</key>
+						<data>
+						cnRmZAAAAAADAAAAAgAAAAcAAABU
+						WFQucnRmAQAAAC6YAAAAKwAAAAEA
+						AACQAAAAe1xydGYxXGFuc2lcYW5z
+						aWNwZzEyNTJcY29jb2FydGYyODIy
+						Clxjb2NvYXRleHRzY2FsaW5nMFxj
+						b2NvYXBsYXRmb3JtMHtcZm9udHRi
+						bH0Ke1xjb2xvcnRibDtccmVkMjU1
+						XGdyZWVuMjU1XGJsdWUyNTU7fQp7
+						XCpcZXhwYW5kZWRjb2xvcnRibDs7
+						fQp9AQAAACMAAAABAAAABwAAAFRY
+						VC5ydGYQAAAAv0D8Z7YBAAAAAAAA
+						AAAAAA==
+						</data>
+						<key>Title</key>
+						<string>Save Window IDs</string>
+					</dict>
+					<dict>
+						<key>ActionUID</key>
+						<integer>2621</integer>
+						<key>DisplayKind</key>
+						<string>None</string>
+						<key>HonourFailureSettings</key>
+						<true/>
+						<key>IncludeStdErr</key>
+						<false/>
+						<key>IncludedVariables</key>
+						<array>
+							<string>9999</string>
+						</array>
+						<key>MacroActionType</key>
+						<string>ExecuteAppleScript</string>
+						<key>Path</key>
+						<string></string>
+						<key>Text</key>
+						<string>-- First set Keyboard Maestro variable values to local variables
+tell application "Keyboard Maestro Engine"
+    set taskNameVar to getvariable "TaskName"
+    set geminiIDVar to getvariable "GeminiWindowID"
+    set claudeIDVar to getvariable "ClaudeWindowID"
+    set chatGPTIDVar to getvariable "ChatGPTWindowID"
+    set grokIDVar to getvariable "GrokWindowID"
+end tell
+
+-- Trim any trailing spaces from task name
+if taskNameVar ends with " " then
+    set taskNameVar to text 1 thru ((length of taskNameVar) - 1) of taskNameVar
+end if
+
+-- Path to the JSON file
+set jsonFilePath to (POSIX path of (path to home folder)) &amp; "Library/Application Support/Keyboard Maestro/ChatbotTasks.json"
+
+-- Get current timestamp for creation time
+set currentDate to do shell script "date +'%Y-%m-%d %H:%M:%S'"
+
+-- Create a Python script to handle the JSON manipulation
+set pythonScript to "
+import json
+import os
+
+json_file_path = '" &amp; jsonFilePath &amp; "'
+task_name = '" &amp; taskNameVar &amp; "'
+gemini_id = '" &amp; geminiIDVar &amp; "'
+claude_id = '" &amp; claudeIDVar &amp; "'
+chatgpt_id = '" &amp; chatGPTIDVar &amp; "'
+grok_id = '" &amp; grokIDVar &amp; "'
+current_date = '" &amp; currentDate &amp; "'
+
+# Create new task data
+new_task_data = {
+    'GeminiWindowID': gemini_id,
+    'ClaudeWindowID': claude_id,
+    'ChatGPTWindowID': chatgpt_id,
+    'GrokWindowID': grok_id,
+    'created_at': current_date
+}
+
+# Initialize with empty JSON if no file exists
+data = {}
+
+# Read existing data if file exists
+if os.path.exists(json_file_path):
+    try:
+        with open(json_file_path, 'r') as f:
+            data = json.load(f)
+    except json.JSONDecodeError:
+        # File exists but isn't valid JSON
+        data = {}
+
+# Add the new task
+data[task_name] = new_task_data
+
+# Set most_recent_task
+data['most_recent_task'] = task_name
+
+# Write back to file
+with open(json_file_path, 'w') as f:
+    json.dump(data, f, indent=2)
+"
+
+-- Execute the Python script
+do shell script "/usr/bin/python3 -c " &amp; quoted form of pythonScript</string>
+						<key>TimeOutAbortsMacro</key>
+						<true/>
+						<key>TrimResults</key>
+						<true/>
+						<key>TrimResultsNew</key>
+						<true/>
+						<key>UseText</key>
+						<true/>
+					</dict>
+					<dict>
+						<key>ActionUID</key>
+						<integer>8211</integer>
+						<key>IsDisclosed</key>
+						<false/>
+						<key>MacroActionType</key>
+						<string>Pause</string>
+						<key>Time</key>
+						<string>3</string>
+						<key>TimeOutAbortsMacro</key>
+						<true/>
+					</dict>
+					<dict>
+						<key>ActionUID</key>
+						<integer>3031</integer>
+						<key>MacroActionType</key>
+						<string>Comment</string>
+						<key>StyledText</key>
+						<data>
+						cnRmZAAAAAADAAAAAgAAAAcAAABU
+						WFQucnRmAQAAAC6YAAAAKwAAAAEA
+						AACQAAAAe1xydGYxXGFuc2lcYW5z
+						aWNwZzEyNTJcY29jb2FydGYyODIy
+						Clxjb2NvYXRleHRzY2FsaW5nMFxj
+						b2NvYXBsYXRmb3JtMHtcZm9udHRi
+						bH0Ke1xjb2xvcnRibDtccmVkMjU1
+						XGdyZWVuMjU1XGJsdWUyNTU7fQp7
+						XCpcZXhwYW5kZWRjb2xvcnRibDs7
+						fQp9AQAAACMAAAABAAAABwAAAFRY
+						VC5ydGYQAAAAv0D8Z7YBAAAAAAAA
+						AAAAAA==
+						</data>
+						<key>Title</key>
+						<string>Focus on Gemini, Submit Prompt</string>
+					</dict>
+					<dict>
+						<key>ActionUID</key>
+						<integer>2617</integer>
+						<key>DisplayKind</key>
+						<string>None</string>
+						<key>HonourFailureSettings</key>
+						<true/>
+						<key>IncludeStdErr</key>
+						<false/>
+						<key>IncludedVariables</key>
+						<array>
+							<string>9999</string>
+						</array>
+						<key>MacroActionType</key>
+						<string>ExecuteAppleScript</string>
+						<key>Path</key>
+						<string></string>
+						<key>Text</key>
+						<string>tell application "Keyboard Maestro Engine"
+    set taskNameVar to getvariable "TaskName"
+    set geminiIDVar to getvariable "GeminiWindowID"
+    set claudeIDVar to getvariable "ClaudeWindowID"
+    set chatGPTIDVar to getvariable "ChatGPTWindowID"
+    set grokIDVar to getvariable "GrokWindowID"
+    set promptTextVar to getvariable "PromptText"
+end tell
+
+-- Focus on the Gemini window directly using the variable we retrieved
+tell application "Safari"
+    set w to window id geminiIDVar
+    set current tab of w to tab 1 of w
+    set index of w to 1
+end tell</string>
+						<key>TimeOutAbortsMacro</key>
+						<true/>
+						<key>TrimResults</key>
+						<true/>
+						<key>TrimResultsNew</key>
+						<true/>
+						<key>UseText</key>
+						<true/>
+					</dict>
+					<dict>
+						<key>ActionUID</key>
+						<integer>7019</integer>
+						<key>Argument</key>
+						<string>1</string>
+						<key>Command</key>
+						<string>WaitForComplete</string>
+						<key>MacroActionType</key>
+						<string>SafariControl</string>
+						<key>TimeOutAbortsMacro</key>
+						<true/>
+						<key>WebBrowser</key>
+						<string>Front Browser</string>
+					</dict>
+					<dict>
+						<key>ActionUID</key>
+						<integer>2622</integer>
+						<key>DisplayKind</key>
+						<string>None</string>
+						<key>HonourFailureSettings</key>
+						<true/>
+						<key>IncludeStdErr</key>
+						<false/>
+						<key>IncludedVariables</key>
+						<array>
+							<string>9999</string>
+						</array>
+						<key>MacroActionType</key>
+						<string>ExecuteJavaScript</string>
+						<key>Path</key>
+						<string></string>
+						<key>Text</key>
+						<string>function automateGeminiChat(messageText, enableResearch) {
+  return new Promise((resolve, reject) =&gt; {
+    try {
+      // Step 1: Check if we need to enable Deep Research first
+      if (enableResearch === 'Yes') {
+        console.log('Research mode requested, will enable Deep Research first');
+        // Enable research before model selection to avoid dropdown conflicts
+        enableDeepResearch(() =&gt; {
+          // Continue with model selection after enabling research
+          selectModelAndProceed(messageText, resolve, reject);
+        }, () =&gt; {
+          // If research enabling fails, still try to continue with model selection
+          console.log('Could not enable Deep Research, continuing with model selection');
+          selectModelAndProceed(messageText, resolve, reject);
+        });
+      } else {
+        // Skip research step, go directly to model selection
+        console.log('Regular mode requested, proceeding to model selection');
+        selectModelAndProceed(messageText, resolve, reject);
+      }
+    } catch (error) {
+      reject(`Error in automation process: ${error}`);
+    }
+  });
+}
+
+function enableDeepResearch(onSuccess, onFailure) {
+  try {
+    // Method 1: Try toolbar button first (from Snippet 4)
+    const toolbarButtons = Array.from(document.querySelectorAll('button.toolbox-drawer-item-button'))
+      .filter(button =&gt; {
+        const labelDiv = button.querySelector('.toolbox-drawer-button-label');
+        return labelDiv &amp;&amp; labelDiv.textContent.trim() === 'Deep Research';
+      });
+    
+    if (toolbarButtons.length &gt; 0) {
+      console.log('Found Deep Research button in toolbar, clicking it');
+      toolbarButtons[0].click();
+      
+      // Wait for button action to take effect
+      setTimeout(onSuccess, 500);
+      return;
+    }
+    
+    // Method 2: Try button with the icon
+    const iconButtons = Array.from(document.querySelectorAll('button'))
+      .filter(button =&gt; {
+        const icon = button.querySelector('mat-icon[data-mat-icon-name="travel_explore"]');
+        return icon !== null;
+      });
+    
+    if (iconButtons.length &gt; 0) {
+      console.log('Found Deep Research button by icon, clicking it');
+      iconButtons[0].click();
+      
+      setTimeout(onSuccess, 500);
+      return;
+    }
+    
+    // Method 3: Any button containing Deep Research text
+    const anyButtons = Array.from(document.querySelectorAll('button'))
+      .filter(button =&gt; {
+        const text = button.textContent || '';
+        return text.includes('Deep Research');
+      });
+    
+    if (anyButtons.length &gt; 0) {
+      console.log('Found Deep Research button by text content, clicking it');
+      anyButtons[0].click();
+      
+      setTimeout(onSuccess, 500);
+      return;
+    }
+    
+    console.log('Could not find Deep Research button');
+    onFailure();
+  } catch (error) {
+    console.error(`Error enabling Deep Research: ${error}`);
+    onFailure();
+  }
+}
+
+function selectModelAndProceed(messageText, resolve, reject) {
+  try {
+    // Find and click the model selector button
+    console.log('Looking for model selector button');
+    
+    // Find buttons that might be the model selector
+    const possibleModelButtons = Array.from(document.querySelectorAll('button'))
+      .filter(button =&gt; {
+        const text = button.textContent || '';
+        return (
+          text.includes('Gemini') || 
+          text.includes('2.5 Pro') || 
+          text.includes('Advanced')
+        );
+      });
+    
+    const modelButton = possibleModelButtons[0];
+    
+    if (!modelButton) {
+      console.log('Model selector button not found, proceeding with current model');
+      // Skip to adding text
+      addTextAndSend(messageText, resolve, reject);
+      return;
+    }
+    
+    console.log('Found model selector button, clicking it');
+    modelButton.click();
+    
+    // Wait for dropdown to appear and click 2.5 Pro option
+    setTimeout(() =&gt; {
+      console.log('Looking for 2.5 Pro button in dropdown');
+      
+      // Find 2.5 Pro button in the dropdown
+      const proButtons = Array.from(document.querySelectorAll('button'))
+        .filter(button =&gt; {
+          const text = button.textContent || '';
+          return text.includes('2.5 Pro');
+        });
+      
+      const proButton = proButtons[0];
+      
+      if (!proButton) {
+        console.log('2.5 Pro button not found, proceeding with current model');
+        // Click somewhere else to close the dropdown
+        document.body.click();
+        setTimeout(() =&gt; {
+          addTextAndSend(messageText, resolve, reject);
+        }, 300);
+        return;
+      }
+      
+      console.log('Found 2.5 Pro button, clicking it');
+      proButton.click();
+      
+      // Wait for model selection to apply and dropdown to close
+      setTimeout(() =&gt; {
+        addTextAndSend(messageText, resolve, reject);
+      }, 500);
+    }, 500);
+  } catch (error) {
+    reject(`Error selecting model: ${error}`);
+  }
+}
+
+function addTextAndSend(messageText, resolve, reject) {
+  try {
+    // Find the editable text area
+    const editor = document.querySelector('.ql-editor');
+    if (!editor) {
+      reject('Editor element not found');
+      return;
+    }
+    console.log('Found editor element');
+    
+    // Focus the editor
+    editor.focus();
+    
+    // Clear existing content
+    editor.innerHTML = '';
+    
+    // Split text into paragraphs and add them properly
+    const lines = messageText.split('\n');
+    lines.forEach(line =&gt; {
+      const p = document.createElement('p');
+      // Use non-breaking space for empty lines to maintain structure
+      p.textContent = line || '\u00A0';
+      editor.appendChild(p);
+    });
+    console.log('Text added as individual paragraphs');
+    
+    // Dispatch input event to ensure the UI updates
+    editor.dispatchEvent(new Event('input', { bubbles: true, cancelable: true }));
+    console.log('Input event dispatched');
+    
+    // Wait for send button (using the slightly longer delay and retry logic)
+    setTimeout(() =&gt; {
+      const sendButton = document.querySelector('button.send-button');
+      if (!sendButton) {
+        reject('Send button not found');
+        return;
+      }
+      console.log('Found send button');
+      if (sendButton.getAttribute('aria-disabled') === 'true') {
+        console.log('Send button is disabled, waiting longer...');
+        setTimeout(() =&gt; {
+          if (sendButton.getAttribute('aria-disabled') === 'true') {
+            // Try dispatching another input event just before the final check
+            editor.dispatchEvent(new Event('input', { bubbles: true, cancelable: true }));
+            setTimeout(() =&gt; { // Nested timeout
+              if (sendButton.getAttribute('aria-disabled') === 'true') {
+                reject('Send button is still disabled after waiting and extra event');
+                return;
+              }
+              sendButton.click();
+              console.log('Send button clicked after extra wait');
+              resolve();
+            }, 500);
+            return;
+          }
+          sendButton.click();
+          console.log('Send button clicked after initial wait');
+          resolve();
+        }, 1000);
+        return;
+      }
+      sendButton.click();
+      console.log('Send button clicked');
+      resolve();
+    }, 750); // Initial wait after inserting text
+  } catch (error) {
+    reject(`Error adding text or sending: ${error}`);
+  }
+}
+
+// Call the function with the prompt text and research flag
+var promptText = kmvar.PromptText;
+var enableResearch = kmvar.Research; // Will be "Yes" or "No"
+automateGeminiChat(promptText, enableResearch);	</string>
+						<key>TimeOutAbortsMacro</key>
+						<true/>
+						<key>TrimResults</key>
+						<true/>
+						<key>TrimResultsNew</key>
+						<true/>
+						<key>UseModernSyntax</key>
+						<true/>
+						<key>UseText</key>
+						<true/>
+						<key>WebBrowser</key>
+						<string>Front Browser</string>
+					</dict>
+					<dict>
+						<key>ActionUID</key>
+						<integer>3032</integer>
+						<key>MacroActionType</key>
+						<string>Comment</string>
+						<key>StyledText</key>
+						<data>
+						cnRmZAAAAAADAAAAAgAAAAcAAABU
+						WFQucnRmAQAAAC6YAAAAKwAAAAEA
+						AACQAAAAe1xydGYxXGFuc2lcYW5z
+						aWNwZzEyNTJcY29jb2FydGYyODIy
+						Clxjb2NvYXRleHRzY2FsaW5nMFxj
+						b2NvYXBsYXRmb3JtMHtcZm9udHRi
+						bH0Ke1xjb2xvcnRibDtccmVkMjU1
+						XGdyZWVuMjU1XGJsdWUyNTU7fQp7
+						XCpcZXhwYW5kZWRjb2xvcnRibDs7
+						fQp9AQAAACMAAAABAAAABwAAAFRY
+						VC5ydGYQAAAAv0D8Z7YBAAAAAAAA
+						AAAAAA==
+						</data>
+						<key>Title</key>
+						<string>Focus on Claude, Submit Prompt</string>
+					</dict>
+					<dict>
+						<key>ActionUID</key>
+						<integer>2626</integer>
+						<key>DisplayKind</key>
+						<string>None</string>
+						<key>HonourFailureSettings</key>
+						<true/>
+						<key>IncludeStdErr</key>
+						<false/>
+						<key>IncludedVariables</key>
+						<array>
+							<string>9999</string>
+						</array>
+						<key>MacroActionType</key>
+						<string>ExecuteAppleScript</string>
+						<key>Path</key>
+						<string></string>
+						<key>Text</key>
+						<string>tell application "Keyboard Maestro Engine"
+    set taskNameVar to getvariable "TaskName"
+    set claudeIDVar to getvariable "ClaudeWindowID"
+    set promptTextVar to getvariable "PromptText"
+end tell
+
+-- Focus on the Claude window directly using the variable we retrieved
+tell application "Safari"
+    set w to window id claudeIDVar
+    set current tab of w to tab 1 of w
+    set index of w to 1
+end tell</string>
+						<key>TimeOutAbortsMacro</key>
+						<true/>
+						<key>TrimResults</key>
+						<true/>
+						<key>TrimResultsNew</key>
+						<true/>
+						<key>UseText</key>
+						<true/>
+					</dict>
+					<dict>
+						<key>ActionUID</key>
+						<integer>7021</integer>
+						<key>Argument</key>
+						<string>1</string>
+						<key>Command</key>
+						<string>WaitForComplete</string>
+						<key>MacroActionType</key>
+						<string>SafariControl</string>
+						<key>TimeOutAbortsMacro</key>
+						<true/>
+						<key>WebBrowser</key>
+						<string>Front Browser</string>
+					</dict>
+					<dict>
+						<key>ActionUID</key>
+						<integer>2628</integer>
+						<key>DisplayKind</key>
+						<string>None</string>
+						<key>HonourFailureSettings</key>
+						<true/>
+						<key>IncludeStdErr</key>
+						<false/>
+						<key>IncludedVariables</key>
+						<array>
+							<string>9999</string>
+						</array>
+						<key>MacroActionType</key>
+						<string>ExecuteJavaScript</string>
+						<key>Path</key>
+						<string></string>
+						<key>Text</key>
+						<string>function automateClaudeInteraction(enableResearch) {
+  console.log('Starting Claude automation' + (enableResearch ? ' with Research enabled' : ''));
+  
+  let automationChain = Promise.resolve();
+  
+  // Step 1: Enable research mode if requested
+  if (enableResearch) {
+    automationChain = automationChain.then(() =&gt; {
+      return enableResearchMode();
+    }).then(() =&gt; {
+      console.log('Research mode enabled');
+    });
+  }
+  
+  // Step 2: Focus the input area (then let Keyboard Maestro handle the paste)
+  automationChain = automationChain.then(() =&gt; {
+    return focusInputArea();
+  }).then(() =&gt; {
+    console.log('Input area focused - ready for Keyboard Maestro paste');
+    // Script ends here, returning control to Keyboard Maestro
+    // Keyboard Maestro will then:
+    // 1. Paste the text (Command+V)
+    // 2. Wait briefly
+    // 3. Send Enter to submit
+  }).catch(error =&gt; {
+    console.error('Automation failed:', error);
+  });
+}
+
+function enableResearchMode() {
+  return new Promise((resolve, reject) =&gt; {
+    try {
+      console.log('Attempting to enable Research mode...');
+      
+      // Method 1: Find by text content
+      const allButtons = Array.from(document.querySelectorAll('button'));
+      const researchButton = allButtons.find(button =&gt; 
+        button.textContent.includes('Research')
+      );
+      
+      if (researchButton) {
+        console.log('Research button found, clicking...');
+        researchButton.click();
+        setTimeout(resolve, 500); // Give time for any UI changes
+        return;
+      }
+      
+      // Method 2: Try finding by the beta tag
+      const betaTags = Array.from(document.querySelectorAll('.uppercase'));
+      const researchBetaParent = betaTags.find(tag =&gt; 
+        tag.textContent.includes('beta')
+      )?.closest('button');
+      
+      if (researchBetaParent) {
+        console.log('Research button found via beta tag, clicking...');
+        researchBetaParent.click();
+        setTimeout(resolve, 500); // Give time for any UI changes
+        return;
+      }
+      
+      // If we get here, we couldn't find the button
+      reject('Research button not found');
+    } catch (error) {
+      reject(`Error enabling research mode: ${error}`);
+    }
+  });
+}
+
+function focusInputArea() {
+  return new Promise((resolve, reject) =&gt; {
+    try {
+      // Find the ProseMirror contenteditable div
+      const editor = document.querySelector('.ProseMirror');
+      if (!editor) {
+        reject('Editor element not found');
+        return;
+      }
+      
+      console.log('Found editor, focusing it for paste...');
+      
+      // Focus the editor to prepare for Keyboard Maestro's paste command
+      editor.focus();
+      console.log('Editor focused - ready for paste');
+      
+      // Resolve immediately - we're just focusing, not handling the paste
+      resolve();
+      
+    } catch (error) {
+      reject(`Error focusing input area: ${error}`);
+    }
+  });
+}
+
+// Get the Keyboard Maestro variables - note that we no longer need promptText
+var enableResearch = kmvar.Research === 'Yes';
+
+// Execute the automation - no need to pass the text
+automateClaudeInteraction(enableResearch);</string>
+						<key>TimeOutAbortsMacro</key>
+						<true/>
+						<key>TrimResults</key>
+						<true/>
+						<key>TrimResultsNew</key>
+						<true/>
+						<key>UseModernSyntax</key>
+						<true/>
+						<key>UseText</key>
+						<true/>
+						<key>WebBrowser</key>
+						<string>Front Browser</string>
+					</dict>
+					<dict>
+						<key>ActionUID</key>
+						<integer>13328</integer>
+						<key>KeyCode</key>
+						<integer>9</integer>
+						<key>MacroActionType</key>
+						<string>SimulateKeystroke</string>
+						<key>Modifiers</key>
+						<integer>256</integer>
+						<key>ReleaseAll</key>
+						<false/>
+						<key>TargetApplication</key>
+						<dict/>
+						<key>TargetingType</key>
+						<string>Front</string>
+					</dict>
+					<dict>
+						<key>ActionUID</key>
+						<integer>13331</integer>
+						<key>MacroActionType</key>
+						<string>Pause</string>
+						<key>Time</key>
+						<string>0.3</string>
+						<key>TimeOutAbortsMacro</key>
+						<true/>
+					</dict>
+					<dict>
+						<key>ActionUID</key>
+						<integer>13329</integer>
+						<key>KeyCode</key>
+						<integer>36</integer>
+						<key>MacroActionType</key>
+						<string>SimulateKeystroke</string>
+						<key>Modifiers</key>
+						<integer>0</integer>
+						<key>ReleaseAll</key>
+						<false/>
+						<key>TargetApplication</key>
+						<dict/>
+						<key>TargetingType</key>
+						<string>Front</string>
+					</dict>
+					<dict>
+						<key>ActionUID</key>
+						<integer>3033</integer>
+						<key>MacroActionType</key>
+						<string>Comment</string>
+						<key>StyledText</key>
+						<data>
+						cnRmZAAAAAADAAAAAgAAAAcAAABU
+						WFQucnRmAQAAAC6YAAAAKwAAAAEA
+						AACQAAAAe1xydGYxXGFuc2lcYW5z
+						aWNwZzEyNTJcY29jb2FydGYyODIy
+						Clxjb2NvYXRleHRzY2FsaW5nMFxj
+						b2NvYXBsYXRmb3JtMHtcZm9udHRi
+						bH0Ke1xjb2xvcnRibDtccmVkMjU1
+						XGdyZWVuMjU1XGJsdWUyNTU7fQp7
+						XCpcZXhwYW5kZWRjb2xvcnRibDs7
+						fQp9AQAAACMAAAABAAAABwAAAFRY
+						VC5ydGYQAAAAv0D8Z7YBAAAAAAAA
+						AAAAAA==
+						</data>
+						<key>Title</key>
+						<string>Focus on ChatGPT, Submit Prompt</string>
+					</dict>
+					<dict>
+						<key>ActionUID</key>
+						<integer>2629</integer>
+						<key>DisplayKind</key>
+						<string>None</string>
+						<key>HonourFailureSettings</key>
+						<true/>
+						<key>IncludeStdErr</key>
+						<false/>
+						<key>IncludedVariables</key>
+						<array>
+							<string>9999</string>
+						</array>
+						<key>MacroActionType</key>
+						<string>ExecuteAppleScript</string>
+						<key>Path</key>
+						<string></string>
+						<key>Text</key>
+						<string>tell application "Keyboard Maestro Engine"
+    set taskNameVar to getvariable "TaskName"
+    set chatGPTIDVar to getvariable "ChatGPTWindowID"
+    set promptTextVar to getvariable "PromptText"
+end tell
+
+-- Focus on the ChatGPT window directly using the variable we retrieved
+tell application "Safari"
+    set w to window id chatGPTIDVar
+    set current tab of w to tab 1 of w
+    set index of w to 1
+end tell</string>
+						<key>TimeOutAbortsMacro</key>
+						<true/>
+						<key>TrimResults</key>
+						<true/>
+						<key>TrimResultsNew</key>
+						<true/>
+						<key>UseText</key>
+						<true/>
+					</dict>
+					<dict>
+						<key>ActionUID</key>
+						<integer>7022</integer>
+						<key>Argument</key>
+						<string>1</string>
+						<key>Command</key>
+						<string>WaitForComplete</string>
+						<key>MacroActionType</key>
+						<string>SafariControl</string>
+						<key>TimeOutAbortsMacro</key>
+						<true/>
+						<key>WebBrowser</key>
+						<string>Front Browser</string>
+					</dict>
+					<dict>
+						<key>ActionUID</key>
+						<integer>2631</integer>
+						<key>DisplayKind</key>
+						<string>None</string>
+						<key>HonourFailureSettings</key>
+						<true/>
+						<key>IncludeStdErr</key>
+						<false/>
+						<key>IncludedVariables</key>
+						<array>
+							<string>9999</string>
+						</array>
+						<key>MacroActionType</key>
+						<string>ExecuteJavaScript</string>
+						<key>Path</key>
+						<string></string>
+						<key>Text</key>
+						<string>function automateOpenAIChat(messageText, useResearch, useIncognito) {
+  return new Promise((resolve, reject) =&gt; {
+    try {
+      console.log(`Starting ChatGPT automation. Research mode: ${useResearch}, Incognito mode: ${useIncognito}`);
+      
+      // INCOGNITO MODE HANDLING - Using exact working example
+      if (useIncognito === 'Yes') {
+        // Find all buttons and click the one containing "Temporary" text
+        const buttons = document.querySelectorAll('button');
+        let found = false;
+        for (const button of buttons) {
+            if (button.textContent.includes('Temporary')) {
+                button.click();
+                console.log("Temporary button clicked successfully");
+                found = true;
+                break;
+            }
+        }
+        if (!found) {
+            console.log("Button not found");
+        }
+        
+        // Add a small delay after clicking without using await
+        setTimeout(() =&gt; {
+          // Continue with research mode after delay
+          handleResearchAndPrompt();
+        }, 800);
+      } else {
+        // Skip directly to research mode
+        handleResearchAndPrompt();
+      }
+      
+      // Function to handle research mode and prompt input
+      function handleResearchAndPrompt() {
+        // RESEARCH MODE HANDLING (updated logic for new UI)
+        if (useResearch === 'Yes') {
+          console.log('Research mode requested. Attempting to enable...');
+          
+          // NEW: Use dropdown-based approach for the updated UI
+          clickToolsDropdownAndSelectDeepResearch()
+            .then(success =&gt; {
+              if (success) {
+                console.log('Research mode enabled successfully');
+                // Wait a moment for research mode to activate
+                setTimeout(submitPrompt, 1200);
+              } else {
+                console.warn('Research button not found. Continuing without research mode...');
+                submitPrompt();
+              }
+            })
+            .catch(error =&gt; {
+              console.warn('Error enabling research mode:', error);
+              submitPrompt();
+            });
+        } else {
+          // No research mode, continue to submit the prompt
+          submitPrompt();
+        }
+      }
+      
+      // NEW: Updated function to click "Run deep research" from Tools dropdown
+      async function clickToolsDropdownAndSelectDeepResearch() {
+        console.log('🚀 Attempting to enable deep research...');
+        
+        function sleep(ms) {
+          return new Promise(resolve =&gt; setTimeout(resolve, ms));
+        }
+        
+        try {
+          // Find the Tools button
+          const toolsButton = document.querySelector('#system-hint-button');
+          if (!toolsButton) {
+            console.log('Tools button not found');
+            return false;
+          }
+          
+          console.log('Found Tools button');
+          
+          // Open dropdown if not already open
+          const isOpen = toolsButton.getAttribute('aria-expanded') === 'true';
+          if (!isOpen) {
+            console.log('Opening Tools dropdown...');
+            toolsButton.click();
+            await sleep(500);
+          }
+          
+          // Wait for menu to render
+          await sleep(500);
+          
+          // Try direct click approach first
+          const menuItems = document.querySelectorAll('div[role="menuitemradio"]');
+          console.log(`Found ${menuItems.length} menu items`);
+          
+          // Find "Run deep research" item
+          let targetItem = null;
+          for (let i = 0; i &lt; menuItems.length; i++) {
+            const text = menuItems[i].textContent?.trim() || '';
+            if (text.includes('Run deep research')) {
+              targetItem = menuItems[i];
+              console.log(`Found "Run deep research" at position ${i + 1}`);
+              break;
+            }
+          }
+          
+          // Fallback to 4th item
+          if (!targetItem &amp;&amp; menuItems.length &gt;= 4) {
+            targetItem = menuItems[3];
+            console.log('Using 4th menu item as fallback');
+          }
+          
+          if (targetItem) {
+            console.log('Clicking deep research option...');
+            targetItem.click();
+            await sleep(1000);
+            
+            // Check if dropdown closed (success indicator)
+            const finalState = toolsButton.getAttribute('aria-expanded');
+            if (finalState === 'false') {
+              console.log('Deep research enabled successfully!');
+              return true;
+            }
+          }
+          
+          // If direct click failed, try keyboard approach
+          console.log('Direct click failed, trying keyboard approach...');
+          return await keyboardApproach();
+          
+        } catch (error) {
+          console.log('Error in dropdown approach:', error);
+          return false;
+        }
+      }
+      
+      // Keyboard fallback for deep research
+      async function keyboardApproach() {
+        try {
+          const toolsButton = document.querySelector('#system-hint-button');
+          if (!toolsButton) return false;
+          
+          console.log('Using keyboard navigation...');
+          
+          // Focus the tools button
+          toolsButton.focus();
+          await new Promise(resolve =&gt; setTimeout(resolve, 200));
+          
+          // Navigate to "Run deep research" (4th item) using arrow keys
+          for (let i = 0; i &lt; 4; i++) {
+            const arrowEvent = new KeyboardEvent('keydown', {
+              key: 'ArrowDown',
+              code: 'ArrowDown',
+              keyCode: 40,
+              bubbles: true,
+              cancelable: true
+            });
+            
+            document.activeElement.dispatchEvent(arrowEvent);
+            await new Promise(resolve =&gt; setTimeout(resolve, 300));
+          }
+          
+          // Press Enter to select
+          const enterEvent = new KeyboardEvent('keydown', {
+            key: 'Enter', 
+            code: 'Enter',
+            keyCode: 13,
+            bubbles: true,
+            cancelable: true
+          });
+          
+          document.activeElement.dispatchEvent(enterEvent);
+          await new Promise(resolve =&gt; setTimeout(resolve, 500));
+          
+          // Check success
+          const finalState = toolsButton.getAttribute('aria-expanded');
+          return finalState === 'false';
+          
+        } catch (error) {
+          console.log('Keyboard approach failed:', error);
+          return false;
+        }
+      }
+      
+      // Function to submit the prompt
+      function submitPrompt() {
+        // Find the ProseMirror editor element
+        const editorElement = document.querySelector('.ProseMirror');
+        if (!editorElement) {
+          reject('Editor element not found');
+          return;
+        }
+        
+        console.log('Found editor element');
+        
+        // Focus the editor
+        editorElement.focus();
+        
+        // Clear existing content if any
+        editorElement.innerHTML = '';
+        
+        // Create a paragraph element with the text
+        const paragraph = document.createElement('p');
+        paragraph.textContent = messageText;
+        
+        // Append the paragraph to the editor
+        editorElement.appendChild(paragraph);
+        
+        // Dispatch an input event to ensure the UI registers the change
+        const inputEvent = new Event('input', { bubbles: true });
+        editorElement.dispatchEvent(inputEvent);
+        
+        console.log('Text added to input');
+        
+        // Wait a moment for the send button to become enabled
+        setTimeout(() =&gt; {
+          // Find the send button
+          const sendButton = document.querySelector('button[data-testid="send-button"]');
+          if (!sendButton) {
+            reject('Send button not found');
+            return;
+          }
+          
+          console.log('Found send button');
+          
+          // Check if the button is disabled
+          if (sendButton.disabled) {
+            console.log('Send button is disabled, waiting longer...');
+            // Wait a bit longer and try again
+            setTimeout(() =&gt; {
+              if (sendButton.disabled) {
+                reject('Send button is still disabled after waiting');
+                return;
+              }
+              // Click the send button
+              sendButton.click();
+              console.log('Send button clicked');
+              resolve();
+            }, 1000);
+            return;
+          }
+          
+          // Click the send button
+          sendButton.click();
+          console.log('Send button clicked');
+          resolve();
+        }, 500); // Give time for the button to become enabled after text is entered
+      }
+      
+    } catch (error) {
+      reject(`Error: ${error}`);
+    }
+  });
+}
+
+// Call the function with your prompt text from Keyboard Maestro variable
+var promptText = kmvar.PromptText;
+var useResearch = kmvar.Research || 'No'; // Default to 'No' if not specified
+var useIncognito = kmvar.Incognito || 'No'; // Default to 'No' if not specified
+
+// Call the function with the prompt text, research setting, and incognito setting
+automateOpenAIChat(promptText, useResearch, useIncognito);</string>
+						<key>TimeOutAbortsMacro</key>
+						<true/>
+						<key>TrimResults</key>
+						<true/>
+						<key>TrimResultsNew</key>
+						<true/>
+						<key>UseModernSyntax</key>
+						<true/>
+						<key>UseText</key>
+						<true/>
+						<key>WebBrowser</key>
+						<string>Front Browser</string>
+					</dict>
+					<dict>
+						<key>ActionUID</key>
+						<integer>3034</integer>
+						<key>MacroActionType</key>
+						<string>Comment</string>
+						<key>StyledText</key>
+						<data>
+						cnRmZAAAAAADAAAAAgAAAAcAAABU
+						WFQucnRmAQAAAC6YAAAAKwAAAAEA
+						AACQAAAAe1xydGYxXGFuc2lcYW5z
+						aWNwZzEyNTJcY29jb2FydGYyODIy
+						Clxjb2NvYXRleHRzY2FsaW5nMFxj
+						b2NvYXBsYXRmb3JtMHtcZm9udHRi
+						bH0Ke1xjb2xvcnRibDtccmVkMjU1
+						XGdyZWVuMjU1XGJsdWUyNTU7fQp7
+						XCpcZXhwYW5kZWRjb2xvcnRibDs7
+						fQp9AQAAACMAAAABAAAABwAAAFRY
+						VC5ydGYQAAAAv0D8Z7YBAAAAAAAA
+						AAAAAA==
+						</data>
+						<key>Title</key>
+						<string>Focus on Grok, Submit Prompt</string>
+					</dict>
+					<dict>
+						<key>ActionUID</key>
+						<integer>2635</integer>
+						<key>DisplayKind</key>
+						<string>None</string>
+						<key>HonourFailureSettings</key>
+						<true/>
+						<key>IncludeStdErr</key>
+						<false/>
+						<key>IncludedVariables</key>
+						<array>
+							<string>9999</string>
+						</array>
+						<key>MacroActionType</key>
+						<string>ExecuteAppleScript</string>
+						<key>Path</key>
+						<string></string>
+						<key>Text</key>
+						<string>tell application "Keyboard Maestro Engine"
+    set taskNameVar to getvariable "TaskName"
+    set grokIDVar to getvariable "GrokWindowID"
+    set promptTextVar to getvariable "PromptText"
+end tell
+
+-- Focus on the Grok window directly using the variable we retrieved
+tell application "Safari"
+    set w to window id grokIDVar
+    set current tab of w to tab 1 of w
+    set index of w to 1
+end tell</string>
+						<key>TimeOutAbortsMacro</key>
+						<true/>
+						<key>TrimResults</key>
+						<true/>
+						<key>TrimResultsNew</key>
+						<true/>
+						<key>UseText</key>
+						<true/>
+					</dict>
+					<dict>
+						<key>ActionUID</key>
+						<integer>7023</integer>
+						<key>Argument</key>
+						<string>1</string>
+						<key>Command</key>
+						<string>WaitForComplete</string>
+						<key>MacroActionType</key>
+						<string>SafariControl</string>
+						<key>TimeOutAbortsMacro</key>
+						<true/>
+						<key>WebBrowser</key>
+						<string>Front Browser</string>
+					</dict>
+					<dict>
+						<key>ActionUID</key>
+						<integer>2637</integer>
+						<key>DisplayKind</key>
+						<string>Window</string>
+						<key>HonourFailureSettings</key>
+						<true/>
+						<key>IncludeStdErr</key>
+						<false/>
+						<key>IncludedVariables</key>
+						<array>
+							<string>9999</string>
+						</array>
+						<key>MacroActionType</key>
+						<string>ExecuteJavaScript</string>
+						<key>Path</key>
+						<string></string>
+						<key>Text</key>
+						<string>// Grok Automation Script - Ultimate Version v1.0
+// ----------------------------------------------------------------------------
+// This script automates Grok chat with support for:
+//   - DeeperSearch/Research mode
+//   - Incognito/Private Chat mode
+//   - Natural text input with fallbacks
+//
+// Keyboard Maestro Variables:
+//   kmvar.PromptText - The message to send
+//   kmvar.Research   - "Yes" | "No" for DeeperSearch mode
+//   kmvar.Incognito  - "Yes" | "No" for Private Chat mode
+// ----------------------------------------------------------------------------
+
+/**
+ * Main Grok automation function
+ * @param {string} promptText - The text to send to Grok
+ * @param {string} researchMode - "Yes" or "No" for DeeperSearch mode
+ * @param {string} incognitoMode - "Yes" or "No" for Private Chat mode
+ * @returns {Promise&lt;string&gt;} Success or error message
+ */
+async function automateGrokChat(promptText, researchMode, incognitoMode) {
+  console.log(`Starting Grok automation: Research=${researchMode}, Incognito=${incognitoMode}`);
+  
+  try {
+    // Step 1: Set operational modes before text input
+    await configureChatModes(researchMode, incognitoMode);
+    
+    // Step 2: Text input and submission
+    await sendPromptToGrok(promptText);
+    
+    console.log("✅ Grok automation completed successfully");
+    return "SUCCESS"; // For Keyboard Maestro result handling
+  } catch (error) {
+    console.error(`❌ Grok automation failed: ${error.message}`);
+    return `ERROR: ${error.message}`; // Structured error for KM
+  }
+}
+
+// =============================================================================
+//  MODE CONFIGURATION - Handles DeeperSearch, Think, and Incognito modes
+// =============================================================================
+
+/**
+ * Configures all chat modes in the correct sequence
+ * @param {string} research - "Yes" or "No" for DeeperSearch mode
+ * @param {string} incognito - "Yes" or "No" for Private Chat mode
+ */
+async function configureChatModes(research, incognito) {
+  console.log(`Configuring chat modes: Research=${research}, Incognito=${incognito}`);
+  
+  // Step 1: Handle Incognito mode if requested (independent of other modes)
+  if (incognito === "Yes") {
+    const incognitoResult = await enableIncognitoMode();
+    if (!incognitoResult) {
+      console.warn("⚠️ Incognito button not found or activation failed - continuing without Private Chat");
+    }
+    await wait(300); // Allow UI to update
+  }
+
+  // Step 2: Configure the appropriate research/thinking mode
+  if (research === "Yes") {
+    try {
+      console.log("Research mode requested - activating DeeperSearch...");
+      await enableDeeperSearch();
+      console.log("✓ DeeperSearch mode activated successfully");
+    } catch (error) {
+      console.warn(`⚠️ DeeperSearch activation failed: ${error.message} - falling back to Think mode`);
+      await enableThinkMode();
+    }
+  } else {
+    console.log("Standard mode - activating Think...");
+    await enableThinkMode();
+  }
+  
+  // Allow UI to stabilize after mode changes
+  await wait(300);
+}
+
+/**
+ * Enables Private Chat (Incognito) mode
+ * @returns {Promise&lt;boolean&gt;} True if successful, false otherwise
+ */
+async function enableIncognitoMode() {
+  console.log("Attempting to enable Private Chat mode...");
+  
+  try {
+    // Find button with multiple selectors for reliability
+    const button = await waitUntil(() =&gt; (
+      document.querySelector('[aria-label="Switch to Private Chat"]') ||
+      document.querySelector('button[title*="Private Chat" i]') ||
+      document.querySelector('button[aria-description*="Private Chat" i]')
+    ), 2000, 100);
+    
+    if (!button) {
+      console.warn("Private Chat button not found");
+      return false;
+    }
+    
+    // Use full click sequence for reliability
+    simulateButtonClick(button);
+    
+    // Verify state change if possible
+    const stateCheck = button.getAttribute('aria-pressed') !== null;
+    if (stateCheck) {
+      await waitUntil(() =&gt; button.getAttribute('aria-pressed') === 'true', 1000, 100)
+        .catch(() =&gt; console.warn("Could not verify Private Chat state change"));
+    }
+    
+    console.log("✓ Private Chat mode enabled");
+    return true;
+  } catch (error) {
+    console.warn(`Private Chat error: ${error.message}`);
+    return false;
+  }
+}
+
+/**
+ * Enables DeeperSearch mode through the dropdown menu
+ * @throws {Error} If the dropdown or DeeperSearch option cannot be found/activated
+ */
+async function enableDeeperSearch() {
+  try {
+    // Step 1: Find and open the mode dropdown
+    const dropdown = await findModeDropdown();
+    if (!dropdown) {
+      throw new Error("Mode dropdown not found");
+    }
+    
+    // Step 2: Open dropdown if not already open
+    const isOpen = dropdown.getAttribute("aria-expanded") === "true";
+    if (!isOpen) {
+      await openModeDropdown(dropdown);
+    }
+    
+    // Step 3: Find and click the DeeperSearch option
+    const option = await findDeeperSearchOption();
+    if (!option) {
+      // Try to close dropdown before erroring
+      if (!isOpen &amp;&amp; dropdown.getAttribute("aria-expanded") === "true") {
+        dropdown.click();
+      }
+      throw new Error("DeeperSearch option not found in dropdown");
+    }
+    
+    // Step 4: Check if already selected, click if needed
+    const alreadyActive = option.getAttribute("aria-checked") === "true";
+    if (alreadyActive) {
+      console.log("DeeperSearch already active - no action needed");
+    } else {
+      await activateDeeperSearchOption(option);
+    }
+    
+    // Step 5: Close dropdown if we opened it
+    if (!isOpen &amp;&amp; dropdown.getAttribute("aria-expanded") === "true") {
+      dropdown.click();
+      await wait(100);
+    }
+  } catch (error) {
+    throw new Error(`DeeperSearch activation failed: ${error.message}`);
+  }
+}
+
+/**
+ * Finds the mode dropdown button
+ * @returns {Promise&lt;Element|null&gt;} The dropdown button or null if not found
+ */
+async function findModeDropdown() {
+  return waitUntil(() =&gt; (
+    document.querySelector('button[aria-label="Change mode"]') ||
+    document.querySelector('button[aria-haspopup="menu"][aria-controls*="dropdown"]') ||
+    Array.from(document.querySelectorAll('button[aria-haspopup="menu"]'))
+      .find(btn =&gt; btn.textContent &amp;&amp; /mode|search|deeper/i.test(btn.textContent))
+  ), 2000, 100).catch(() =&gt; null);
+}
+
+/**
+ * Opens the mode dropdown with proper event sequence
+ * @param {Element} dropdown - The dropdown button element
+ */
+async function openModeDropdown(dropdown) {
+  console.log("Opening mode dropdown");
+  
+  // Use pointerdown first for more reliable dropdown opening
+  dropdown.dispatchEvent(new PointerEvent("pointerdown", { 
+    bubbles: true, cancelable: true, view: window 
+  }));
+  
+  // Standard click after pointerdown
+  dropdown.click();
+  
+  // Wait for dropdown to open by checking aria-expanded attribute
+  await waitUntil(
+    () =&gt; dropdown.getAttribute("aria-expanded") === "true",
+    1000, 50
+  ).catch(() =&gt; console.warn("Dropdown didn't report as expanded, proceeding anyway"));
+  
+  // Give time for menu items to render
+  await wait(300);
+}
+
+/**
+ * Finds the DeeperSearch option in the dropdown menu
+ * @returns {Promise&lt;Element|null&gt;} The DeeperSearch option or null if not found
+ */
+async function findDeeperSearchOption() {
+  return waitUntil(() =&gt; {
+    // Try multiple selectors for maximum reliability
+    const menuItems = document.querySelectorAll('[role="menuitemcheckbox"], [role="menuitem"], [role="option"]');
+    return Array.from(menuItems).find(item =&gt; {
+      const text = item.textContent || "";
+      return text.includes("DeeperSearch") || text.includes("Deeper Search");
+    });
+  }, 2000, 100).catch(() =&gt; null);
+}
+
+/**
+ * Activates the DeeperSearch option with proper event sequence and verification
+ * @param {Element} option - The DeeperSearch menu option element
+ */
+async function activateDeeperSearchOption(option) {
+  console.log("Activating DeeperSearch option");
+  
+  // Find the best click target (specific span if available, or main element)
+  const clickTarget = 
+    option.querySelector('.text-secondary') || 
+    option.querySelector('span:nth-child(2)') || 
+    option;
+  
+  // Use full sequence for reliable clicking
+  simulateButtonClick(clickTarget);
+  
+  // Verify selection worked by checking aria-checked (with timeout)
+  await waitUntil(
+    () =&gt; option.getAttribute("aria-checked") === "true",
+    1500, 100
+  ).catch(() =&gt; console.warn("DeeperSearch selection not confirmed via aria-checked attribute"));
+}
+
+/**
+ * Enables Think mode for standard operation
+ * @returns {Promise&lt;boolean&gt;} True if successful or unavailable, false if failed
+ */
+async function enableThinkMode() {
+  try {
+    // Find Think button with multiple selector strategies
+    const thinkButton = await waitUntil(() =&gt; (
+      document.querySelector('button[aria-label="Think"]') ||
+      document.querySelector('button[data-testid="think-button"]') ||
+      document.querySelector('button[title="Think"]') ||
+      Array.from(document.querySelectorAll('button')).find(btn =&gt; {
+        const text = (btn.textContent || "").trim();
+        return (text === "Think" || text === "") &amp;&amp; 
+               btn.querySelector('svg path[d*="M19"]');
+      })
+    ), 2000, 100).catch(() =&gt; null);
+    
+    if (!thinkButton) {
+      console.log("Think button not found - continuing with default mode");
+      return true; // Not finding the button is fine - it might be default
+    }
+    
+    // Check if already pressed
+    const isPressed = thinkButton.getAttribute("aria-pressed") === "true";
+    if (isPressed) {
+      console.log("Think mode already active");
+      return true;
+    }
+    
+    // Click with full event sequence
+    console.log("Clicking Think button");
+    simulateButtonClick(thinkButton);
+    
+    // Wait for button state to update
+    await waitUntil(
+      () =&gt; thinkButton.getAttribute("aria-pressed") === "true",
+      1000, 50
+    ).catch(() =&gt; console.warn("Think button pressed but state change not confirmed"));
+    
+    console.log("✓ Think mode enabled");
+    return true;
+  } catch (error) {
+    console.warn(`Think mode error: ${error.message}`);
+    return false; // Continue even if think mode fails
+  }
+}
+
+// =============================================================================
+//  TEXT INPUT AND SUBMISSION - Handles textarea interaction and form submission
+// =============================================================================
+
+/**
+ * Handles prompt input and submission
+ * @param {string} messageText - The text to send to Grok
+ * @throws {Error} If text input or submission fails
+ */
+async function sendPromptToGrok(messageText) {
+  console.log("Sending prompt to Grok...");
+  
+  // Step 1: Find and prepare textarea
+  const textarea = await findAndPrepareTextarea();
+  if (!textarea) {
+    throw new Error("Textarea not found or couldn't be prepared");
+  }
+  
+  // Step 2: Paste text with natural event sequence
+  await executeTextInput(textarea, messageText);
+  
+  // Step 3: Verify text was accepted by React
+  const textAccepted = await verifyTextInputAccepted(textarea, messageText);
+  if (!textAccepted) {
+    throw new Error("Text input verification failed");
+  }
+  
+  // Step 4: Find and click submit button
+  await clickSubmitButton(textarea);
+  
+  console.log("✓ Prompt successfully sent");
+}
+
+/**
+ * Finds the textarea and prepares it for input
+ * @returns {Promise&lt;Element|null&gt;} The textarea element or null if not found
+ */
+async function findAndPrepareTextarea() {
+  console.log("Finding and preparing textarea...");
+  
+  try {
+    // Find textarea with multiple selectors
+    const textarea = await waitUntil(() =&gt; (
+      document.querySelector('textarea[aria-label="Ask Grok anything"]') ||
+      document.querySelector('textarea[placeholder*="Ask" i][placeholder*="Grok" i]') ||
+      document.querySelector('form textarea')
+    ), 3000, 100);
+    
+    if (!textarea) {
+      console.error("Textarea not found");
+      return null;
+    }
+    
+    // Ensure textarea is visible and enabled
+    const isVisible = textarea.offsetParent !== null;
+    const isEnabled = !textarea.disabled;
+    
+    if (!isVisible || !isEnabled) {
+      console.error("Textarea found but not visible or enabled");
+      return null;
+    }
+    
+    // Prepare by focusing with full event sequence
+    simulateFocusSequence(textarea);
+    await wait(100); // Brief pause after focus
+    
+    return textarea;
+  } catch (error) {
+    console.error(`Error finding textarea: ${error.message}`);
+    return null;
+  }
+}
+
+/**
+ * Executes text input with platform-aware paste simulation
+ * @param {Element} textarea - The textarea element
+ * @param {string} text - The text to input
+ */
+async function executeTextInput(textarea, text) {
+  console.log(`Inputting text (${text.length} chars)...`);
+  
+  // Determine platform for correct meta key
+  const isMac = navigator.platform.toLowerCase().includes("mac");
+  const metaKey = isMac ? "Meta" : "Control";
+  const metaKeyProps = isMac ? { metaKey: true } : { ctrlKey: true };
+  
+  try {
+    // Meta key down (Cmd/Ctrl)
+    textarea.dispatchEvent(new KeyboardEvent("keydown", { 
+      key: metaKey, 
+      code: isMac ? "MetaLeft" : "ControlLeft", 
+      ...metaKeyProps, 
+      bubbles: true,
+      cancelable: true 
+    }));
+    
+    // V key down
+    textarea.dispatchEvent(new KeyboardEvent("keydown", { 
+      key: "v", 
+      code: "KeyV", 
+      ...metaKeyProps, 
+      bubbles: true,
+      cancelable: true 
+    }));
+    
+    // Set value directly
+    textarea.value = text;
+    
+    // Dispatch input event (critical for React)
+    textarea.dispatchEvent(new InputEvent("input", { 
+      bubbles: true,
+      cancelable: true, 
+      inputType: "insertFromPaste", 
+      data: text 
+    }));
+    
+    // Position cursor at end of text
+    textarea.selectionStart = textarea.selectionEnd = text.length;
+    
+    // Key up events in reverse order
+    textarea.dispatchEvent(new KeyboardEvent("keyup", { 
+      key: "v", 
+      code: "KeyV",
+      ...metaKeyProps, 
+      bubbles: true,
+      cancelable: true 
+    }));
+    
+    textarea.dispatchEvent(new KeyboardEvent("keyup", { 
+      key: metaKey, 
+      code: isMac ? "MetaLeft" : "ControlLeft",
+      ...metaKeyProps, 
+      bubbles: true,
+      cancelable: true
+    }));
+    
+    // Final change event
+    textarea.dispatchEvent(new Event("change", { 
+      bubbles: true,
+      cancelable: true 
+    }));
+    
+    await wait(50); // Brief pause after input sequence
+  } catch (error) {
+    console.error(`Error during text input: ${error.message}`);
+    throw error;
+  }
+}
+
+/**
+ * Verifies text input was accepted by React, with fallback mechanisms
+ * @param {Element} textarea - The textarea element
+ * @param {string} expectedText - The text that should be in the textarea
+ * @returns {Promise&lt;boolean&gt;} True if verification succeeds
+ */
+async function verifyTextInputAccepted(textarea, expectedText) {
+  console.log("Verifying text input was accepted...");
+  
+  return new Promise(async (resolve) =&gt; {
+    // Multiple placeholder selectors for different UI versions
+    const placeholderSelectors = [
+      'span.pointer-events-none', 
+      'span.text-fg-secondary.pointer-events-none',
+      'span[aria-hidden="true"]'
+    ];
+    
+    let attempts = 0;
+    const maxAttempts = 5;
+    
+    const checkStatus = async () =&gt; {
+      // Check if the textarea has the expected value
+      const valueCorrect = textarea.value === expectedText;
+      
+      // Check for placeholder visibility (hidden means React accepted the input)
+      const parent = textarea.parentElement;
+      if (!parent) {
+        resolve(valueCorrect); // Can't check placeholder, rely on value only
+        return;
+      }
+      
+      // Check each possible placeholder element
+      let placeholderHidden = true;
+      for (const selector of placeholderSelectors) {
+        const placeholder = parent.querySelector(selector);
+        if (placeholder) {
+          placeholderHidden = placeholder.classList.contains("hidden") || 
+                             placeholder.style.display === "none" ||
+                             placeholder.getAttribute("aria-hidden") === "true";
+          if (!placeholderHidden) break;
+        }
+      }
+      
+      // If both checks pass, we're good
+      if (valueCorrect &amp;&amp; placeholderHidden) {
+        console.log("✓ Text input accepted by React");
+        resolve(true);
+        return;
+      }
+      
+      // Try fallback if attempts exhausted
+      attempts++;
+      if (attempts &gt;= maxAttempts) {
+        console.warn("React did not accept input, trying execCommand fallback...");
+        
+        try {
+          // Clear and try execCommand approach
+          textarea.focus();
+          textarea.value = '';
+          document.execCommand("insertText", false, expectedText);
+          
+          // Wait briefly and check if fallback worked
+          await wait(100);
+          if (textarea.value === expectedText) {
+            console.log("✓ execCommand fallback successful");
+            resolve(true);
+          } else {
+            console.error("Text input failed even with fallback");
+            resolve(false);
+          }
+        } catch (e) {
+          console.error(`execCommand fallback failed: ${e.message}`);
+          resolve(false);
+        }
+        return;
+      }
+      
+      // Continue checking
+      setTimeout(checkStatus, 100);
+    };
+    
+    checkStatus();
+  });
+}
+
+/**
+ * Finds and clicks the submit button
+ * @param {Element} textarea - The textarea element (to help locate the form)
+ * @throws {Error} If submit button cannot be found or clicked
+ */
+async function clickSubmitButton(textarea) {
+  console.log("Finding submit button...");
+  
+  try {
+    // First try to find the button within the same form as the textarea
+    const form = textarea.closest('form');
+    
+    // Multiple strategies to find the submit button
+    const submitButton = await waitUntil(() =&gt; {
+      // Within form (most reliable)
+      if (form) {
+        const formButton = form.querySelector('button[type="submit"]:not([disabled])') ||
+                          form.querySelector('button[aria-label="Submit"]:not([disabled])');
+        if (formButton) return formButton;
+      }
+      
+      // Global selectors (backup)
+      return document.querySelector('button[type="submit"]:not([disabled])') ||
+             document.querySelector('button[aria-label="Submit"]:not([disabled])') ||
+             Array.from(document.querySelectorAll('button:not([disabled])'))
+               .find(btn =&gt; {
+                 // Check type attribute
+                 const hasSubmitType = btn.getAttribute('type') === 'submit';
+                 // Check for common icon patterns
+                 const hasSendIcon = btn.querySelector('svg path[d*="M2.01 21L23 12 2.01 3"]'); // Send icon
+                 // Check visible text
+                 const text = (btn.textContent || '').trim().toLowerCase();
+                 const hasSubmitText = text === 'submit' || text === 'send';
+                 
+                 return hasSubmitType || hasSendIcon || hasSubmitText;
+               });
+    }, 3000, 100);
+    
+    if (!submitButton) {
+      throw new Error("Submit button not found or not enabled");
+    }
+    
+    console.log("Submit button found, clicking...");
+    simulateButtonClick(submitButton);
+    
+    // Brief wait for submission to start
+    await wait(100);
+    
+    // Success is presumed if we get this far
+    console.log("✓ Submit button clicked");
+  } catch (error) {
+    throw new Error(`Submit button interaction failed: ${error.message}`);
+  }
+}
+
+// =============================================================================
+//  EVENT SIMULATION - Helpers for simulating natural user interactions
+// =============================================================================
+
+/**
+ * Simulates a complete button click with proper event sequence
+ * @param {Element} element - The element to click
+ */
+function simulateButtonClick(element) {
+  // Use the full pointer/mouse event sequence for maximum compatibility
+  const events = [
+    new PointerEvent("pointerdown", { bubbles: true, cancelable: true, view: window, button: 0 }),
+    new MouseEvent("mousedown", { bubbles: true, cancelable: true, view: window, button: 0 }),
+    new PointerEvent("pointerup", { bubbles: true, cancelable: true, view: window, button: 0 }),
+    new MouseEvent("mouseup", { bubbles: true, cancelable: true, view: window, button: 0 }),
+    new MouseEvent("click", { bubbles: true, cancelable: true, view: window, button: 0 })
+  ];
+  
+  // Dispatch events with small delays to mimic natural interaction
+  events.forEach(event =&gt; element.dispatchEvent(event));
+}
+
+/**
+ * Simulates a complete focus sequence for text inputs
+ * @param {Element} element - The element to focus
+ */
+function simulateFocusSequence(element) {
+  // The exact event sequence observed in natural browser interactions
+  const events = [
+    new FocusEvent("focus", { bubbles: true, view: window }),
+    new FocusEvent("focusin", { bubbles: true, view: window }),
+    new PointerEvent("pointerdown", { bubbles: true, cancelable: true, view: window }),
+    new MouseEvent("mousedown", { bubbles: true, cancelable: true, view: window }),
+    new PointerEvent("pointerup", { bubbles: true, cancelable: true, view: window }),
+    new MouseEvent("mouseup", { bubbles: true, cancelable: true, view: window }),
+    new MouseEvent("click", { bubbles: true, cancelable: true, view: window })
+  ];
+  
+  events.forEach(event =&gt; element.dispatchEvent(event));
+  element.focus(); // Actual browser focus
+}
+
+// =============================================================================
+//  UTILITY FUNCTIONS - General helpers used throughout the script
+// =============================================================================
+
+/**
+ * Waits for a specified time
+ * @param {number} ms - Milliseconds to wait
+ * @returns {Promise&lt;void&gt;}
+ */
+function wait(ms) {
+  return new Promise(resolve =&gt; setTimeout(resolve, ms));
+}
+
+/**
+ * Waits until a condition is true or timeout expires
+ * @param {Function} condition - Function that returns truthy when condition is met
+ * @param {number} timeout - Maximum time to wait in milliseconds
+ * @param {number} interval - Polling interval in milliseconds
+ * @returns {Promise&lt;any&gt;} - Resolves with condition result when true
+ */
+function waitUntil(condition, timeout = 3000, interval = 100) {
+  return new Promise((resolve, reject) =&gt; {
+    const startTime = Date.now();
+    
+    const checkCondition = () =&gt; {
+      try {
+        const result = condition();
+        if (result) {
+          resolve(result);
+          return;
+        }
+      } catch (e) {
+        // Ignore errors in condition function during polling
+      }
+      
+      if (Date.now() - startTime &gt; timeout) {
+        reject(new Error("Timeout waiting for condition"));
+        return;
+      }
+      
+      setTimeout(checkCondition, interval);
+    };
+    
+    checkCondition();
+  });
+}
+
+// =============================================================================
+//  SCRIPT EXECUTION - Entry point that calls automateGrokChat with KM variables
+// =============================================================================
+
+// Ensure we have kmvar, providing fallbacks for testing
+if (typeof kmvar === 'undefined') {
+  console.warn("kmvar not defined, using testing defaults");
+  var kmvar = {
+    PromptText: "Test message from automation script",
+    Research: "No", 
+    Incognito: "No"
+  };
+}
+
+// Extract variables with fallbacks
+const promptText = kmvar.PromptText || "Test message";
+const researchMode = kmvar.Research || "No";
+const incognitoMode = kmvar.Incognito || "No";
+
+// Call the main function and handle results for Keyboard Maestro
+automateGrokChat(promptText, researchMode, incognitoMode)
+  .then(result =&gt; {
+    console.log("Final result:", result);
+    return result; // Return for Keyboard Maestro
+  })
+  .catch(error =&gt; {
+    console.error("Script execution failed:", error.message);
+    return `ERROR: ${error.message}`; // Return structured error for KM
+  });</string>
+						<key>TimeOutAbortsMacro</key>
+						<true/>
+						<key>TrimResults</key>
+						<true/>
+						<key>TrimResultsNew</key>
+						<true/>
+						<key>UseModernSyntax</key>
+						<true/>
+						<key>UseText</key>
+						<true/>
+						<key>WebBrowser</key>
+						<string>Front Browser</string>
+					</dict>
+				</array>
+				<key>CreationDate</key>
+				<real>766299999.99999905</real>
+				<key>ModificationDate</key>
+				<real>771741028.16387606</real>
+				<key>Name</key>
+				<string>LLMs Activate</string>
+				<key>Triggers</key>
+				<array>
+					<dict>
+						<key>FireType</key>
+						<string>Pressed</string>
+						<key>KeyCode</key>
+						<integer>15</integer>
+						<key>MacroTriggerType</key>
+						<string>HotKey</string>
+						<key>Modifiers</key>
+						<integer>768</integer>
+					</dict>
+				</array>
+				<key>UID</key>
+				<string>12345678-ABCD-1234-EFAB-9876543210AB</string>
+			</dict>
+		</array>
+		<key>Name</key>
+		<string>Global Macro Group</string>
+		<key>ToggleMacroUID</key>
+		<string>E1AC0AB8-E9D7-4C0A-ACA3-61C51961E2A5</string>
+		<key>UID</key>
+		<string>804D32AF-0B39-439F-8EF3-493A833B14CA</string>
+	</dict>
+</array>
+</plist>

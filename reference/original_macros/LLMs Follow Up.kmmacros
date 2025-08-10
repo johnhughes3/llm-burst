@@ -1,0 +1,1735 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<!DOCTYPE plist PUBLIC "-//Apple//DTD PLIST 1.0//EN" "http://www.apple.com/DTDs/PropertyList-1.0.dtd">
+<plist version="1.0">
+<array>
+	<dict>
+		<key>Activate</key>
+		<string>Normal</string>
+		<key>CreationDate</key>
+		<real>766205513.29118598</real>
+		<key>Macros</key>
+		<array>
+			<dict>
+				<key>Actions</key>
+				<array>
+					<dict>
+						<key>ActionUID</key>
+						<integer>3425</integer>
+						<key>MacroActionType</key>
+						<string>Comment</string>
+						<key>StyledText</key>
+						<data>
+						cnRmZAAAAAADAAAAAgAAAAcAAABU
+						WFQucnRmAQAAAC6YAAAAKwAAAAEA
+						AACQAAAAe1xydGYxXGFuc2lcYW5z
+						aWNwZzEyNTJcY29jb2FydGYyODIy
+						Clxjb2NvYXRleHRzY2FsaW5nMFxj
+						b2NvYXBsYXRmb3JtMHtcZm9udHRi
+						bH0Ke1xjb2xvcnRibDtccmVkMjU1
+						XGdyZWVuMjU1XGJsdWUyNTU7fQp7
+						XCpcZXhwYW5kZWRjb2xvcnRibDs7
+						fQp9AQAAACMAAAABAAAABwAAAFRY
+						VC5ydGYQAAAAv0D8Z7YBAAAAAAAA
+						AAAAAA==
+						</data>
+						<key>Title</key>
+						<string>Prompt Set Up</string>
+					</dict>
+					<dict>
+						<key>ActionUID</key>
+						<integer>3442</integer>
+						<key>MacroActionType</key>
+						<string>SetVariableToText</string>
+						<key>Text</key>
+						<string>%SystemClipboard%</string>
+						<key>Variable</key>
+						<string>PromptText</string>
+					</dict>
+					<dict>
+						<key>ActionUID</key>
+						<integer>3440</integer>
+						<key>DisplayKind</key>
+						<string>Variable</string>
+						<key>HonourFailureSettings</key>
+						<true/>
+						<key>IncludeStdErr</key>
+						<false/>
+						<key>IncludedVariables</key>
+						<array>
+							<string>9999</string>
+						</array>
+						<key>MacroActionType</key>
+						<string>ExecuteAppleScript</string>
+						<key>Path</key>
+						<string></string>
+						<key>Text</key>
+						<string>-- Path to the JSON file
+set jsonFilePath to (POSIX path of (path to home folder)) &amp; "Library/Application Support/Keyboard Maestro/ChatbotTasks.json"
+
+-- Get existing window IDs from Safari
+tell application "Safari"
+    set existingWindowIDs to {}
+    repeat with w in windows
+        try
+            set end of existingWindowIDs to (id of w as string)
+        end try
+    end repeat
+end tell
+
+-- Create Python script to read and validate JSON
+set pythonScript to "
+import json
+import os
+
+json_file_path = '" &amp; jsonFilePath &amp; "'
+existing_windows = " &amp; my listToString(existingWindowIDs) &amp; "
+
+# Initialize result string
+result = ''
+
+# Check if file exists
+if not os.path.exists(json_file_path):
+    print('NO_TASKS')
+    exit(0)
+
+try:
+    # Read JSON file
+    with open(json_file_path, 'r') as f:
+        data = json.load(f)
+    
+    # Get the most_recent_task
+    most_recent_task = data.get('most_recent_task', '')
+    
+    # Process each task
+    valid_tasks = []
+    for task_name, task_info in data.items():
+        if task_name == 'most_recent_task':
+            continue
+            
+        # Check if any window is still open
+        has_open_window = False
+        for model, window_id in task_info.items():
+            if model != 'created_at' and window_id in existing_windows:
+                has_open_window = True
+                break
+        
+        if has_open_window:
+            valid_tasks.append(task_name)
+    
+    # Build menu string with most recent task first
+    if most_recent_task in valid_tasks:
+        valid_tasks.remove(most_recent_task)
+        valid_tasks.insert(0, most_recent_task)
+    
+    # Return formatted string for KM menu - CHANGED FROM PIPE TO NEWLINE
+    if valid_tasks:
+        result = '\\n'.join(valid_tasks)
+    else:
+        result = 'NO_TASKS'
+    
+    print(result)
+
+except Exception as e:
+    print(f'ERROR: {str(e)}')
+"
+
+-- Execute Python script
+set pythonResult to do shell script "/usr/bin/python3 -c " &amp; quoted form of pythonScript
+
+-- Return result directly to Keyboard Maestro
+return pythonResult
+
+-- Helper function to convert AppleScript list to Python list
+on listToString(theList)
+    set resultString to "["
+    repeat with i from 1 to count of theList
+        set theItem to item i of theList
+        set resultString to resultString &amp; "'" &amp; theItem &amp; "'"
+        if i &lt; (count of theList) then
+            set resultString to resultString &amp; ", "
+        end if
+    end repeat
+    set resultString to resultString &amp; "]"
+    return resultString
+end listToString</string>
+						<key>TimeOutAbortsMacro</key>
+						<true/>
+						<key>TrimResults</key>
+						<true/>
+						<key>TrimResultsNew</key>
+						<true/>
+						<key>UseText</key>
+						<true/>
+						<key>Variable</key>
+						<string>ValidTasks</string>
+					</dict>
+					<dict>
+						<key>Action</key>
+						<string>DisplayWindow</string>
+						<key>ActionUID</key>
+						<integer>8210</integer>
+						<key>IsActive</key>
+						<false/>
+						<key>MacroActionType</key>
+						<string>InsertText</string>
+						<key>StyledText</key>
+						<data>
+						cnRmZAAAAAADAAAAAgAAAAcAAABU
+						WFQucnRmAQAAAC6WAQAAKwAAAAEA
+						AACOAQAAe1xydGYxXGFuc2lcYW5z
+						aWNwZzEyNTJcY29jb2FydGYyODIy
+						Clxjb2NvYXRleHRzY2FsaW5nMFxj
+						b2NvYXBsYXRmb3JtMHtcZm9udHRi
+						bFxmMFxmc3dpc3NcZmNoYXJzZXQw
+						IEhlbHZldGljYTt9CntcY29sb3J0
+						Ymw7XHJlZDI1NVxncmVlbjI1NVxi
+						bHVlMjU1O1xyZWQwXGdyZWVuMFxi
+						bHVlMDt9CntcKlxleHBhbmRlZGNv
+						bG9ydGJsOztcY3NzcmdiXGMwXGMw
+						XGMwXGM4NDcwNlxjbmFtZSBjb250
+						cm9sVGV4dENvbG9yO30KXHBhcmRc
+						dHg1NjBcdHgxMTIwXHR4MTY4MFx0
+						eDIyNDBcdHgyODAwXHR4MzM2MFx0
+						eDM5MjBcdHg0NDgwXHR4NTA0MFx0
+						eDU2MDBcdHg2MTYwXHR4NjcyMFxw
+						YXJkaXJuYXR1cmFsXHBhcnRpZ2h0
+						ZW5mYWN0b3IwCgpcZjBcZnMyNiBc
+						Y2YyICVWYXJpYWJsZSVWYWxpZFRh
+						c2tzJX0BAAAAIwAAAAEAAAAHAAAA
+						VFhULnJ0ZhAAAAAj+/5ntgEAAAAA
+						AAAAAAAA
+						</data>
+						<key>Text</key>
+						<string>%Variable%ValidTasks%</string>
+					</dict>
+					<dict>
+						<key>ActionUID</key>
+						<integer>3444</integer>
+						<key>Conditions</key>
+						<dict>
+							<key>ConditionList</key>
+							<array>
+								<dict>
+									<key>ConditionType</key>
+									<string>Variable</string>
+									<key>Variable</key>
+									<string>ValidTasks</string>
+									<key>VariableConditionType</key>
+									<string>IsNot</string>
+									<key>VariableValue</key>
+									<string>NO_TASKS</string>
+								</dict>
+								<dict>
+									<key>ConditionType</key>
+									<string>Variable</string>
+									<key>Variable</key>
+									<string>ValidTasks</string>
+									<key>VariableConditionType</key>
+									<string>DoesNotContain</string>
+									<key>VariableValue</key>
+									<string>ERROR:</string>
+								</dict>
+							</array>
+							<key>ConditionListMatch</key>
+							<string>All</string>
+						</dict>
+						<key>ElseActions</key>
+						<array>
+							<dict>
+								<key>ActionUID</key>
+								<integer>3449</integer>
+								<key>Buttons</key>
+								<array>
+									<dict>
+										<key>Button</key>
+										<string>OK</string>
+										<key>Cancel</key>
+										<true/>
+									</dict>
+								</array>
+								<key>MacroActionType</key>
+								<string>PromptForUserInput</string>
+								<key>Prompt</key>
+								<string>No valid tasks found. Please start a new LLM conversation first.</string>
+								<key>TimeOutAbortsMacro</key>
+								<true/>
+								<key>Title</key>
+								<string>No Chats</string>
+								<key>Variables</key>
+								<array/>
+							</dict>
+							<dict>
+								<key>Action</key>
+								<string>CancelThisMacro</string>
+								<key>ActionUID</key>
+								<integer>3445</integer>
+								<key>MacroActionType</key>
+								<string>Cancel</string>
+							</dict>
+						</array>
+						<key>MacroActionType</key>
+						<string>IfThenElse</string>
+						<key>ThenActions</key>
+						<array/>
+						<key>TimeOutAbortsMacro</key>
+						<true/>
+					</dict>
+					<dict>
+						<key>ActionUID</key>
+						<integer>7015</integer>
+						<key>Destination</key>
+						<string>Variable</string>
+						<key>DestinationVariable</key>
+						<string>TaskName</string>
+						<key>MacroActionType</key>
+						<string>PromptWithList</string>
+						<key>PromptUID</key>
+						<string>8C33DAAF-5137-45F9-A29C-7CF314962B0D</string>
+						<key>Source</key>
+						<string>Variable</string>
+						<key>TimeOutAbortsMacro</key>
+						<true/>
+						<key>Variable</key>
+						<string>ValidTasks</string>
+						<key>WindowTitle</key>
+						<string>LLM Tasks</string>
+					</dict>
+					<dict>
+						<key>ActionUID</key>
+						<integer>3424</integer>
+						<key>Buttons</key>
+						<array>
+							<dict>
+								<key>Button</key>
+								<string>OK</string>
+							</dict>
+							<dict>
+								<key>Button</key>
+								<string>Cancel</string>
+								<key>Cancel</key>
+								<true/>
+							</dict>
+						</array>
+						<key>MacroActionType</key>
+						<string>PromptForUserInput</string>
+						<key>Prompt</key>
+						<string>Confirm your follow-up question</string>
+						<key>TimeOutAbortsMacro</key>
+						<true/>
+						<key>Title</key>
+						<string>LLM Follow-Up Question</string>
+						<key>Variables</key>
+						<array>
+							<dict>
+								<key>Default</key>
+								<string>%Variable%PromptText%</string>
+								<key>Type</key>
+								<string>Automatic</string>
+								<key>Variable</key>
+								<string>PromptText</string>
+							</dict>
+						</array>
+					</dict>
+					<dict>
+						<key>ActionUID</key>
+						<integer>3443</integer>
+						<key>DisplayKind</key>
+						<string>None</string>
+						<key>HonourFailureSettings</key>
+						<true/>
+						<key>IncludeStdErr</key>
+						<false/>
+						<key>IncludedVariables</key>
+						<array>
+							<string>9999</string>
+						</array>
+						<key>MacroActionType</key>
+						<string>ExecuteAppleScript</string>
+						<key>Path</key>
+						<string></string>
+						<key>Text</key>
+						<string>-- Get the selected task from Keyboard Maestro
+tell application "Keyboard Maestro Engine"
+    set selectedTask to getvariable "TaskName"
+end tell
+
+-- Path to the JSON file
+set jsonFilePath to (POSIX path of (path to home folder)) &amp; "Library/Application Support/Keyboard Maestro/ChatbotTasks.json"
+
+-- Get existing window IDs from Safari
+tell application "Safari"
+    set existingWindowIDs to {}
+    repeat with w in windows
+        try
+            set end of existingWindowIDs to (id of w as string)
+        end try
+    end repeat
+end tell
+
+-- Create Python script to update JSON and get window IDs
+set pythonScript to "
+import json
+import os
+
+json_file_path = '" &amp; jsonFilePath &amp; "'
+selected_task = '" &amp; selectedTask &amp; "'
+existing_windows = " &amp; my listToString(existingWindowIDs) &amp; "
+
+try:
+    # Read JSON file
+    with open(json_file_path, 'r') as f:
+        data = json.load(f)
+    
+    # Update most_recent_task
+    data['most_recent_task'] = selected_task
+    
+    # Get window IDs for the selected task
+    task_info = data.get(selected_task, {})
+    window_ids = {
+        'gemini': task_info.get('GeminiWindowID', '0'),
+        'claude': task_info.get('ClaudeWindowID', '0'),
+        'chatgpt': task_info.get('ChatGPTWindowID', '0'),
+        'grok': task_info.get('GrokWindowID', '0')
+    }
+    
+    # Validate that windows still exist
+    for model, window_id in list(window_ids.items()):
+        if window_id not in existing_windows and window_id != '0':
+            window_ids[model] = '0'
+    
+    # Update the task data with validated window IDs
+    if 'GeminiWindowID' in task_info:
+        task_info['GeminiWindowID'] = window_ids['gemini']
+    if 'ClaudeWindowID' in task_info:
+        task_info['ClaudeWindowID'] = window_ids['claude']
+    if 'ChatGPTWindowID' in task_info:
+        task_info['ChatGPTWindowID'] = window_ids['chatgpt']
+    if 'GrokWindowID' in task_info:
+        task_info['GrokWindowID'] = window_ids['grok']
+    
+    # Save the updated JSON
+    with open(json_file_path, 'w') as f:
+        json.dump(data, f, indent=2)
+    
+    # Return window IDs as pipe-separated string
+    print(f\"{window_ids['gemini']}|{window_ids['claude']}|{window_ids['chatgpt']}|{window_ids['grok']}\")
+
+except Exception as e:
+    print(f'ERROR: {str(e)}')
+"
+
+-- Execute Python script
+set pythonResult to do shell script "/usr/bin/python3 -c " &amp; quoted form of pythonScript
+
+-- Parse the result
+if pythonResult starts with "ERROR:" then
+    return "ERROR"
+else
+    set oldTIFS to AppleScript's text item delimiters
+    set AppleScript's text item delimiters to "|"
+    set windowIDs to text items of pythonResult
+    set AppleScript's text item delimiters to oldTIFS
+    
+    -- Set window ID variables in Keyboard Maestro
+    tell application "Keyboard Maestro Engine"
+        setvariable "GeminiWindowID" to item 1 of windowIDs
+        setvariable "ClaudeWindowID" to item 2 of windowIDs
+        setvariable "ChatGPTWindowID" to item 3 of windowIDs
+        setvariable "GrokWindowID" to item 4 of windowIDs
+    end tell
+    
+    return "OK"
+end if
+
+-- Helper function to convert AppleScript list to Python list
+on listToString(theList)
+    set resultString to "["
+    repeat with i from 1 to count of theList
+        set theItem to item i of theList
+        set resultString to resultString &amp; "'" &amp; theItem &amp; "'"
+        if i &lt; count of theList then
+            set resultString to resultString &amp; ", "
+        end if
+    end repeat
+    set resultString to resultString &amp; "]"
+    return resultString
+end listToString</string>
+						<key>TimeOutAbortsMacro</key>
+						<true/>
+						<key>TrimResults</key>
+						<true/>
+						<key>TrimResultsNew</key>
+						<true/>
+						<key>UseText</key>
+						<true/>
+					</dict>
+					<dict>
+						<key>ActionUID</key>
+						<integer>3428</integer>
+						<key>Conditions</key>
+						<dict>
+							<key>ConditionList</key>
+							<array>
+								<dict>
+									<key>ConditionType</key>
+									<string>Variable</string>
+									<key>Variable</key>
+									<string>GeminiWindowID</string>
+									<key>VariableConditionType</key>
+									<string>IsNot</string>
+									<key>VariableValue</key>
+									<string>0</string>
+								</dict>
+							</array>
+							<key>ConditionListMatch</key>
+							<string>All</string>
+						</dict>
+						<key>ElseActions</key>
+						<array/>
+						<key>MacroActionType</key>
+						<string>IfThenElse</string>
+						<key>ThenActions</key>
+						<array>
+							<dict>
+								<key>ActionUID</key>
+								<integer>3429</integer>
+								<key>DisplayKind</key>
+								<string>None</string>
+								<key>HonourFailureSettings</key>
+								<true/>
+								<key>IncludeStdErr</key>
+								<false/>
+								<key>IncludedVariables</key>
+								<array>
+									<string>9999</string>
+								</array>
+								<key>MacroActionType</key>
+								<string>ExecuteAppleScript</string>
+								<key>Path</key>
+								<string></string>
+								<key>Text</key>
+								<string>tell application "Keyboard Maestro Engine"
+    set geminiIDVar to getvariable "GeminiWindowID"
+    set promptTextVar to getvariable "PromptText"
+end tell
+
+-- Check if we have a valid window ID
+if geminiIDVar is "0" or geminiIDVar is "" then
+    return "SKIP_GEMINI"
+end if
+
+-- Focus on the Gemini window
+tell application "Safari"
+    try
+        set w to window id geminiIDVar
+        set current tab of w to tab 1 of w
+        set index of w to 1
+        return "OK"
+    on error
+        -- If window doesn't exist anymore
+        tell application "Keyboard Maestro Engine"
+            setvariable "GeminiWindowID" to "0"
+        end tell
+        return "SKIP_GEMINI"
+    end try
+end tell</string>
+								<key>TimeOutAbortsMacro</key>
+								<true/>
+								<key>TrimResults</key>
+								<true/>
+								<key>TrimResultsNew</key>
+								<true/>
+								<key>UseText</key>
+								<true/>
+							</dict>
+							<dict>
+								<key>ActionUID</key>
+								<integer>3430</integer>
+								<key>DisplayKind</key>
+								<string>None</string>
+								<key>HonourFailureSettings</key>
+								<true/>
+								<key>IncludeStdErr</key>
+								<false/>
+								<key>IncludedVariables</key>
+								<array>
+									<string>9999</string>
+								</array>
+								<key>MacroActionType</key>
+								<string>ExecuteJavaScript</string>
+								<key>Path</key>
+								<string></string>
+								<key>Text</key>
+								<string>// JavaScript to Send Gemini Follow-Up (using robust paragraph insertion)
+function geminiFollowUpMessage(messageText) {
+  return new Promise((resolve, reject) =&gt; {
+    try {
+      // Find the editable text area
+      const editor = document.querySelector('.ql-editor');
+      if (!editor) {
+        console.error('Gemini editor element not found');
+        reject('Editor element not found');
+        return;
+      }
+      console.log('Found Gemini editor element');
+
+      editor.focus();
+      editor.innerHTML = ''; // Clear existing content
+
+      // Split text into paragraphs and add them properly
+      const lines = messageText.split('\n');
+      lines.forEach(line =&gt; {
+        const p = document.createElement('p');
+        p.textContent = line || '\u00A0'; // Use non-breaking space for empty lines
+        editor.appendChild(p);
+      });
+      console.log('Follow-up text added as individual paragraphs');
+
+      // Dispatch input event
+      editor.dispatchEvent(new Event('input', { bubbles: true, cancelable: true }));
+      console.log('Input event dispatched');
+
+      // Wait for send button (using the existing retry logic in your follow-up script is fine)
+      const checkSendButton = () =&gt; {
+        const sendButton = document.querySelector('.send-button');
+        if (!sendButton) {
+          reject('Send button not found');
+          return;
+        }
+        const isDisabled =
+          sendButton.getAttribute('aria-disabled') === 'true' ||
+          sendButton.parentElement.classList.contains('disabled');
+
+        if (isDisabled) {
+          console.log('Send button is disabled, waiting...');
+          setTimeout(checkSendButton, 300); // Keep checking
+          return;
+        }
+        console.log('Send button enabled, clicking');
+        sendButton.click();
+        console.log('Gemini follow-up message sent successfully');
+        resolve();
+      };
+      setTimeout(checkSendButton, 500); // Initial delay before checking
+
+    } catch (error) {
+        console.error(`Error in geminiFollowUpMessage: ${error}`);
+        reject(`Error: ${error}`);
+    }
+  });
+}
+
+// Call the function
+var promptText = kmvar.PromptText;
+geminiFollowUpMessage(promptText);</string>
+								<key>TimeOutAbortsMacro</key>
+								<true/>
+								<key>TrimResults</key>
+								<true/>
+								<key>TrimResultsNew</key>
+								<true/>
+								<key>UseModernSyntax</key>
+								<true/>
+								<key>UseText</key>
+								<true/>
+								<key>WebBrowser</key>
+								<string>Safari</string>
+							</dict>
+						</array>
+						<key>TimeOutAbortsMacro</key>
+						<true/>
+					</dict>
+					<dict>
+						<key>ActionUID</key>
+						<integer>3431</integer>
+						<key>Conditions</key>
+						<dict>
+							<key>ConditionList</key>
+							<array>
+								<dict>
+									<key>ConditionType</key>
+									<string>Variable</string>
+									<key>Variable</key>
+									<string>ClaudeWindowID</string>
+									<key>VariableConditionType</key>
+									<string>IsNot</string>
+									<key>VariableValue</key>
+									<string>0</string>
+								</dict>
+							</array>
+							<key>ConditionListMatch</key>
+							<string>All</string>
+						</dict>
+						<key>ElseActions</key>
+						<array/>
+						<key>MacroActionType</key>
+						<string>IfThenElse</string>
+						<key>ThenActions</key>
+						<array>
+							<dict>
+								<key>ActionUID</key>
+								<integer>3432</integer>
+								<key>DisplayKind</key>
+								<string>None</string>
+								<key>HonourFailureSettings</key>
+								<true/>
+								<key>IncludeStdErr</key>
+								<false/>
+								<key>IncludedVariables</key>
+								<array>
+									<string>9999</string>
+								</array>
+								<key>MacroActionType</key>
+								<string>ExecuteAppleScript</string>
+								<key>Path</key>
+								<string></string>
+								<key>Text</key>
+								<string>tell application "Keyboard Maestro Engine"
+    set claudeIDVar to getvariable "ClaudeWindowID"
+    set promptTextVar to getvariable "PromptText"
+end tell
+
+-- Check if we have a valid window ID
+if claudeIDVar is "0" or claudeIDVar is "" then
+    return "SKIP_CLAUDE"
+end if
+
+-- Focus on the Claude window
+tell application "Safari"
+    try
+        set w to window id claudeIDVar
+        set current tab of w to tab 1 of w
+        set index of w to 1
+        return "OK"
+    on error
+        -- If window doesn't exist anymore
+        tell application "Keyboard Maestro Engine"
+            setvariable "ClaudeWindowID" to "0"
+        end tell
+        return "SKIP_CLAUDE"
+    end try
+end tell</string>
+								<key>TimeOutAbortsMacro</key>
+								<true/>
+								<key>TrimResults</key>
+								<true/>
+								<key>TrimResultsNew</key>
+								<true/>
+								<key>UseText</key>
+								<true/>
+							</dict>
+							<dict>
+								<key>ActionUID</key>
+								<integer>3433</integer>
+								<key>DisplayKind</key>
+								<string>None</string>
+								<key>HonourFailureSettings</key>
+								<true/>
+								<key>IncludeStdErr</key>
+								<false/>
+								<key>IncludedVariables</key>
+								<array>
+									<string>9999</string>
+								</array>
+								<key>MacroActionType</key>
+								<string>ExecuteJavaScript</string>
+								<key>Path</key>
+								<string></string>
+								<key>Text</key>
+								<string>// JavaScript to Send Claude Follow-Up (using robust paragraph insertion)
+function claudeFollowUpMessage(messageText) {
+  return new Promise((resolve, reject) =&gt; {
+    try {
+        // Find the ProseMirror element
+        const editorElement = document.querySelector('.ProseMirror');
+        if (!editorElement) {
+          console.error('Claude editor element not found');
+          reject('Editor element not found');
+          return;
+        }
+        editorElement.focus();
+        editorElement.innerHTML = ''; // Clear
+        // Split text by line breaks and create proper paragraph elements
+        const lines = messageText.split('\n');
+        lines.forEach(line =&gt; {
+          const p = document.createElement('p');
+          p.textContent = line || '\u00A0'; // Use nbsp for empty lines
+          editorElement.appendChild(p);
+        });
+        console.log('Follow-up text added as individual paragraphs');
+        // Dispatch input event
+        const inputEvent = new Event('input', { bubbles: true });
+        editorElement.dispatchEvent(inputEvent);
+        console.log('Input event dispatched');
+        // Wait for send button (existing logic is fine)
+        setTimeout(() =&gt; {
+          const sendButton = document.querySelector('button[aria-label="Send message"]');
+          if (!sendButton) {
+            reject('Send button not found');
+            return;
+          }
+          if (sendButton.disabled) {
+             // Adding a retry mechanism similar to Gemini's for robustness
+             console.log('Claude send button disabled, retrying...');
+             setTimeout(() =&gt; {
+                 if (sendButton.disabled) {
+                     reject('Send button still disabled after retry');
+                     return;
+                 }
+                 sendButton.click();
+                 console.log('Follow-up message sent successfully after retry');
+                 
+                 // Scroll to bottom after 1 second
+                 setTimeout(() =&gt; {
+                   window.scrollTo({
+                     top: document.documentElement.scrollHeight,
+                     behavior: 'smooth'
+                   });
+                   console.log('Scrolled to bottom of page');
+                 }, 1000);
+                 
+                 resolve();
+             }, 500); // Wait another 500ms
+             return;
+          }
+          sendButton.click();
+          console.log('Follow-up message sent successfully');
+          
+          // Scroll to bottom after 1 second
+          setTimeout(() =&gt; {
+            window.scrollTo({
+              top: document.documentElement.scrollHeight,
+              behavior: 'smooth'
+            });
+            console.log('Scrolled to bottom of page');
+          }, 1000);
+          
+          resolve();
+        }, 500); // Initial timeout
+    } catch (error) {
+        console.error(`Error in claudeFollowUpMessage: ${error}`);
+        reject(`Error adding text or sending: ${error}`);
+    }
+  });
+}
+// Call the function
+var promptText = kmvar.PromptText;
+claudeFollowUpMessage(promptText);</string>
+								<key>TimeOutAbortsMacro</key>
+								<true/>
+								<key>TrimResults</key>
+								<true/>
+								<key>TrimResultsNew</key>
+								<true/>
+								<key>UseModernSyntax</key>
+								<true/>
+								<key>UseText</key>
+								<true/>
+								<key>WebBrowser</key>
+								<string>Safari</string>
+							</dict>
+						</array>
+						<key>TimeOutAbortsMacro</key>
+						<true/>
+					</dict>
+					<dict>
+						<key>ActionUID</key>
+						<integer>3434</integer>
+						<key>Conditions</key>
+						<dict>
+							<key>ConditionList</key>
+							<array>
+								<dict>
+									<key>ConditionType</key>
+									<string>Variable</string>
+									<key>Variable</key>
+									<string>ChatGPTWindowID</string>
+									<key>VariableConditionType</key>
+									<string>IsNot</string>
+									<key>VariableValue</key>
+									<string>0</string>
+								</dict>
+							</array>
+							<key>ConditionListMatch</key>
+							<string>All</string>
+						</dict>
+						<key>ElseActions</key>
+						<array/>
+						<key>MacroActionType</key>
+						<string>IfThenElse</string>
+						<key>ThenActions</key>
+						<array>
+							<dict>
+								<key>ActionUID</key>
+								<integer>3435</integer>
+								<key>DisplayKind</key>
+								<string>None</string>
+								<key>HonourFailureSettings</key>
+								<true/>
+								<key>IncludeStdErr</key>
+								<false/>
+								<key>IncludedVariables</key>
+								<array>
+									<string>9999</string>
+								</array>
+								<key>MacroActionType</key>
+								<string>ExecuteAppleScript</string>
+								<key>Path</key>
+								<string></string>
+								<key>Text</key>
+								<string>tell application "Keyboard Maestro Engine"
+    set chatGPTIDVar to getvariable "ChatGPTWindowID"
+    set promptTextVar to getvariable "PromptText"
+end tell
+
+-- Check if we have a valid window ID
+if chatGPTIDVar is "0" or chatGPTIDVar is "" then
+    return "SKIP_CHATGPT"
+end if
+
+-- Focus on the ChatGPT window
+tell application "Safari"
+    try
+        set w to window id chatGPTIDVar
+        set current tab of w to tab 1 of w
+        set index of w to 1
+        return "OK"
+    on error
+        -- If window doesn't exist anymore
+        tell application "Keyboard Maestro Engine"
+            setvariable "ChatGPTWindowID" to "0"
+        end tell
+        return "SKIP_CHATGPT"
+    end try
+end tell</string>
+								<key>TimeOutAbortsMacro</key>
+								<true/>
+								<key>TrimResults</key>
+								<true/>
+								<key>TrimResultsNew</key>
+								<true/>
+								<key>UseText</key>
+								<true/>
+							</dict>
+							<dict>
+								<key>ActionUID</key>
+								<integer>3436</integer>
+								<key>DisplayKind</key>
+								<string>None</string>
+								<key>HonourFailureSettings</key>
+								<true/>
+								<key>IncludeStdErr</key>
+								<false/>
+								<key>IncludedVariables</key>
+								<array>
+									<string>9999</string>
+								</array>
+								<key>MacroActionType</key>
+								<string>ExecuteJavaScript</string>
+								<key>Path</key>
+								<string></string>
+								<key>Text</key>
+								<string>// JavaScript to Send ChatGPT Follow-Up
+function chatGPTFollowUpMessage(messageText) {
+  return new Promise((resolve, reject) =&gt; {
+    try {
+      // Find the ProseMirror element (the editable div)
+      const editorElement = document.querySelector('#prompt-textarea');
+      if (!editorElement) {
+        console.error('Editor element not found');
+        reject('Editor element not found');
+        return;
+      }
+      
+      console.log('Found ChatGPT editor element');
+      
+      // Focus the editor
+      editorElement.focus();
+      
+      // Clear existing content
+      // This uses the innerHTML approach since it's contenteditable
+      editorElement.innerHTML = '';
+      
+      // Set the text content
+      editorElement.textContent = messageText;
+      
+      // Dispatch input event to ensure ChatGPT registers the change
+      const inputEvent = new Event('input', { bubbles: true });
+      editorElement.dispatchEvent(inputEvent);
+      
+      console.log('Follow-up text added to ChatGPT input');
+      
+      // Wait a moment for the send button to become enabled
+      setTimeout(() =&gt; {
+        // Find the send button - looking for the submit button
+        const sendButton = document.querySelector('button[type="submit"]');
+        if (!sendButton) {
+          // Try alternative selector if the primary one fails
+          const alternativeSendButton = document.querySelector('[data-testid="send-button"]');
+          if (!alternativeSendButton) {
+            reject('Send button not found');
+            return;
+          }
+          
+          // Check if the button is disabled
+          if (alternativeSendButton.disabled) {
+            reject('Send button is disabled');
+            return;
+          }
+          
+          // Click the alternative send button
+          alternativeSendButton.click();
+          console.log('ChatGPT follow-up message sent successfully (alternative button)');
+          resolve();
+          return;
+        }
+        
+        // Check if the primary button is disabled
+        if (sendButton.disabled) {
+          reject('Send button is disabled');
+          return;
+        }
+        
+        // Click the send button
+        sendButton.click();
+        console.log('ChatGPT follow-up message sent successfully');
+        resolve();
+      }, 500); // Give time for the button to become enabled after text is entered
+    } catch (error) {
+      reject(`Error: ${error}`);
+    }
+  });
+}
+
+// Call the function with the prompt text from Keyboard Maestro
+var promptText = kmvar.PromptText;
+chatGPTFollowUpMessage(promptText);</string>
+								<key>TimeOutAbortsMacro</key>
+								<true/>
+								<key>TrimResults</key>
+								<true/>
+								<key>TrimResultsNew</key>
+								<true/>
+								<key>UseModernSyntax</key>
+								<true/>
+								<key>UseText</key>
+								<true/>
+								<key>WebBrowser</key>
+								<string>Safari</string>
+							</dict>
+						</array>
+						<key>TimeOutAbortsMacro</key>
+						<true/>
+					</dict>
+					<dict>
+						<key>ActionUID</key>
+						<integer>3437</integer>
+						<key>Conditions</key>
+						<dict>
+							<key>ConditionList</key>
+							<array>
+								<dict>
+									<key>ConditionType</key>
+									<string>Variable</string>
+									<key>Variable</key>
+									<string>GrokWindowID</string>
+									<key>VariableConditionType</key>
+									<string>IsNot</string>
+									<key>VariableValue</key>
+									<string>0</string>
+								</dict>
+							</array>
+							<key>ConditionListMatch</key>
+							<string>All</string>
+						</dict>
+						<key>ElseActions</key>
+						<array/>
+						<key>MacroActionType</key>
+						<string>IfThenElse</string>
+						<key>ThenActions</key>
+						<array>
+							<dict>
+								<key>ActionUID</key>
+								<integer>3438</integer>
+								<key>DisplayKind</key>
+								<string>None</string>
+								<key>HonourFailureSettings</key>
+								<true/>
+								<key>IncludeStdErr</key>
+								<false/>
+								<key>IncludedVariables</key>
+								<array>
+									<string>9999</string>
+								</array>
+								<key>MacroActionType</key>
+								<string>ExecuteAppleScript</string>
+								<key>Path</key>
+								<string></string>
+								<key>Text</key>
+								<string>tell application "Keyboard Maestro Engine"
+    set grokIDVar to getvariable "GrokWindowID"
+    set promptTextVar to getvariable "PromptText"
+end tell
+
+-- Check if we have a valid window ID
+if grokIDVar is "0" or grokIDVar is "" then
+    return "SKIP_GROK"
+end if
+
+-- Focus on the Grok window
+tell application "Safari"
+    try
+        set w to window id grokIDVar
+        set current tab of w to tab 1 of w
+        set index of w to 1
+        return "OK"
+    on error
+        -- If window doesn't exist anymore
+        tell application "Keyboard Maestro Engine"
+            setvariable "GrokWindowID" to "0"
+        end tell
+        return "SKIP_GROK"
+    end try
+end tell</string>
+								<key>TimeOutAbortsMacro</key>
+								<true/>
+								<key>TrimResults</key>
+								<true/>
+								<key>TrimResultsNew</key>
+								<true/>
+								<key>UseText</key>
+								<true/>
+							</dict>
+							<dict>
+								<key>ActionUID</key>
+								<integer>3439</integer>
+								<key>DisplayKind</key>
+								<string>None</string>
+								<key>HonourFailureSettings</key>
+								<true/>
+								<key>IncludeStdErr</key>
+								<false/>
+								<key>IncludedVariables</key>
+								<array>
+									<string>9999</string>
+								</array>
+								<key>MacroActionType</key>
+								<string>ExecuteJavaScript</string>
+								<key>Path</key>
+								<string></string>
+								<key>Text</key>
+								<string>/**
+ * Grok Follow-Up Message Script - Enhanced Reliability Edition
+ * 
+ * This script provides a robust method for submitting follow-up questions to Grok
+ * after page navigation, with extensive error handling and verification steps
+ * to ensure React properly processes the input and submission.
+ */
+
+// Main function that Keyboard Maestro will call
+function grokFollowUpMessage(messageText, debug = false) {
+  // Return a single promise for KM to handle
+  return executeWithTimeout(
+    performFollowUp(messageText, debug),
+    20000, // 20-second maximum execution time
+    "Timed out waiting for Grok UI to respond"
+  ).then(result =&gt; {
+    if (debug) console.log("Final result:", result);
+    return result;
+  });
+}
+
+/**
+ * Executes the main logic with a timeout safety net
+ */
+function executeWithTimeout(promise, timeoutMs, timeoutMessage) {
+  const timeout = new Promise((_, reject) =&gt; {
+    setTimeout(() =&gt; reject(new Error(timeoutMessage)), timeoutMs);
+  });
+  
+  return Promise.race([promise, timeout])
+    .catch(error =&gt; ({ 
+      ok: false, 
+      error: error.message || "Unknown error", 
+      stepDurations: {}
+    }));
+}
+
+/**
+ * Main execution flow for follow-up question submission
+ */
+async function performFollowUp(messageText, debug) {
+  const timing = {};
+  const log = debug ? (...args) =&gt; console.log(...args) : () =&gt; {};
+  
+  try {
+    log("Starting Grok follow-up submission...");
+    
+    // Step 1: Find the textarea using MutationObserver + polling fallback
+    log("Finding textarea...");
+    const textareaStartTime = performance.now();
+    const textarea = await findTextareaWithObserver(log);
+    timing.discovery = Math.round(performance.now() - textareaStartTime);
+    log(`✓ Textarea found in ${timing.discovery}ms`);
+    
+    if (!textarea) {
+      throw new Error("Unable to find Grok textarea");
+    }
+    
+    // Step 2: Focus and input text with React-compatible events
+    log(`Inputting text (${messageText.length} chars)...`);
+    const inputStartTime = performance.now();
+    await inputTextToTextarea(textarea, messageText, log);
+    timing.input = Math.round(performance.now() - inputStartTime);
+    log(`✓ Text input completed in ${timing.input}ms`);
+    
+    // Step 3: Verify text was accepted before proceeding
+    log("Verifying text was accepted by React...");
+    const verifyStartTime = performance.now();
+    const verificationResult = await verifyTextAccepted(textarea, messageText, log);
+    timing.verification = Math.round(performance.now() - verifyStartTime);
+    
+    if (!verificationResult.accepted) {
+      log("⚠️ Primary input method failed, trying fallback...");
+      await executeInputFallback(textarea, messageText, log);
+      
+      // Re-verify after fallback
+      const fallbackVerification = await verifyTextAccepted(textarea, messageText, log);
+      if (!fallbackVerification.accepted) {
+        throw new Error("Text input not accepted by React after fallback attempt");
+      }
+      log("✓ Fallback input method succeeded");
+    }
+    
+    // Step 4: Find and verify submit button is enabled
+    log("Finding submit button...");
+    const submitStartTime = performance.now();
+    const submitButton = await findSubmitButton(textarea, log);
+    
+    if (!submitButton) {
+      throw new Error("Submit button not found");
+    }
+    
+    // Step 5: Click the submit button with full event sequence
+    log("Clicking submit button...");
+    await clickSubmitButton(submitButton, log);
+    timing.submit = Math.round(performance.now() - submitStartTime);
+    
+    // Step 6: Verify submission was successful
+    const submissionVerified = await verifySubmissionStarted(log);
+    timing.total = Math.round(performance.now() - textareaStartTime);
+    
+    log(`✅ Follow-up message successfully submitted in ${timing.total}ms`);
+    return { 
+      ok: true, 
+      message: "Follow-up message submitted successfully", 
+      stepDurations: timing 
+    };
+  } catch (error) {
+    log(`❌ Error: ${error.message}`);
+    return { 
+      ok: false, 
+      error: error.message, 
+      stepDurations: timing 
+    };
+  }
+}
+
+/**
+ * Finds the textarea using MutationObserver with polling fallback
+ */
+function findTextareaWithObserver(log) {
+  return new Promise((resolve) =&gt; {
+    // First try immediate selection
+    const immediateTextarea = findTextareaImmediately();
+    if (immediateTextarea) {
+      return resolve(immediateTextarea);
+    }
+    
+    log("Textarea not immediately available, setting up observer...");
+    
+    // Set up MutationObserver to watch for textarea insertion
+    const observer = new MutationObserver((mutations, obs) =&gt; {
+      const textarea = findTextareaImmediately();
+      if (textarea) {
+        log("Textarea found via MutationObserver");
+        obs.disconnect();
+        resolve(textarea);
+      }
+    });
+    
+    // Observe the entire document for changes - specifically for textarea insertion
+    observer.observe(document.body, { 
+      childList: true, 
+      subtree: true 
+    });
+    
+    // Fallback: polling with timeout in case MutationObserver misses something
+    let attempts = 0;
+    const maxAttempts = 50; // 5 seconds total
+    
+    const pollForTextarea = () =&gt; {
+      attempts++;
+      const textarea = findTextareaImmediately();
+      
+      if (textarea) {
+        log(`Textarea found via polling (attempt ${attempts})`);
+        observer.disconnect();
+        resolve(textarea);
+        return;
+      }
+      
+      if (attempts &gt;= maxAttempts) {
+        log("Max polling attempts reached");
+        observer.disconnect();
+        resolve(null); // Resolve with null to handle gracefully
+        return;
+      }
+      
+      setTimeout(pollForTextarea, 100);
+    };
+    
+    pollForTextarea();
+  });
+}
+
+/**
+ * Immediate textarea detection with multiple selector strategies
+ */
+function findTextareaImmediately() {
+  // Strategy 1: Direct aria-label match (most specific)
+  let textarea = document.querySelector('textarea[aria-label="Ask Grok anything"]');
+  
+  // Strategy 2: Match on placeholder text containing "Grok"
+  if (!textarea) {
+    const textareas = Array.from(document.querySelectorAll('textarea'));
+    textarea = textareas.find(el =&gt; {
+      // Check for placeholder attribute
+      if (el.placeholder &amp;&amp; el.placeholder.toLowerCase().includes('grok')) {
+        return true;
+      }
+      
+      // Check for placeholder span near the textarea
+      const parent = el.parentElement;
+      if (parent) {
+        const placeholderSpan = parent.querySelector('.pointer-events-none, span[aria-hidden="true"]');
+        return placeholderSpan &amp;&amp; placeholderSpan.textContent.toLowerCase().includes('grok');
+      }
+      
+      return false;
+    });
+  }
+  
+  // Strategy 3: Any textarea within a form (least specific)
+  if (!textarea) {
+    textarea = document.querySelector('form textarea');
+  }
+  
+  return textarea;
+}
+
+/**
+ * Input text to textarea with React-compatible events
+ */
+async function inputTextToTextarea(textarea, text, log) {
+  // Focus the textarea with natural event sequence
+  simulateFocusSequence(textarea);
+  await wait(50); // Brief pause after focus
+  
+  // Clear any existing content
+  if (textarea.value) {
+    textarea.select();
+    document.execCommand('delete');
+    await wait(50);
+  }
+  
+  // Set value and dispatch proper events for React
+  textarea.value = text;
+  
+  // Critical: Use InputEvent with proper inputType and data for React
+  textarea.dispatchEvent(new InputEvent('input', {
+    bubbles: true,
+    cancelable: true,
+    inputType: 'insertFromPaste',
+    data: text
+  }));
+  
+  // Set selection range to end of text
+  textarea.selectionStart = textarea.selectionEnd = text.length;
+  
+  // Dispatch standard change event
+  textarea.dispatchEvent(new Event('change', {
+    bubbles: true,
+    cancelable: true
+  }));
+  
+  // Add some key events to simulate user interaction
+  simulateTypingActivity(textarea);
+  
+  return wait(100); // Brief pause to let React process
+}
+
+/**
+ * Simulate focus sequence for text inputs
+ */
+function simulateFocusSequence(element) {
+  // Match browser's exact event sequence
+  const events = [
+    new MouseEvent('mousedown', { bubbles: true, cancelable: true }),
+    new MouseEvent('mouseup', { bubbles: true, cancelable: true }),
+    new MouseEvent('click', { bubbles: true, cancelable: true }),
+    new FocusEvent('focus', { bubbles: true }),
+    new FocusEvent('focusin', { bubbles: true })
+  ];
+  
+  events.forEach(event =&gt; element.dispatchEvent(event));
+  element.focus(); // Actual browser focus
+}
+
+/**
+ * Simulate some keyboard activity to ensure React notices the input
+ */
+function simulateTypingActivity(element) {
+  // Simulate a keystroke after paste
+  element.dispatchEvent(new KeyboardEvent('keydown', { 
+    key: 'Process', 
+    bubbles: true 
+  }));
+  
+  element.dispatchEvent(new KeyboardEvent('keyup', { 
+    key: 'Process', 
+    bubbles: true 
+  }));
+}
+
+/**
+ * Verify text was accepted by React
+ */
+async function verifyTextAccepted(textarea, expectedText, log) {
+  return new Promise(resolve =&gt; {
+    let attempts = 0;
+    const maxAttempts = 10;
+    
+    const checkAccepted = () =&gt; {
+      // Check 1: Value matches expected
+      const valueCorrect = textarea.value === expectedText;
+      
+      // Check 2: Placeholder hidden (critical for React state)
+      const parent = textarea.parentElement;
+      let placeholderHidden = true;
+      
+      if (parent) {
+        const placeholder = parent.querySelector('.pointer-events-none, span[aria-hidden="true"]');
+        if (placeholder) {
+          placeholderHidden = 
+            window.getComputedStyle(placeholder).display === 'none' || 
+            placeholder.style.display === 'none' || 
+            placeholder.classList.contains('hidden') ||
+            placeholder.getAttribute('aria-hidden') === 'true';
+        }
+      }
+      
+      // Check 3: Submit button enabled
+      const form = textarea.closest('form');
+      const submitButton = form ? 
+        form.querySelector('button[type="submit"]') : 
+        document.querySelector('button[type="submit"]');
+      
+      const submitEnabled = submitButton &amp;&amp; !submitButton.disabled;
+      
+      if (valueCorrect &amp;&amp; placeholderHidden &amp;&amp; submitEnabled) {
+        log("✓ Text input verified accepted by React");
+        resolve({ accepted: true });
+        return;
+      }
+      
+      attempts++;
+      if (attempts &gt;= maxAttempts) {
+        log(`⚠️ Text verification failed after ${maxAttempts} attempts:`);
+        log(`  - Value correct: ${valueCorrect}`);
+        log(`  - Placeholder hidden: ${placeholderHidden}`);
+        log(`  - Submit enabled: ${submitEnabled}`);
+        resolve({ 
+          accepted: false,
+          valueCorrect,
+          placeholderHidden,
+          submitEnabled
+        });
+        return;
+      }
+      
+      setTimeout(checkAccepted, 100);
+    };
+    
+    checkAccepted();
+  });
+}
+
+/**
+ * Execute fallback input method if primary method fails
+ */
+async function executeInputFallback(textarea, text, log) {
+  log("Executing input fallback method...");
+  
+  // Re-focus the textarea
+  textarea.focus();
+  await wait(50);
+  
+  // Clear existing content
+  textarea.value = '';
+  
+  // Try execCommand approach
+  try {
+    const execCommandSupported = document.queryCommandSupported('insertText');
+    if (execCommandSupported) {
+      document.execCommand('insertText', false, text);
+      log("Used execCommand insertText fallback");
+    } else {
+      // Last resort: direct assignment + multiple events
+      textarea.value = text;
+      log("Used direct value assignment fallback");
+    }
+  } catch (e) {
+    log(`execCommand fallback error: ${e.message}`);
+    // Direct assignment as final fallback
+    textarea.value = text;
+  }
+  
+  // Dispatch multiple input events with different configurations
+  [
+    new InputEvent('input', { bubbles: true, cancelable: true }),
+    new InputEvent('input', { bubbles: true, cancelable: true, inputType: 'insertText', data: text }),
+    new InputEvent('input', { bubbles: true, cancelable: true, inputType: 'insertFromPaste', data: text }),
+    new Event('input', { bubbles: true, cancelable: true }),
+    new Event('change', { bubbles: true, cancelable: true })
+  ].forEach(event =&gt; textarea.dispatchEvent(event));
+  
+  // Simulate keystrokes to activate listeners
+  'abcdefghij'.split('').forEach(char =&gt; {
+    textarea.dispatchEvent(new KeyboardEvent('keydown', { key: char, bubbles: true }));
+    textarea.dispatchEvent(new KeyboardEvent('keyup', { key: char, bubbles: true }));
+  });
+  
+  return wait(200); // Give React more time to notice
+}
+
+/**
+ * Find submit button with reliable detection strategies
+ */
+async function findSubmitButton(textarea, log) {
+  return new Promise((resolve) =&gt; {
+    let attempts = 0;
+    const maxAttempts = 50; // 5 seconds
+    
+    const checkForButton = () =&gt; {
+      // Strategy 1: Find button within same form as textarea
+      const form = textarea.closest('form');
+      let submitButton = null;
+      
+      if (form) {
+        submitButton = form.querySelector('button[type="submit"]:not([disabled])') ||
+                      form.querySelector('button[aria-label="Submit"]:not([disabled])');
+      }
+      
+      // Strategy 2: Global submit button search
+      if (!submitButton) {
+        submitButton = document.querySelector('button[type="submit"]:not([disabled])') ||
+                      document.querySelector('button[aria-label="Submit"]:not([disabled])');
+      }
+      
+      // Strategy 3: Look for icon buttons with send icon
+      if (!submitButton) {
+        const buttons = Array.from(document.querySelectorAll('button:not([disabled])'));
+        submitButton = buttons.find(btn =&gt; {
+          const hasSendIcon = btn.querySelector('svg path[d*="M2,21L23"]'); // Common path for send icon
+          const ariaLabel = btn.getAttribute('aria-label');
+          return hasSendIcon || (ariaLabel &amp;&amp; ariaLabel.toLowerCase().includes('send'));
+        });
+      }
+      
+      if (submitButton &amp;&amp; !submitButton.disabled) {
+        log(`✓ Submit button found (attempt ${attempts + 1})`);
+        resolve(submitButton);
+        return;
+      }
+      
+      attempts++;
+      if (attempts &gt;= maxAttempts) {
+        log(`⚠️ Submit button not found or not enabled after ${maxAttempts} attempts`);
+        resolve(null);
+        return;
+      }
+      
+      setTimeout(checkForButton, 100);
+    };
+    
+    checkForButton();
+  });
+}
+
+/**
+ * Click submit button with complete event sequence
+ */
+async function clickSubmitButton(button, log) {
+  log("Clicking submit button with full event sequence...");
+  
+  // Complete pointer/mouse sequence that browsers generate
+  const events = [
+    new PointerEvent('pointerdown', { bubbles: true, cancelable: true, button: 0 }),
+    new MouseEvent('mousedown', { bubbles: true, cancelable: true, button: 0 }),
+    new PointerEvent('pointerup', { bubbles: true, cancelable: true, button: 0 }),
+    new MouseEvent('mouseup', { bubbles: true, cancelable: true, button: 0 }),
+    new MouseEvent('click', { bubbles: true, cancelable: true, button: 0 })
+  ];
+  
+  // Dispatch events with small delays to mimic natural interaction
+  for (const event of events) {
+    button.dispatchEvent(event);
+    await wait(10); // Brief delay between events
+  }
+  
+  // Verify button state changed if it has aria-pressed
+  if (button.hasAttribute('aria-pressed')) {
+    await waitForCondition(
+      () =&gt; button.getAttribute('aria-pressed') === 'true',
+      1000,
+      50
+    ).catch(() =&gt; log("⚠️ Button press state change not confirmed"));
+  }
+  
+  log("✓ Submit button clicked");
+  return wait(100); // Brief pause after click
+}
+
+/**
+ * Verify submission started by looking for response indicators
+ */
+async function verifySubmissionStarted(log) {
+  log("Verifying submission was processed...");
+  
+  return new Promise((resolve) =&gt; {
+    // Set up observer to look for typing indicators or response elements
+    const observer = new MutationObserver((mutations, obs) =&gt; {
+      // Look for new message container or typing indicator
+      const responseStarted = 
+        document.querySelector('.typing-indicator') || 
+        document.querySelector('.message-item:last-child') ||
+        document.querySelector('[data-testid="assistant-message"]');
+      
+      if (responseStarted) {
+        log("✓ Response started appearing in DOM");
+        obs.disconnect();
+        resolve(true);
+      }
+    });
+    
+    // Watch for new elements in the chat container
+    const chatContainer = document.querySelector('.chat-container') || 
+                          document.querySelector('.messages-container') ||
+                          document.body; // Fallback to body if containers not found
+    
+    observer.observe(chatContainer, { 
+      childList: true, 
+      subtree: true, 
+      attributes: true 
+    });
+    
+    // Set timeout to avoid hanging
+    setTimeout(() =&gt; {
+      observer.disconnect();
+      log("⚠️ Could not confirm response started, but proceeding");
+      resolve(false);
+    }, 2000);
+  });
+}
+
+/**
+ * Helper: Wait for a specified time
+ */
+function wait(ms) {
+  return new Promise(resolve =&gt; setTimeout(resolve, ms));
+}
+
+/**
+ * Helper: Wait until condition is true or timeout
+ */
+function waitForCondition(condition, timeout = 3000, interval = 100) {
+  return new Promise((resolve, reject) =&gt; {
+    const startTime = Date.now();
+    
+    const checkCondition = () =&gt; {
+      try {
+        const result = condition();
+        if (result) {
+          resolve(result);
+          return;
+        }
+      } catch (e) {
+        // Ignore errors during polling
+      }
+      
+      if (Date.now() - startTime &gt; timeout) {
+        reject(new Error("Condition timeout"));
+        return;
+      }
+      
+      setTimeout(checkCondition, interval);
+    };
+    
+    checkCondition();
+  });
+}
+
+// Call the function with the prompt text from Keyboard Maestro
+var promptText = kmvar.PromptText;
+grokFollowUpMessage(promptText);</string>
+								<key>TimeOutAbortsMacro</key>
+								<true/>
+								<key>TrimResults</key>
+								<true/>
+								<key>TrimResultsNew</key>
+								<true/>
+								<key>UseModernSyntax</key>
+								<true/>
+								<key>UseText</key>
+								<true/>
+								<key>WebBrowser</key>
+								<string>Safari</string>
+							</dict>
+						</array>
+						<key>TimeOutAbortsMacro</key>
+						<true/>
+					</dict>
+				</array>
+				<key>CreationDate</key>
+				<real>766279686.94420505</real>
+				<key>ModificationDate</key>
+				<real>768547715.58859205</real>
+				<key>Name</key>
+				<string>LLMs Follow Up</string>
+				<key>Triggers</key>
+				<array>
+					<dict>
+						<key>FireType</key>
+						<string>Pressed</string>
+						<key>KeyCode</key>
+						<integer>3</integer>
+						<key>MacroTriggerType</key>
+						<string>HotKey</string>
+						<key>Modifiers</key>
+						<integer>768</integer>
+					</dict>
+				</array>
+				<key>UID</key>
+				<string>27BDAE48-46EE-4806-A628-85BB14F3218B</string>
+			</dict>
+		</array>
+		<key>Name</key>
+		<string>Global Macro Group</string>
+		<key>ToggleMacroUID</key>
+		<string>E1AC0AB8-E9D7-4C0A-ACA3-61C51961E2A5</string>
+		<key>UID</key>
+		<string>804D32AF-0B39-439F-8EF3-493A833B14CA</string>
+	</dict>
+</array>
+</plist>

@@ -1,0 +1,426 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<!DOCTYPE plist PUBLIC "-//Apple//DTD PLIST 1.0//EN" "http://www.apple.com/DTDs/PropertyList-1.0.dtd">
+<plist version="1.0">
+<array>
+	<dict>
+		<key>Activate</key>
+		<string>Normal</string>
+		<key>CreationDate</key>
+		<real>766205513.29118598</real>
+		<key>Macros</key>
+		<array>
+			<dict>
+				<key>Actions</key>
+				<array>
+					<dict>
+						<key>ActionUID</key>
+						<integer>7804</integer>
+						<key>DisplayKind</key>
+						<string>Variable</string>
+						<key>HonourFailureSettings</key>
+						<true/>
+						<key>IncludeStdErr</key>
+						<false/>
+						<key>IncludedVariables</key>
+						<array>
+							<string>9999</string>
+						</array>
+						<key>MacroActionType</key>
+						<string>ExecuteShellScript</string>
+						<key>Path</key>
+						<string>~/Library/Application Support/Keyboard Maestro/llm_prompt_builder.py get_info</string>
+						<key>Source</key>
+						<string>Nothing</string>
+						<key>Text</key>
+						<string>/Users/johnhughes/.nix-profile/bin/python ~/Library/Application\ Support/Keyboard\ Maestro/llm_prompt_builder.py get_info</string>
+						<key>TimeOutAbortsMacro</key>
+						<true/>
+						<key>TrimResults</key>
+						<true/>
+						<key>TrimResultsNew</key>
+						<true/>
+						<key>UseText</key>
+						<true/>
+						<key>Variable</key>
+						<string>Info_JSON</string>
+					</dict>
+					<dict>
+						<key>ActionUID</key>
+						<integer>7814</integer>
+						<key>MacroActionType</key>
+						<string>SetVariablesToJSON</string>
+						<key>Prefix</key>
+						<string>KMVAR_</string>
+						<key>Text</key>
+						<string>%Variable%Info_JSON%</string>
+					</dict>
+					<dict>
+						<key>ActionUID</key>
+						<integer>7809</integer>
+						<key>Buttons</key>
+						<array>
+							<dict>
+								<key>Button</key>
+								<string>OK</string>
+							</dict>
+							<dict>
+								<key>Button</key>
+								<string>Cancel</string>
+								<key>Cancel</key>
+								<true/>
+							</dict>
+						</array>
+						<key>MacroActionType</key>
+						<string>PromptForUserInput</string>
+						<key>Prompt</key>
+						<string>Current file: %Variable%KMVAR_file_name%</string>
+						<key>TimeOutAbortsMacro</key>
+						<true/>
+						<key>Title</key>
+						<string>LLM Prompt Builder</string>
+						<key>Variables</key>
+						<array>
+							<dict>
+								<key>Default</key>
+								<string>snippet%Variable%KMVAR_next_snippet%</string>
+								<key>Type</key>
+								<string>Automatic</string>
+								<key>Variable</key>
+								<string>Snippet Name</string>
+							</dict>
+							<dict>
+								<key>Default</key>
+								<string>%Variable%KMVAR_file_name%</string>
+								<key>Type</key>
+								<string>Text</string>
+								<key>Variable</key>
+								<string>Topic or File Name</string>
+							</dict>
+							<dict>
+								<key>Default</key>
+								<string>no|yes</string>
+								<key>Type</key>
+								<string>Automatic</string>
+								<key>Variable</key>
+								<string>Copy Markdown</string>
+							</dict>
+							<dict>
+								<key>Default</key>
+								<string>%SystemClipboard%</string>
+								<key>Type</key>
+								<string>Automatic</string>
+								<key>Variable</key>
+								<string>Snippet Text</string>
+							</dict>
+						</array>
+					</dict>
+					<dict>
+						<key>ActionUID</key>
+						<integer>11742</integer>
+						<key>MacroActionType</key>
+						<string>SetVariableToText</string>
+						<key>Text</key>
+						<string>%Variable%Snippet Name%</string>
+						<key>Variable</key>
+						<string>KMVAR_PromptDescription</string>
+					</dict>
+					<dict>
+						<key>ActionUID</key>
+						<integer>11743</integer>
+						<key>MacroActionType</key>
+						<string>SetVariableToText</string>
+						<key>Text</key>
+						<string>%Variable%Topic or File Name%</string>
+						<key>Variable</key>
+						<string>KMVAR_NewFileSubject</string>
+					</dict>
+					<dict>
+						<key>ActionUID</key>
+						<integer>11744</integer>
+						<key>MacroActionType</key>
+						<string>SetVariableToText</string>
+						<key>Text</key>
+						<string>%Variable%Snippet Text%</string>
+						<key>Variable</key>
+						<string>KMVAR_PromptContent</string>
+					</dict>
+					<dict>
+						<key>ActionUID</key>
+						<integer>11350</integer>
+						<key>Conditions</key>
+						<dict>
+							<key>ConditionList</key>
+							<array>
+								<dict>
+									<key>ConditionType</key>
+									<string>Variable</string>
+									<key>Variable</key>
+									<string>KMVAR_NewFileSubject</string>
+									<key>VariableConditionType</key>
+									<string>Is</string>
+									<key>VariableValue</key>
+									<string>%Variable%KMVAR_file_name%</string>
+								</dict>
+							</array>
+							<key>ConditionListMatch</key>
+							<string>All</string>
+						</dict>
+						<key>ElseActions</key>
+						<array>
+							<dict>
+								<key>ActionUID</key>
+								<integer>11352</integer>
+								<key>MacroActionType</key>
+								<string>SetVariableToText</string>
+								<key>Text</key>
+								<string>true</string>
+								<key>Variable</key>
+								<string>KMVAR_IsNewFile</string>
+							</dict>
+						</array>
+						<key>MacroActionType</key>
+						<string>IfThenElse</string>
+						<key>ThenActions</key>
+						<array>
+							<dict>
+								<key>ActionUID</key>
+								<integer>11351</integer>
+								<key>MacroActionType</key>
+								<string>SetVariableToText</string>
+								<key>Text</key>
+								<string>false</string>
+								<key>Variable</key>
+								<string>KMVAR_IsNewFile</string>
+							</dict>
+						</array>
+						<key>TimeOutAbortsMacro</key>
+						<true/>
+					</dict>
+					<dict>
+						<key>ActionUID</key>
+						<integer>7815</integer>
+						<key>DisplayKind</key>
+						<string>AppendVar</string>
+						<key>HonourFailureSettings</key>
+						<true/>
+						<key>IncludeStdErr</key>
+						<false/>
+						<key>IncludedVariables</key>
+						<array>
+							<string>9999</string>
+						</array>
+						<key>MacroActionType</key>
+						<string>ExecuteAppleScript</string>
+						<key>Path</key>
+						<string></string>
+						<key>Text</key>
+						<string>-- Get variables from Keyboard Maestro
+tell application "Keyboard Maestro Engine"
+  set promptDescription to getvariable "KMVAR_PromptDescription"
+  set isNewFile to getvariable "KMVAR_IsNewFile"
+  set newFileSubject to getvariable "KMVAR_NewFileSubject"
+  set promptContent to getvariable "KMVAR_PromptContent"
+end tell
+
+-- Create a temporary file for the prompt content
+set tmpFile to (POSIX path of (path to temporary items from user domain)) &amp; "km_prompt_content.txt"
+
+-- Write the prompt content to the temporary file
+do shell script "cat &gt; " &amp; quoted form of tmpFile &amp; " &lt;&lt; 'EOT'
+" &amp; promptContent &amp; "
+EOT"
+
+-- Call the Python script with the variables
+set pythonPath to "/usr/bin/python3"
+set scriptPath to "~/Library/Application\\ Support/Keyboard\\ Maestro/llm_prompt_builder.py"
+
+-- Execute the Python script with proper quoting for all arguments
+set shellCommand to pythonPath &amp; " " &amp; scriptPath &amp; " " &amp; quoted form of promptDescription &amp; " " &amp; quoted form of isNewFile &amp; " " &amp; quoted form of newFileSubject &amp; " " &amp; quoted form of tmpFile
+
+-- Execute and capture result
+set result to do shell script shellCommand
+
+-- Clean up temporary file
+do shell script "rm -f " &amp; quoted form of tmpFile
+
+-- Return result to Keyboard Maestro
+return result</string>
+						<key>TimeOutAbortsMacro</key>
+						<true/>
+						<key>TrimResults</key>
+						<true/>
+						<key>TrimResultsNew</key>
+						<true/>
+						<key>UseText</key>
+						<true/>
+						<key>Variable</key>
+						<string>ScriptResult</string>
+					</dict>
+					<dict>
+						<key>ActionUID</key>
+						<integer>7816</integer>
+						<key>Conditions</key>
+						<dict>
+							<key>ConditionList</key>
+							<array>
+								<dict>
+									<key>ConditionType</key>
+									<string>Variable</string>
+									<key>Variable</key>
+									<string>Copy Markdown</string>
+									<key>VariableConditionType</key>
+									<string>Is</string>
+									<key>VariableValue</key>
+									<string>yes</string>
+								</dict>
+							</array>
+							<key>ConditionListMatch</key>
+							<string>All</string>
+						</dict>
+						<key>ElseActions</key>
+						<array/>
+						<key>MacroActionType</key>
+						<string>IfThenElse</string>
+						<key>ThenActions</key>
+						<array>
+							<dict>
+								<key>ActionUID</key>
+								<integer>7820</integer>
+								<key>DisplayKind</key>
+								<string>None</string>
+								<key>HonourFailureSettings</key>
+								<true/>
+								<key>IncludeStdErr</key>
+								<false/>
+								<key>IncludedVariables</key>
+								<array>
+									<string>9999</string>
+								</array>
+								<key>MacroActionType</key>
+								<string>ExecuteAppleScript</string>
+								<key>Path</key>
+								<string></string>
+								<key>Text</key>
+								<string>-- Get current file path from Keyboard Maestro
+tell application "Keyboard Maestro Engine"
+	set currentFilePath to getvariable "KMVAR_current_file"
+end tell
+
+-- Check if we have a valid file path
+if currentFilePath is "" then
+	return "ERROR: No active markdown file to copy"
+end if
+
+-- Check if file exists
+do shell script "test -e " &amp; quoted form of currentFilePath &amp; " || exit 1"
+
+-- Copy file content to clipboard verbatim (preserves all line endings/encoding)
+do shell script "LC_CTYPE=UTF-8 pbcopy &lt; " &amp; quoted form of currentFilePath
+
+return "File copied to clipboard: " &amp; (do shell script "basename " &amp; quoted form of currentFilePath)</string>
+								<key>TimeOutAbortsMacro</key>
+								<true/>
+								<key>TrimResults</key>
+								<true/>
+								<key>TrimResultsNew</key>
+								<true/>
+								<key>UseText</key>
+								<true/>
+							</dict>
+						</array>
+						<key>TimeOutAbortsMacro</key>
+						<true/>
+					</dict>
+					<dict>
+						<key>ActionUID</key>
+						<integer>7811</integer>
+						<key>Conditions</key>
+						<dict>
+							<key>ConditionList</key>
+							<array>
+								<dict>
+									<key>ConditionType</key>
+									<string>Variable</string>
+									<key>Variable</key>
+									<string>ScriptResult</string>
+									<key>VariableConditionType</key>
+									<string>Contains</string>
+									<key>VariableValue</key>
+									<string>ERROR:</string>
+								</dict>
+							</array>
+							<key>ConditionListMatch</key>
+							<string>All</string>
+						</dict>
+						<key>ElseActions</key>
+						<array>
+							<dict>
+								<key>ActionUID</key>
+								<integer>7813</integer>
+								<key>MacroActionType</key>
+								<string>Notification</string>
+								<key>SoundName</key>
+								<string></string>
+								<key>Subtitle</key>
+								<string></string>
+								<key>Text</key>
+								<string>%Variable%ScriptResult%</string>
+								<key>Title</key>
+								<string>LLM Prompt Builder - Success</string>
+							</dict>
+						</array>
+						<key>MacroActionType</key>
+						<string>IfThenElse</string>
+						<key>ThenActions</key>
+						<array>
+							<dict>
+								<key>ActionUID</key>
+								<integer>7812</integer>
+								<key>MacroActionType</key>
+								<string>Notification</string>
+								<key>SoundName</key>
+								<string></string>
+								<key>Subtitle</key>
+								<string></string>
+								<key>Text</key>
+								<string>%Variable%ScriptResult%"</string>
+								<key>Title</key>
+								<string>LLM Prompt Builder - Error</string>
+							</dict>
+						</array>
+						<key>TimeOutAbortsMacro</key>
+						<true/>
+					</dict>
+				</array>
+				<key>CreationDate</key>
+				<real>766347420.27893806</real>
+				<key>ModificationDate</key>
+				<real>767652081.5517</real>
+				<key>Name</key>
+				<string>Prompt Builder</string>
+				<key>Triggers</key>
+				<array>
+					<dict>
+						<key>FireType</key>
+						<string>Pressed</string>
+						<key>KeyCode</key>
+						<integer>35</integer>
+						<key>MacroTriggerType</key>
+						<string>HotKey</string>
+						<key>Modifiers</key>
+						<integer>768</integer>
+					</dict>
+				</array>
+				<key>UID</key>
+				<string>3FD5CC62-EFD5-4908-98EB-C1923906E863</string>
+			</dict>
+		</array>
+		<key>Name</key>
+		<string>Global Macro Group</string>
+		<key>ToggleMacroUID</key>
+		<string>E1AC0AB8-E9D7-4C0A-ACA3-61C51961E2A5</string>
+		<key>UID</key>
+		<string>804D32AF-0B39-439F-8EF3-493A833B14CA</string>
+	</dict>
+</array>
+</plist>

@@ -1,0 +1,603 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<!DOCTYPE plist PUBLIC "-//Apple//DTD PLIST 1.0//EN" "http://www.apple.com/DTDs/PropertyList-1.0.dtd">
+<plist version="1.0">
+<array>
+	<dict>
+		<key>Activate</key>
+		<string>Normal</string>
+		<key>CreationDate</key>
+		<real>766205513.29118598</real>
+		<key>Macros</key>
+		<array>
+			<dict>
+				<key>Actions</key>
+				<array>
+					<dict>
+						<key>ActionUID</key>
+						<integer>10951</integer>
+						<key>DisplayKind</key>
+						<string>Variable</string>
+						<key>HonourFailureSettings</key>
+						<true/>
+						<key>IncludeStdErr</key>
+						<false/>
+						<key>IncludedVariables</key>
+						<array>
+							<string>9999</string>
+						</array>
+						<key>MacroActionType</key>
+						<string>ExecuteAppleScript</string>
+						<key>NotifyOnFailure</key>
+						<false/>
+						<key>Path</key>
+						<string></string>
+						<key>StopOnFailure</key>
+						<false/>
+						<key>Text</key>
+						<string>-- Path to the JSON file
+set jsonFilePath to (POSIX path of (path to home folder)) &amp; "Library/Application Support/Keyboard Maestro/ChatbotTasks.json"
+set promptBuilderPath to (POSIX path of (path to home folder)) &amp; "Library/Mobile Documents/iCloud~md~obsidian/Documents/JJH/LLM Prompts/LLMPromptBuilder.json"
+
+-- Collect all open Safari window IDs
+tell application "Safari"
+	set existingWindowIDs to {}
+	repeat with w in windows
+		try
+			set end of existingWindowIDs to (id of w as string)
+		end try
+	end repeat
+end tell
+
+-- Python script to parse JSON, clean up inactive tasks, find valid tasks
+set pythonScript to "
+import json, os
+
+json_file_path = '" &amp; jsonFilePath &amp; "'
+prompt_builder_path = '" &amp; promptBuilderPath &amp; "'
+existing_windows = set(" &amp; my listToString(existingWindowIDs) &amp; ") # Use a set for faster lookups
+
+if not os.path.exists(json_file_path):
+    print('NO_TASKS')
+    exit(0)
+
+try:
+    # Read with JSON error handling
+    with open(json_file_path, 'r') as f:
+        try:
+            data = json.load(f)
+        except json.JSONDecodeError:
+            print('ERROR:Invalid JSON file')
+            exit(1)
+
+    most_recent_task = data.get('most_recent_task', '')
+    valid_tasks = []
+    tasks_to_delete = []
+    
+    # Identify tasks to keep vs delete
+    for tname, info in data.items():
+        if tname == 'most_recent_task':
+            continue
+            
+        # Check if any window is still open
+        has_open_window = False
+        for k, w_id in info.items():
+            if k.endswith('WindowID') and w_id in existing_windows:
+                has_open_window = True
+                break
+                
+        if has_open_window:
+            valid_tasks.append(tname)
+        else:
+            tasks_to_delete.append(tname)
+    
+    # Delete dead tasks
+    if tasks_to_delete:
+        for task in tasks_to_delete:
+            if task in data:
+                del data[task]
+        
+        # Update most_recent_task if it was deleted
+        if most_recent_task in tasks_to_delete:
+            most_recent_task = valid_tasks[0] if valid_tasks else ''
+            data['most_recent_task'] = most_recent_task
+            
+        # Write updated data
+        with open(json_file_path, 'w') as f:
+            json.dump(data, f, indent=2)
+            
+    # Also clean LLMPromptBuilder.json if it exists
+    try:
+        if os.path.exists(prompt_builder_path):
+            with open(prompt_builder_path, 'r+') as f:
+                try:
+                    pdata = json.load(f)
+                    snippets = [
+                        s for s in pdata.get('snippets', [])
+                        if s.get('description') in data  # keep snippet only if task still alive
+                    ]
+                    pdata['snippets'] = snippets
+                    pdata['snippet_count'] = len(snippets)
+                    f.seek(0)
+                    json.dump(pdata, f, indent=2)
+                    f.truncate()
+                except json.JSONDecodeError:
+                    pass  # Non-critical if this fails
+    except Exception:
+        pass  # Keep going even if prompt builder cleanup fails
+
+    # Format output
+    if most_recent_task in valid_tasks:
+        valid_tasks.remove(most_recent_task)
+        valid_tasks.insert(0, most_recent_task)
+
+    if valid_tasks:
+        print('\\n'.join(valid_tasks))
+    else:
+        print('NO_TASKS')
+except Exception as e:
+    print('ERROR:' + str(e))
+"
+
+set pythonResult to do shell script "/usr/bin/python3 -c " &amp; quoted form of pythonScript
+return pythonResult
+
+-- Helper to turn AppleScript list -&gt; Python list
+on listToString(theList)
+	set resultString to "["
+	repeat with i from 1 to count of theList
+		set theItem to item i of theList
+		set resultString to resultString &amp; "'" &amp; theItem &amp; "'"
+		if i &lt; (count of theList) then
+			set resultString to resultString &amp; ", "
+		end if
+	end repeat
+	set resultString to resultString &amp; "]"
+	return resultString
+end listToString</string>
+						<key>TimeOutAbortsMacro</key>
+						<true/>
+						<key>TrimResults</key>
+						<true/>
+						<key>TrimResultsNew</key>
+						<true/>
+						<key>UseText</key>
+						<true/>
+						<key>Variable</key>
+						<string>ValidTasks</string>
+					</dict>
+					<dict>
+						<key>ActionUID</key>
+						<integer>10952</integer>
+						<key>Conditions</key>
+						<dict>
+							<key>ConditionList</key>
+							<array>
+								<dict>
+									<key>ConditionType</key>
+									<string>Variable</string>
+									<key>Variable</key>
+									<string>ValidTasks</string>
+									<key>VariableConditionType</key>
+									<string>IsNot</string>
+									<key>VariableValue</key>
+									<string>NO_TASKS</string>
+								</dict>
+								<dict>
+									<key>ConditionType</key>
+									<string>Variable</string>
+									<key>Variable</key>
+									<string>ValidTasks</string>
+									<key>VariableConditionType</key>
+									<string>DoesNotContain</string>
+									<key>VariableValue</key>
+									<string>ERROR:</string>
+								</dict>
+							</array>
+							<key>ConditionListMatch</key>
+							<string>All</string>
+						</dict>
+						<key>ElseActions</key>
+						<array>
+							<dict>
+								<key>ActionUID</key>
+								<integer>10953</integer>
+								<key>Buttons</key>
+								<array>
+									<dict>
+										<key>Button</key>
+										<string>OK</string>
+										<key>Cancel</key>
+										<true/>
+									</dict>
+								</array>
+								<key>MacroActionType</key>
+								<string>PromptForUserInput</string>
+								<key>Prompt</key>
+								<string>No valid tasks found. Please start a new LLM conversation first.</string>
+								<key>TimeOutAbortsMacro</key>
+								<true/>
+								<key>Title</key>
+								<string>No Chats</string>
+								<key>Variables</key>
+								<array/>
+							</dict>
+							<dict>
+								<key>Action</key>
+								<string>CancelThisMacro</string>
+								<key>ActionUID</key>
+								<integer>10954</integer>
+								<key>MacroActionType</key>
+								<string>Cancel</string>
+							</dict>
+						</array>
+						<key>MacroActionType</key>
+						<string>IfThenElse</string>
+						<key>ThenActions</key>
+						<array/>
+						<key>TimeOutAbortsMacro</key>
+						<true/>
+					</dict>
+					<dict>
+						<key>ActionUID</key>
+						<integer>10955</integer>
+						<key>Destination</key>
+						<string>Variable</string>
+						<key>DestinationVariable</key>
+						<string>TaskName</string>
+						<key>MacroActionType</key>
+						<string>PromptWithList</string>
+						<key>PromptUID</key>
+						<string>4A293600-8D94-450E-926E-46FC512B8430</string>
+						<key>Source</key>
+						<string>Variable</string>
+						<key>TimeOutAbortsMacro</key>
+						<true/>
+						<key>Variable</key>
+						<string>ValidTasks</string>
+						<key>WindowTitle</key>
+						<string>Choose a Task to Arrange</string>
+					</dict>
+					<dict>
+						<key>ActionUID</key>
+						<integer>10956</integer>
+						<key>DisplayKind</key>
+						<string>Variable</string>
+						<key>HonourFailureSettings</key>
+						<true/>
+						<key>IncludeStdErr</key>
+						<false/>
+						<key>IncludedVariables</key>
+						<array>
+							<string>9999</string>
+						</array>
+						<key>MacroActionType</key>
+						<string>ExecuteAppleScript</string>
+						<key>NotifyOnFailure</key>
+						<false/>
+						<key>Path</key>
+						<string></string>
+						<key>StopOnFailure</key>
+						<false/>
+						<key>Text</key>
+						<string>-- Get the selected task from KM
+tell application "Keyboard Maestro Engine"
+    set selectedTask to getvariable "TaskName"
+end tell
+
+set jsonFilePath to (POSIX path of (path to home folder)) &amp; "Library/Application Support/Keyboard Maestro/ChatbotTasks.json"
+
+-- Collect open window IDs again
+tell application "Safari"
+    set existingWindowIDs to {}
+    repeat with w in windows
+        try
+            set end of existingWindowIDs to (id of w as string)
+        end try
+    end repeat
+end tell
+
+-- Python to read the chosen task, validate window IDs, update JSON if any are closed
+set pythonScript to "
+import json, os
+
+json_file_path = '" &amp; jsonFilePath &amp; "'
+selected_task = '" &amp; selectedTask &amp; "'
+existing_windows = set(" &amp; my listToString(existingWindowIDs) &amp; ")
+
+try:
+    with open(json_file_path, 'r') as f:
+        try:
+            data = json.load(f)
+        except json.JSONDecodeError:
+            print('ERROR:Invalid JSON file')
+            exit(1)
+    
+    # Update 'most_recent_task'
+    data['most_recent_task'] = selected_task
+    
+    task_info = data.get(selected_task, {})
+    window_ids = {
+        'Gemini': task_info.get('GeminiWindowID', '0'),
+        'Claude': task_info.get('ClaudeWindowID', '0'),
+        'ChatGPT': task_info.get('ChatGPTWindowID', '0'),
+        'Grok': task_info.get('GrokWindowID', '0')
+    }
+    
+    # If a window ID is not in existing_windows, set it to '0'
+    for model, w_id in list(window_ids.items()):
+        if w_id not in existing_windows:
+            window_ids[model] = '0'
+    
+    # Write back to data
+    if selected_task in data:
+        data[selected_task]['GeminiWindowID'] = window_ids['Gemini']
+        data[selected_task]['ClaudeWindowID'] = window_ids['Claude']
+        data[selected_task]['ChatGPTWindowID'] = window_ids['ChatGPT']
+        data[selected_task]['GrokWindowID'] = window_ids['Grok']
+    
+    with open(json_file_path, 'w') as wf:
+        json.dump(data, wf, indent=2)
+    
+    print(f\"{window_ids['Gemini']}|{window_ids['Claude']}|{window_ids['ChatGPT']}|{window_ids['Grok']}\")
+except Exception as e:
+    print('ERROR:' + str(e))
+"
+
+set pyResult to do shell script "/usr/bin/python3 -c " &amp; quoted form of pythonScript
+
+if pyResult starts with "ERROR:" then
+    return "ERROR"
+else
+    -- parse the pipe-delimited IDs
+    set oldDelims to AppleScript's text item delimiters
+    set AppleScript's text item delimiters to "|"
+    set theIDs to text items of pyResult
+    set AppleScript's text item delimiters to oldDelims
+    
+    tell application "Keyboard Maestro Engine"
+        setvariable "GeminiWindowID" to item 1 of theIDs
+        setvariable "ClaudeWindowID" to item 2 of theIDs
+        setvariable "ChatGPTWindowID" to item 3 of theIDs
+        setvariable "GrokWindowID" to item 4 of theIDs
+    end tell
+    
+    return "OK"
+end if
+
+on listToString(theList)
+    set resultString to "["
+    repeat with i from 1 to count of theList
+        set theItem to item i of theList
+        set resultString to resultString &amp; "'" &amp; theItem &amp; "'"
+        if i &lt; count of theList then
+            set resultString to resultString &amp; ", "
+        end if
+    end repeat
+    set resultString to resultString &amp; "]"
+    return resultString
+end listToString</string>
+						<key>TimeOutAbortsMacro</key>
+						<true/>
+						<key>TrimResults</key>
+						<true/>
+						<key>TrimResultsNew</key>
+						<true/>
+						<key>UseText</key>
+						<true/>
+						<key>Variable</key>
+						<string>Result</string>
+					</dict>
+					<dict>
+						<key>ActionUID</key>
+						<integer>10957</integer>
+						<key>Conditions</key>
+						<dict>
+							<key>ConditionList</key>
+							<array>
+								<dict>
+									<key>ConditionType</key>
+									<string>Variable</string>
+									<key>Variable</key>
+									<string>Result</string>
+									<key>VariableConditionType</key>
+									<string>Contains</string>
+									<key>VariableValue</key>
+									<string>ERROR</string>
+								</dict>
+							</array>
+							<key>ConditionListMatch</key>
+							<string>All</string>
+						</dict>
+						<key>ElseActions</key>
+						<array/>
+						<key>MacroActionType</key>
+						<string>IfThenElse</string>
+						<key>ThenActions</key>
+						<array>
+							<dict>
+								<key>Action</key>
+								<string>CancelThisMacro</string>
+								<key>ActionUID</key>
+								<integer>10958</integer>
+								<key>MacroActionType</key>
+								<string>Cancel</string>
+							</dict>
+						</array>
+						<key>TimeOutAbortsMacro</key>
+						<true/>
+					</dict>
+					<dict>
+						<key>ActionUID</key>
+						<integer>10959</integer>
+						<key>AllWindows</key>
+						<true/>
+						<key>AlreadyActivatedActionType</key>
+						<string>Normal</string>
+						<key>Application</key>
+						<dict>
+							<key>BundleIdentifier</key>
+							<string>com.apple.Safari</string>
+							<key>Name</key>
+							<string>Safari</string>
+							<key>NewFile</key>
+							<string>/System/Volumes/Preboot/Cryptexes/App/System/Applications/Safari.app</string>
+						</dict>
+						<key>MacroActionType</key>
+						<string>ActivateApplication</string>
+						<key>ReopenWindows</key>
+						<false/>
+						<key>TimeOutAbortsMacro</key>
+						<true/>
+					</dict>
+					<dict>
+						<key>ActionUID</key>
+						<integer>10960</integer>
+						<key>DisplayKind</key>
+						<string>Briefly</string>
+						<key>HonourFailureSettings</key>
+						<true/>
+						<key>IncludeStdErr</key>
+						<false/>
+						<key>IncludedVariables</key>
+						<array>
+							<string>9999</string>
+						</array>
+						<key>MacroActionType</key>
+						<string>ExecuteAppleScript</string>
+						<key>NotifyOnFailure</key>
+						<false/>
+						<key>Path</key>
+						<string></string>
+						<key>StopOnFailure</key>
+						<false/>
+						<key>Text</key>
+						<string>-- Retrieve window IDs from Keyboard Maestro variables
+tell application "Keyboard Maestro Engine"
+    set geminiID to getvariable "GeminiWindowID"
+    set claudeID to getvariable "ClaudeWindowID"
+    set chatgptID to getvariable "ChatGPTWindowID"
+    set grokID to getvariable "GrokWindowID"
+end tell
+
+-- Activate Safari first
+tell application "Safari" to activate
+delay 0.2
+
+-- Helper function to position a window using keyboard shortcuts
+on positionWindow(windowID, keyCode, windowName)
+    if windowID is not "0" and windowID is not "" then
+        tell application "Safari"
+            try
+                -- Find and focus the specific window
+                set w to window id (windowID as number)
+                
+                -- Un-minimize if needed
+                if miniaturized of w then
+                    set miniaturized of w to false
+                    delay 0.2
+                end if
+                
+                -- CRITICAL: Explicitly bring this window to front
+                set index of w to 1
+                set current tab of w to tab 1 of w  -- Ensure the window is active
+                
+                -- Wait for window to become fully active
+                delay 0.3
+                
+                -- VERIFY we have the right window as frontmost
+                if id of front window is not (windowID as number) then
+                    -- Force it again if needed
+                    set index of w to 1
+                    delay 0.2
+                end if
+                
+                -- Now that we have focus, send the keyboard shortcut
+                tell application "System Events"
+                    -- Send Control+Option+Key shortcut
+                    key code keyCode using {control down, option down}
+                end tell
+                
+                -- Allow window manager to process
+                delay 0.3
+                
+                return "✓ " &amp; windowName &amp; " positioned"
+            on error errMsg
+                return "✗ " &amp; windowName &amp; " failed: " &amp; errMsg
+            end try
+        end tell
+    else
+        return "- " &amp; windowName &amp; " skipped (not active)"
+    end if
+end positionWindow
+
+-- Apply quadrant positions to each active window with proper key codes
+set results to {}
+
+-- Position Gemini (Top Left - Ctrl+Opt+U - key code 32)
+set geminiResult to my positionWindow(geminiID, 32, "Gemini")
+set end of results to geminiResult
+delay 0.2
+
+-- Position Claude (Top Right - Ctrl+Opt+I - key code 34)
+set claudeResult to my positionWindow(claudeID, 34, "Claude")
+set end of results to claudeResult
+delay 0.2
+
+-- Position ChatGPT (Bottom Left - Ctrl+Opt+J - key code 38)
+set chatgptResult to my positionWindow(chatgptID, 38, "ChatGPT")
+set end of results to chatgptResult
+delay 0.2
+
+-- Position Grok (Bottom Right - Ctrl+Opt+K - key code 40)
+set grokResult to my positionWindow(grokID, 40, "Grok")
+set end of results to grokResult
+
+-- Display results
+set resultText to ""
+repeat with r in results
+    set resultText to resultText &amp; r &amp; return
+end repeat
+
+return resultText</string>
+						<key>TimeOutAbortsMacro</key>
+						<true/>
+						<key>TrimResults</key>
+						<true/>
+						<key>TrimResultsNew</key>
+						<true/>
+						<key>UseText</key>
+						<true/>
+					</dict>
+				</array>
+				<key>CreationDate</key>
+				<real>766285439.20959496</real>
+				<key>ModificationDate</key>
+				<real>767321061.54538596</real>
+				<key>Name</key>
+				<string>LLMs Window Arrange</string>
+				<key>Triggers</key>
+				<array>
+					<dict>
+						<key>FireType</key>
+						<string>Pressed</string>
+						<key>KeyCode</key>
+						<integer>13</integer>
+						<key>MacroTriggerType</key>
+						<string>HotKey</string>
+						<key>Modifiers</key>
+						<integer>768</integer>
+					</dict>
+				</array>
+				<key>UID</key>
+				<string>9CABEE90-F253-4E25-AC07-250B20624571</string>
+			</dict>
+		</array>
+		<key>Name</key>
+		<string>Global Macro Group</string>
+		<key>ToggleMacroUID</key>
+		<string>E1AC0AB8-E9D7-4C0A-ACA3-61C51961E2A5</string>
+		<key>UID</key>
+		<string>804D32AF-0B39-439F-8EF3-493A833B14CA</string>
+	</dict>
+</array>
+</plist>
