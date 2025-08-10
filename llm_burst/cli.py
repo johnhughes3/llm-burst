@@ -75,13 +75,13 @@ def _run_jxa_prompt(clipboard_text: str = "") -> Dict[str, Any] | None:
     // Create alert (use property access for alloc and init in JXA)
     var alert = $.NSAlert.alloc.init;
     alert.messageText = 'Start LLM Burst';
-    alert.informativeText = 'Please confirm your prompt from clipboard:\n\nTip: Press ⌘↩ to submit';
+    alert.informativeText = 'Please confirm your prompt from clipboard:\\n\\nTip: Press ⌘↩ to submit';
     alert.addButtonWithTitle('OK');
     alert.addButtonWithTitle('Cancel');
     // Make Cmd+Return trigger OK even when focus is in the text view
     var okButton = alert.buttons.objectAtIndex(0);
     if (okButton && okButton.setKeyEquivalent && okButton.setKeyEquivalentModifierMask) {
-        okButton.setKeyEquivalent('\r');
+        okButton.setKeyEquivalent('\\r');
         if (typeof $.NSEventModifierFlagCommand !== 'undefined') {
             okButton.setKeyEquivalentModifierMask($.NSEventModifierFlagCommand);
         }
@@ -129,19 +129,20 @@ def _run_jxa_prompt(clipboard_text: str = "") -> Dict[str, Any] | None:
     var response = alert.runModal;
     // Accept both modern and legacy "OK" codes; treat others as cancel
     var okCode = 1000; // NSAlertFirstButtonReturn
+    
+    // Return JSON result as the script's value
+    var result;
     if (response !== okCode) { 
-        // Return special marker for cancellation instead of trying to exit
-        JSON.stringify({"__cancelled__": true});
+        // Return special marker for cancellation
+        result = {"__cancelled__": true};
     } else {
-
-        // Return JSON result as the script's value
-        var result = {
+        result = {
             "Prompt Text": ObjC.unwrap(textView.string),
             "Research mode": (researchCheck.state === StateOn),
             "Incognito mode": (incognitoCheck.state === StateOn)
         };
-        JSON.stringify(result);
     }
+    JSON.stringify(result);
     '''
     
     try:
