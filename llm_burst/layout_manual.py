@@ -79,7 +79,7 @@ async def _verify_bounds(
 
 
 async def arrange_via_cdp(max_windows: int = 4) -> None:
-    """Arrange Chrome windows using CDP window bounds instead of Rectangle."""
+    """Arrange Chrome windows using CDP window bounds."""
     state = StateManager()
     sessions = [s for s in state.list_all().values() if s.group_id is None]
 

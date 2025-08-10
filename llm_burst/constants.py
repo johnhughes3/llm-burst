@@ -151,4 +151,4 @@ AUTO_NAMING_MAX_CHARS: Final[int] = 10000
 AUTO_NAMING_TIMEOUT: Final[float] = 15.0
 
 
-# Rectangle layout contracts removed; CDP is the default arrangement strategy.
+# Legacy layout contracts removed; CDP is the default arrangement strategy.

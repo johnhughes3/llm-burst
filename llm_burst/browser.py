@@ -216,7 +216,7 @@ class BrowserAdapter:
         # 2. Navigate to the LLM landing URL. Avoid 'networkidle' which can hang on dynamic sites.
         await page.goto(LLM_URLS[provider], wait_until="load")
 
-        # 3. Determine chrome windowId for Rectangle integration.
+        # 3. Determine chrome windowId for window arrangement integration.
         cdp = await self._get_cdp_connection()
         if not cdp:
             raise RuntimeError("No CDP connection available")

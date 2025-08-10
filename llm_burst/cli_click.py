@@ -9,7 +9,7 @@ Commands
 list   : Show running sessions
 open   : Open (or reuse) an LLM window and optionally send a prompt
 stop   : Close one or more running sessions
-arrange: Tile active windows with Rectangle.app
+arrange: Arrange active windows via Chrome CDP
 """
 
 from __future__ import annotations

@@ -154,7 +154,7 @@ llm-burst stop --all
 Stage 3 provides the CLI foundation for:
 - **Stage 4**: Auto-naming with Gemini API
 - **Stage 5**: Chrome tab grouping
-- **Stage 6**: Rectangle.app window positioning
+- **Stage 6**: CDP window arrangement
 
 ## Files Modified/Created
 - Created: `llm_burst/cli_click.py` (189 lines)

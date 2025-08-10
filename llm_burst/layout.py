@@ -3,7 +3,7 @@
 
 Window arrangement via Chrome DevTools Protocol (CDP).
 
-Rectangle.app integration is intentionally removed to avoid brittle
+External window-manager integrations were removed to avoid brittle
 AppleScript paths and macOS permission prompts. This module exposes a single
 ``arrange`` function that delegates to the CDP implementation in
 ``layout_manual.py``.
@@ -49,5 +49,5 @@ def arrange(max_windows: int = 4) -> None:
         arrange_cdp_sync(max_windows)
         _LOG.info("Windows arranged using CDP")
     except Exception as exc:
-        # Do not attempt Rectangle; simply report and continue
+        # Do not attempt other strategies; simply report and continue
         _LOG.warning("CDP arrangement failed: %s", exc)

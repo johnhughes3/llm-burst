@@ -91,7 +91,7 @@ Stage 2 provides the foundation for:
 
 ### Why CDP over regular Playwright?
 - CDP allows creating true browser windows (not just tabs)
-- Provides windowId for Rectangle.app integration
+- Provides windowId for CDP-based arrangement
 - Enables fine-grained browser control
 
 ### Why async/await architecture?
