@@ -131,9 +131,11 @@ def prompt_user(gui: bool | None = None) -> Dict[str, Any]:
             tmp_config_path = tmp_config.name
 
         # Call dialog CLI directly - no wrapper, no Finder involvement
+        # Suppress stderr to prevent macOS -50 error alerts
         result = subprocess.run(
             ["dialog", "--jsonfile", tmp_config_path, "--json"],
-            capture_output=True,
+            stdout=subprocess.PIPE,
+            stderr=subprocess.DEVNULL,
             text=True,
         )
     finally:
@@ -144,14 +146,7 @@ def prompt_user(gui: bool | None = None) -> Dict[str, Any]:
             except Exception:
                 pass
 
-    # Only log meaningful errors, not the Finder -50 or safe-wrapper fallback notice
-    if (
-        result.stderr
-        and "-50" not in result.stderr
-        and "application can't be opened" not in result.stderr
-        and "SwiftDialog error detected" not in result.stderr
-    ):
-        sys.stderr.write(result.stderr)
+    # Stderr logging removed as stderr is now suppressed
 
     if result.returncode != PROMPT_OK_EXIT:
         # User cancelled or an error occurred.

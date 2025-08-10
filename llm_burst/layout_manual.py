@@ -10,23 +10,38 @@ import logging
 _LOG = logging.getLogger(__name__)
 
 
-def _get_screen_dimensions() -> tuple[int, int]:
-    """Get the primary screen dimensions dynamically."""
+def _get_screen_dimensions() -> tuple[int, int, int, int]:
+    """Get the primary screen's visible dimensions and origin (x, y, width, height) for CDP."""
     if sys.platform == "darwin":
         try:
             from AppKit import NSScreen
 
-            main_screen = NSScreen.mainScreen()
-            if main_screen:
-                frame = main_screen.visibleFrame()
-                return int(frame.size.width), int(frame.size.height)
+            # Get the primary screen (index 0) - this is where the menu bar is
+            screens = NSScreen.screens()
+            if not screens:
+                raise Exception("No screens found")
+            
+            primary_screen = screens[0]
+            frame = primary_screen.visibleFrame()
+            full_frame = primary_screen.frame()
+
+            # CDP expects top-left coordinates. macOS uses bottom-left origin.
+            # We need to calculate the top-left Y coordinate of the visible frame.
+            x = int(frame.origin.x)
+            # Y coordinate conversion: FullHeight - (VisibleFrameOriginY + VisibleFrameHeight)
+            # This gives the distance from the top of the screen to the top of the visible frame
+            y = int(full_frame.size.height - (frame.origin.y + frame.size.height))
+            width = int(frame.size.width)
+            height = int(frame.size.height)
+
+            return x, y, width, height
         except ImportError:
             _LOG.warning("pyobjc not available, using default dimensions")
         except Exception as e:
             _LOG.warning(f"Failed to get screen dimensions: {e}, using defaults")
 
-    # Fallback dimensions
-    return 1920, 1080
+    # Fallback dimensions (assuming standard 1920x1080 screen with a 25px top menu bar)
+    return 0, 25, 1920, 1055
 
 
 async def _verify_bounds(
@@ -75,34 +90,34 @@ async def arrange_via_cdp(max_windows: int = 4) -> None:
     # Limit to max_windows
     sessions = sessions[:max_windows]
 
-    # Get screen dimensions dynamically
-    screen_width, screen_height = _get_screen_dimensions()
-    menu_bar_height = 25  # Standard macOS menu bar height
+    # Get screen dimensions dynamically (x, y, width, height)
+    screen_x, screen_y, screen_width, screen_height = _get_screen_dimensions()
 
     # Define layouts for different window counts
+    # Coordinates are (left, top, width, height)
     layouts = {
-        1: [(0, menu_bar_height, screen_width, screen_height)],
+        1: [(screen_x, screen_y, screen_width, screen_height)],
         2: [
-            (0, menu_bar_height, screen_width // 2, screen_height),
-            (screen_width // 2, menu_bar_height, screen_width // 2, screen_height),
+            (screen_x, screen_y, screen_width // 2, screen_height),
+            (screen_x + screen_width // 2, screen_y, screen_width // 2, screen_height),
         ],
         3: [
-            (0, menu_bar_height, screen_width // 2, screen_height // 2),
-            (screen_width // 2, menu_bar_height, screen_width // 2, screen_height // 2),
-            (0, menu_bar_height + screen_height // 2, screen_width, screen_height // 2),
+            (screen_x, screen_y, screen_width // 2, screen_height // 2),
+            (screen_x + screen_width // 2, screen_y, screen_width // 2, screen_height // 2),
+            (screen_x, screen_y + screen_height // 2, screen_width, screen_height // 2),
         ],
         4: [
-            (0, menu_bar_height, screen_width // 2, screen_height // 2),
-            (screen_width // 2, menu_bar_height, screen_width // 2, screen_height // 2),
+            (screen_x, screen_y, screen_width // 2, screen_height // 2),
+            (screen_x + screen_width // 2, screen_y, screen_width // 2, screen_height // 2),
             (
-                0,
-                menu_bar_height + screen_height // 2,
+                screen_x,
+                screen_y + screen_height // 2,
                 screen_width // 2,
                 screen_height // 2,
             ),
             (
-                screen_width // 2,
-                menu_bar_height + screen_height // 2,
+                screen_x + screen_width // 2,
+                screen_y + screen_height // 2,
                 screen_width // 2,
                 screen_height // 2,
             ),
