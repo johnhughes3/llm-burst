@@ -128,16 +128,20 @@ def _run_jxa_prompt(clipboard_text: str = "") -> Dict[str, Any] | None:
     // Show dialog (0-arg methods are properties in JXA)
     var response = alert.runModal;
     // Accept both modern and legacy "OK" codes; treat others as cancel
-    var okCode = (typeof $.NSModalResponseOK !== 'undefined') ? $.NSModalResponseOK : $.NSAlertFirstButtonReturn;
-    if (response !== okCode) { $.exit(1); }
+    var okCode = 1000; // NSAlertFirstButtonReturn
+    if (response !== okCode) { 
+        // Return special marker for cancellation instead of trying to exit
+        JSON.stringify({"__cancelled__": true});
+    } else {
 
-    // Return JSON result as the script's value
-    var result = {
-        "Prompt Text": ObjC.unwrap(textView.string),
-        "Research mode": (researchCheck.state === StateOn),
-        "Incognito mode": (incognitoCheck.state === StateOn)
-    };
-    JSON.stringify(result);
+        // Return JSON result as the script's value
+        var result = {
+            "Prompt Text": ObjC.unwrap(textView.string),
+            "Research mode": (researchCheck.state === StateOn),
+            "Incognito mode": (incognitoCheck.state === StateOn)
+        };
+        JSON.stringify(result);
+    }
     '''
     
     try:
