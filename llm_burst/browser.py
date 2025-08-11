@@ -45,6 +45,23 @@ from .constants import (
 from .state import StateManager, LiveSession
 
 # --------------------------------------------------------------------------- #
+# Helper functions
+# --------------------------------------------------------------------------- #
+
+def bring_chrome_to_front() -> None:
+    """Bring Chrome to the foreground on macOS using AppleScript."""
+    try:
+        # Use osascript to activate Chrome
+        subprocess.run(
+            ["osascript", "-e", 'tell application "Google Chrome" to activate'],
+            capture_output=True,
+            timeout=2
+        )
+    except (subprocess.TimeoutExpired, subprocess.CalledProcessError, FileNotFoundError):
+        # Best effort - don't fail if this doesn't work
+        pass
+
+# --------------------------------------------------------------------------- #
 # Constants
 # --------------------------------------------------------------------------- #
 

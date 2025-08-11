@@ -353,9 +353,9 @@ def cmd_open(
 @click.option(
     "--tabs/--windows",
     "as_tabs",
-    default=False,
+    default=True,  # Changed to True to default to tabs mode
     show_default=True,
-    help="Open one window with four tabs instead of four windows.",
+    help="Open one window with four tabs instead of four windows (default: tabs).",
 )
 def cmd_activate(
     session_title: str | None,
@@ -548,6 +548,10 @@ def cmd_activate(
                             except Exception:
                                 pass
 
+                # Bring Chrome to front after opening all tabs
+                from llm_burst.browser import bring_chrome_to_front
+                bring_chrome_to_front()
+
                 state.persist_now()
                 return opened_providers, current_title
 
@@ -614,6 +618,10 @@ def cmd_activate(
                             await set_window_title(h.page, current_title)
                         except Exception:
                             pass
+
+            # Bring Chrome to front after everything is set up
+            from llm_burst.browser import bring_chrome_to_front
+            bring_chrome_to_front()
 
             # Flush state
             state.persist_now()
