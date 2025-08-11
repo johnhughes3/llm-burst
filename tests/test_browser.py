@@ -238,7 +238,7 @@ async def test_open_window_creates_new_window(temp_state_file):
                 # Verify navigation call
                 mock_page.goto.assert_awaited_once_with(
                     LLM_URLS[LLMProvider.CLAUDE],
-                    wait_until="domcontentloaded",
+                    wait_until="load",
                 )
 
                 # Verify state persistence

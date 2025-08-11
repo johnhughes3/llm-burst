@@ -30,7 +30,7 @@ from .constants import (
 from .browser import BrowserAdapter, SessionHandle
 
 
-def _run_jxa_prompt(clipboard_text: str = "", debug: bool = False) -> Dict[str, Any] | None:
+def _run_jxa_prompt(clipboard_text: str = "", debug: bool = False, active_sessions: Optional[list[str]] = None) -> Dict[str, Any] | None:
     """
     Run JXA (JavaScript for Automation) dialog using native macOS AppKit.
     
@@ -68,14 +68,24 @@ def _run_jxa_prompt(clipboard_text: str = "", debug: bool = False) -> Dict[str, 
     var clipEnv = env.objectForKey('LLM_BURST_CLIPBOARD');
     var clipboardText = clipEnv ? ObjC.unwrap(clipEnv) : readClipboard();
 
+    // Read active sessions from environment variable if present
+    var sessionsEnv = env.objectForKey('LLM_BURST_ACTIVE_SESSIONS');
+    var activeSessions = [];
+    if (sessionsEnv) {
+        try {
+            activeSessions = JSON.parse(ObjC.unwrap(sessionsEnv));
+        } catch (e) {
+            // console.error not available in JXA - silently ignore parse errors
+            activeSessions = [];
+        }
+    }
+
     // Backward/forward compatible control state constants
     var StateOn = (typeof $.NSControlStateValueOn !== 'undefined') ? $.NSControlStateValueOn : $.NSOnState;
     var StateOff = (typeof $.NSControlStateValueOff !== 'undefined') ? $.NSControlStateValueOff : $.NSOffState;
 
     // Create alert (use property access for alloc and init in JXA)
     var alert = $.NSAlert.alloc.init;
-    alert.messageText = 'Start LLM Burst';
-    alert.informativeText = 'Please confirm your prompt from clipboard:\\n\\nTip: Press ⌘↩ to submit';
     alert.addButtonWithTitle('OK');
     alert.addButtonWithTitle('Cancel');
     // Make Cmd+Return trigger OK even when focus is in the text view
@@ -87,15 +97,54 @@ def _run_jxa_prompt(clipboard_text: str = "", debug: bool = False) -> Dict[str, 
         }
     }
 
-    // Accessory view containing a scrollable, editable text view and checkboxes
-    var containerView = $.NSView.alloc.initWithFrame($.NSMakeRect(0, 0, 500, 250));
+    // Determine layout dimensions
+    var viewWidth = 500;
+    var baseHeight = 250;
+    var sessionSelectorHeight = 0;
+    var sessionSelector = null;
 
-    var scrollView = $.NSScrollView.alloc.initWithFrame($.NSMakeRect(0, 40, 500, 210));
+    if (activeSessions && activeSessions.length > 0) {
+        sessionSelectorHeight = 50; // Height for label and dropdown
+        baseHeight += sessionSelectorHeight;
+        alert.messageText = 'LLM Burst Follow-up'; // Change title if we are selecting sessions
+        alert.informativeText = 'Select session and confirm prompt:\\n\\nTip: Press ⌘↩ to submit';
+    } else {
+        alert.messageText = 'Start LLM Burst';
+        alert.informativeText = 'Please confirm your prompt from clipboard:\\n\\nTip: Press ⌘↩ to submit';
+    }
+
+    // Accessory view containing a scrollable, editable text view and checkboxes
+    var containerView = $.NSView.alloc.initWithFrame($.NSMakeRect(0, 0, viewWidth, baseHeight));
+
+    // Session Selector (if applicable)
+    if (sessionSelectorHeight > 0) {
+        // Position the dropdown near the top (Coordinates are from bottom-left)
+        var dropdownY = baseHeight - 48;
+        var labelY = baseHeight - 20;
+
+        var label = $.NSTextField.alloc.initWithFrame($.NSMakeRect(0, labelY, viewWidth, 18));
+        label.stringValue = "Target Session:";
+        label.editable = false;
+        label.bezeled = false;
+        label.drawsBackground = false;
+        containerView.addSubview(label);
+
+        sessionSelector = $.NSPopUpButton.alloc.initWithFrame($.NSMakeRect(0, dropdownY, viewWidth, 25));
+        sessionSelector.addItemsWithTitles(activeSessions);
+        containerView.addSubview(sessionSelector);
+    }
+
+    // Text View (adjust position and height based on session selector)
+    var bottomAreaHeight = 40; // Height for checkboxes and margin
+    var textViewHeight = baseHeight - bottomAreaHeight - sessionSelectorHeight;
+    var scrollViewY = bottomAreaHeight;
+
+    var scrollView = $.NSScrollView.alloc.initWithFrame($.NSMakeRect(0, scrollViewY, viewWidth, textViewHeight));
     scrollView.hasVerticalScroller = true;
     scrollView.hasHorizontalScroller = false;
     scrollView.borderType = $.NSBezelBorder;
 
-    var textView = $.NSTextView.alloc.initWithFrame($.NSMakeRect(0, 0, 500, 210));
+    var textView = $.NSTextView.alloc.initWithFrame($.NSMakeRect(0, 0, viewWidth, textViewHeight));
     textView.string = clipboardText;
     textView.editable = true;
     textView.selectable = true;
@@ -143,6 +192,9 @@ def _run_jxa_prompt(clipboard_text: str = "", debug: bool = False) -> Dict[str, 
             "Research mode": (researchCheck.state === StateOn),
             "Incognito mode": (incognitoCheck.state === StateOn)
         };
+        if (sessionSelector) {
+            result["Selected Session"] = ObjC.unwrap(sessionSelector.titleOfSelectedItem);
+        }
     }
     JSON.stringify(result);
     '''
@@ -155,6 +207,9 @@ def _run_jxa_prompt(clipboard_text: str = "", debug: bool = False) -> Dict[str, 
         env = os.environ.copy()
         if clipboard_text:
             env['LLM_BURST_CLIPBOARD'] = clipboard_text
+        
+        if active_sessions:
+            env['LLM_BURST_ACTIVE_SESSIONS'] = json.dumps(active_sessions)
         
         if debug:
             print(f"DEBUG: Running osascript with clipboard: {clipboard_text[:50] if clipboard_text else 'None'}...", file=sys.stderr)
@@ -195,7 +250,7 @@ def _run_jxa_prompt(clipboard_text: str = "", debug: bool = False) -> Dict[str, 
         return None
 
 
-def prompt_user(gui: bool | None = None, debug: bool = False) -> Dict[str, Any]:
+def prompt_user(gui: bool | None = None, debug: bool = False, active_sessions: Optional[list[str]] = None) -> Dict[str, Any]:
     """
     Launch a native macOS prompt and return the user's input.
 
@@ -273,8 +328,8 @@ def prompt_user(gui: bool | None = None, debug: bool = False) -> Dict[str, Any]:
 
     # Try native JXA dialog first (most reliable on macOS)
     if debug:
-        print(f"DEBUG: Running JXA dialog...", file=sys.stderr)
-    jxa_result = _run_jxa_prompt(clipboard_text, debug=debug)
+        print("DEBUG: Running JXA dialog...", file=sys.stderr)
+    jxa_result = _run_jxa_prompt(clipboard_text, debug=debug, active_sessions=active_sessions)
     if debug:
         print(f"DEBUG: JXA returned: {jxa_result}", file=sys.stderr)
     
@@ -328,7 +383,7 @@ def _generate_placeholder(provider: LLMProvider) -> str:
     return f"{provider.name}-{uuid4().hex[:4]}"
 
 
-def open_llm_window(task_name: str, provider: LLMProvider) -> SessionHandle:
+def open_llm_window(task_name: str | None, provider: LLMProvider) -> SessionHandle:
     """
     Synchronous wrapper to open an LLM browser window.
 

@@ -27,7 +27,8 @@ def test_cli_help(runner):
 
 def test_list_command_empty(runner):
     """Test list command with no sessions."""
-    with patch("llm_burst.cli_click.get_running_sessions", return_value={}):
+    with patch("llm_burst.cli_click.prune_stale_sessions_sync", return_value=0), \
+         patch("llm_burst.cli_click.get_running_sessions", return_value={}):
         result = runner.invoke(cli, ["list"])
         assert result.exit_code == 0
         assert "No active sessions" in result.output
@@ -47,7 +48,8 @@ def test_list_command_with_sessions(runner):
             "window_id": 888,
         },
     }
-    with patch("llm_burst.cli_click.get_running_sessions", return_value=mock_sessions):
+    with patch("llm_burst.cli_click.prune_stale_sessions_sync", return_value=0), \
+         patch("llm_burst.cli_click.get_running_sessions", return_value=mock_sessions):
         result = runner.invoke(cli, ["list"])
         assert result.exit_code == 0
         assert "Test-Task-1" in result.output
@@ -59,19 +61,23 @@ def test_list_command_with_sessions(runner):
 def test_list_command_json_output(runner):
     """Test list command with JSON output."""
     mock_sessions = {"Test": {"provider": "GROK", "target_id": "t1", "window_id": 1}}
-    with patch("llm_burst.cli_click.get_running_sessions", return_value=mock_sessions):
+    with patch("llm_burst.cli_click.prune_stale_sessions_sync", return_value=0), \
+         patch("llm_burst.cli_click.get_running_sessions", return_value=mock_sessions):
         result = runner.invoke(cli, ["list", "--output", "json"])
         assert result.exit_code == 0
         data = json.loads(result.output)
-        assert data["Test"]["provider"] == "GROK"
+        # New JSON structure nests window entries under "windows"
+        assert data["windows"]["Test"]["provider"] == "GROK"
 
 
 def test_open_command_with_all_args(runner):
     """Test open command with all arguments provided."""
     mock_handle = Mock()
     mock_handle.live.task_name = "Test-Task"
-    with patch("llm_burst.cli_click.open_llm_window", return_value=mock_handle):
-        with patch("llm_burst.cli_click.send_prompt_sync") as mock_send:
+    with patch("llm_burst.cli_click.prune_stale_sessions_sync", return_value=0), \
+         patch("llm_burst.cli_click.ensure_remote_debugging"), \
+         patch("llm_burst.cli_click.open_llm_window", return_value=mock_handle), \
+         patch("llm_burst.cli_click.send_prompt_sync") as mock_send:
             result = runner.invoke(
                 cli,
                 [
@@ -100,9 +106,11 @@ def test_open_command_with_dialog(runner):
     mock_handle = Mock()
     mock_handle.live.task_name = "Dialog-Task"
 
-    with patch("llm_burst.cli_click.prompt_user", return_value=mock_user_data):
-        with patch("llm_burst.cli_click.open_llm_window", return_value=mock_handle):
-            with patch("llm_burst.cli_click.send_prompt_sync"):
+    with patch("llm_burst.cli_click.prune_stale_sessions_sync", return_value=0), \
+         patch("llm_burst.cli_click.ensure_remote_debugging"), \
+         patch("llm_burst.cli_click.prompt_user", return_value=mock_user_data), \
+         patch("llm_burst.cli_click.open_llm_window", return_value=mock_handle), \
+         patch("llm_burst.cli_click.send_prompt_sync"):
                 result = runner.invoke(cli, ["open"])
                 assert result.exit_code == 0
                 assert "Dialog-Task" in result.output
@@ -114,8 +122,10 @@ def test_open_command_stdin(runner):
     mock_handle.live.task_name = "Stdin-Task"
     stdin_text = "This is from stdin"
 
-    with patch("llm_burst.cli_click.open_llm_window", return_value=mock_handle):
-        with patch("llm_burst.cli_click.send_prompt_sync") as mock_send:
+    with patch("llm_burst.cli_click.prune_stale_sessions_sync", return_value=0), \
+         patch("llm_burst.cli_click.ensure_remote_debugging"), \
+         patch("llm_burst.cli_click.open_llm_window", return_value=mock_handle), \
+         patch("llm_burst.cli_click.send_prompt_sync") as mock_send:
             result = runner.invoke(
                 cli,
                 [
@@ -134,7 +144,8 @@ def test_open_command_stdin(runner):
 
 def test_stop_command_single(runner):
     """Test stop command with single task."""
-    with patch("llm_burst.cli_click.close_llm_window_sync", return_value=True):
+    with patch("llm_burst.cli_click.prune_stale_sessions_sync", return_value=0), \
+         patch("llm_burst.cli_click.close_llm_window_sync", return_value=True):
         result = runner.invoke(cli, ["stop", "-t", "Task-1"])
         assert result.exit_code == 0
         assert "Closed 'Task-1'" in result.output
@@ -143,9 +154,10 @@ def test_stop_command_single(runner):
 
 def test_stop_command_multiple(runner):
     """Test stop command with multiple tasks."""
-    with patch(
-        "llm_burst.cli_click.close_llm_window_sync", side_effect=[True, False, True]
-    ):
+    with patch("llm_burst.cli_click.prune_stale_sessions_sync", return_value=0), \
+         patch(
+            "llm_burst.cli_click.close_llm_window_sync", side_effect=[True, False, True]
+         ):
         result = runner.invoke(cli, ["stop", "-t", "T1", "-t", "T2", "-t", "T3"])
         assert result.exit_code == 0
         assert "Closed 'T1'" in result.output
@@ -157,8 +169,9 @@ def test_stop_command_multiple(runner):
 def test_stop_command_all(runner):
     """Test stop command with --all flag."""
     mock_sessions = {"Task-A": {}, "Task-B": {}}
-    with patch("llm_burst.cli_click.get_running_sessions", return_value=mock_sessions):
-        with patch("llm_burst.cli_click.close_llm_window_sync", return_value=True):
+    with patch("llm_burst.cli_click.prune_stale_sessions_sync", return_value=0), \
+         patch("llm_burst.cli_click.get_running_sessions", return_value=mock_sessions), \
+         patch("llm_burst.cli_click.close_llm_window_sync", return_value=True):
             result = runner.invoke(cli, ["stop", "--all"])
             assert result.exit_code == 0
             assert "2 window(s) closed" in result.output

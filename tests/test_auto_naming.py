@@ -80,9 +80,9 @@ class TestActivateAutoNaming:
         StateManager._instance = None
 
     @patch("llm_burst.browser.BrowserAdapter")
-    @patch("llm_burst.auto_namer.auto_name_session", new_callable=AsyncMock)
+    @patch("llm_burst.auto_namer.suggest_session_name", new_callable=AsyncMock)
     @patch("llm_burst.cli_click.get_injector")
-    def test_auto_naming_called(self, mock_injector, mock_auto_name, mock_adapter):
+    def test_auto_naming_called(self, mock_injector, mock_suggest, mock_adapter):
         """Test that auto_name_session is called for each provider."""
         from llm_burst.cli_click import cmd_activate
         from click.testing import CliRunner
@@ -99,17 +99,21 @@ class TestActivateAutoNaming:
         mock_handle.live.task_name = "test"
 
         mock_adapter_instance.open_window.return_value = mock_handle
-        mock_injector.return_value = AsyncMock()
-        mock_auto_name.return_value = None  # No rename
+        inj = AsyncMock()
+        mock_injector.return_value = inj
+        mock_suggest.return_value = None  # No rename applied
 
         runner = CliRunner()
-        runner.invoke(cmd_activate, ["--prompt-text", "test prompt"])
+        with patch("llm_burst.cli_click.ensure_remote_debugging"):
+            runner.invoke(cmd_activate, ["--prompt-text", "test prompt"])
 
-        # Auto-name should be called for each provider
-        assert mock_auto_name.call_count == len(LLMProvider)
+        # Suggestion should be attempted at least once
+        assert mock_suggest.await_count >= 1
+        # Ensure we injected prompts for each provider
+        assert mock_injector.call_count == len(LLMProvider)
 
     @patch("llm_burst.browser.BrowserAdapter")
-    @patch("llm_burst.auto_namer.auto_name_session", new_callable=AsyncMock)
+    @patch("llm_burst.auto_namer.suggest_session_name", new_callable=AsyncMock)
     @patch("llm_burst.cli_click.get_injector")
     @patch("llm_burst.state.StateManager")
     @patch("llm_burst.cli_click.prompt_user")
@@ -118,7 +122,7 @@ class TestActivateAutoNaming:
         mock_prompt_user,
         mock_state_class,
         mock_injector,
-        mock_auto_name,
+        mock_suggest,
         mock_adapter,
     ):
         """Test that session is renamed when title was auto-generated."""
@@ -154,25 +158,19 @@ class TestActivateAutoNaming:
         mock_adapter_instance.open_window.return_value = mock_handle
         mock_injector.return_value = AsyncMock()
 
-        # First provider gets renamed
-        mock_auto_name.side_effect = [
-            "Better Name:gemini",  # First call returns a rename
-            None,  # Others return None
-            None,
-            None,
-        ]
+        # Return a better suggested name for the session
+        mock_suggest.return_value = "Better Name"
 
         runner = CliRunner()
 
         # Don't provide --prompt-text, let it come from mock_prompt_user
-        runner.invoke(cmd_activate, [])
+        with patch("llm_burst.cli_click.ensure_remote_debugging"):
+            runner.invoke(cmd_activate, [])
 
-        # rename_session should have been called
+        # rename_session should have been called with the suggested name
         mock_state.rename_session.assert_called_once()
-
-        # The new name should be derived from the renamed tab
-        call_args = mock_state.rename_session.call_args[0]
-        assert call_args[1] == "Better Name"  # Second arg is new name
+        _, new_name = mock_state.rename_session.call_args[0]
+        assert new_name == "Better Name"
 
     def test_timestamp_format(self):
         """Test that auto-generated title has correct format."""

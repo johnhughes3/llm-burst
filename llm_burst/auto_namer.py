@@ -20,6 +20,7 @@ import google.generativeai as genai
 from google.generativeai.types import HarmCategory, HarmBlockThreshold
 from playwright.async_api import Page
 from pydantic import BaseModel, ConfigDict
+from dotenv import load_dotenv, find_dotenv
 
 from .constants import (
     LLMProvider,
@@ -27,11 +28,51 @@ from .constants import (
     GEMINI_API_KEY_ENV,
     AUTO_NAMING_MAX_CHARS,
     AUTO_NAMING_TIMEOUT,
+    PACKAGE_ROOT,
 )
 from .state import LiveSession, StateManager
 from .browser import set_window_title
 
 _LOG = logging.getLogger(__name__)
+
+# --------------------------------------------------------------------------- #
+# Environment Setup (Load .env)
+# --------------------------------------------------------------------------- #
+
+"""
+Robust .env loading strategy:
+1) Honour explicit LLM_BURST_DOTENV if set.
+2) Load PACKAGE_ROOT/.env when present (repo layout in dev).
+3) Use dotenv discovery from current working directory upwards.
+This allows running the package from anywhere while keeping dev ergonomics.
+"""
+try:
+    # 1) Explicit override via env var
+    specific = os.environ.get("LLM_BURST_DOTENV")
+    if specific and os.path.exists(specific):
+        load_dotenv(specific)
+        _LOG.debug("Loaded .env from LLM_BURST_DOTENV: %s", specific)
+    else:
+        # 2) Repo root (when running from source checkout)
+        env_path = PACKAGE_ROOT / ".env"
+        if env_path.exists():
+            load_dotenv(env_path)
+            _LOG.debug("Loaded .env from project root: %s", env_path)
+        else:
+            # 3) Discover relative to CWD
+            discovered = find_dotenv(usecwd=True)
+            if discovered:
+                load_dotenv(discovered)
+                _LOG.debug("Loaded .env via discovery: %s", discovered)
+            else:
+                # Fallback to default behaviour (CWD only)
+                if load_dotenv():
+                    _LOG.debug("Loaded .env from CWD.")
+                else:
+                    _LOG.debug("No .env found (checked explicit, repo, discovery, CWD).")
+except Exception as e:
+    _LOG.warning("Failed to load .env file: %s", e)
+
 
 # --------------------------------------------------------------------------- #
 # Pydantic Model for Structured Output
@@ -76,6 +117,7 @@ _CONVERSATION_SELECTORS: dict[LLMProvider, dict[str, str]] = {
 
 def _setup_gemini() -> Optional[genai.GenerativeModel]:
     """Configure Gemini API and return model instance."""
+    # Re-check after our .env loading to ensure env is seeded
     api_key = os.getenv(GEMINI_API_KEY_ENV)
     if not api_key:
         _LOG.warning(

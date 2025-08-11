@@ -92,22 +92,61 @@ def cmd_list(output: str) -> None:
     """List running LLM sessions."""
     prune_stale_sessions_sync()
     sessions = get_running_sessions()
+    # Also include multi-provider sessions (groups)
+    from llm_burst.state import StateManager
+    st = StateManager()
+    mp_sessions = st.list_sessions()
+    groups = st.list_groups()
 
     if output == "json":
-        click.echo(json.dumps(sessions, indent=2))
+        payload = {
+            "sessions": {
+                title: {
+                    "grouped": sess.grouped,
+                    "tabs": {
+                        prov.name.lower(): {
+                            "windowId": th.window_id,
+                            "tabId": th.tab_id,
+                        }
+                        for prov, th in sess.tabs.items()
+                    },
+                }
+                for title, sess in mp_sessions.items()
+            },
+            "windows": sessions,
+            "groups": {gid: {"name": g.name, "color": g.color} for gid, g in groups.items()},
+        }
+        click.echo(json.dumps(payload, indent=2))
         return
 
     # Table view
-    if not sessions:
-        click.echo("No active sessions.")
-        return
-    header = f"{'Task':30}  {'Provider':10}  TargetID / WindowID"
-    click.echo(header)
-    click.echo("-" * len(header))
-    for task, info in sessions.items():
-        click.echo(
-            f"{task:30}  {info['provider']:10}  {info['target_id']} / {info['window_id']}"
-        )
+    if mp_sessions:
+        click.echo("Active Session Groups:")
+        header = f"{'Title':30}  {'Grouped':7}  {'Providers':9}  Tabs"
+        click.echo(header)
+        click.echo("-" * len(header))
+        for title, sess in mp_sessions.items():
+            prov_count = len(sess.tabs)
+            tabs_desc = ", ".join(
+                f"{prov.name.lower()}:{th.tab_id}" for prov, th in sess.tabs.items()
+            )
+            click.echo(
+                f"{title:30}  {str(sess.grouped):7}  {prov_count:9}  {tabs_desc}"
+            )
+        click.echo("")
+
+    if sessions:
+        click.echo("Live Windows/Tabs:")
+        header = f"{'Task':30}  {'Provider':10}  TargetID / WindowID"
+        click.echo(header)
+        click.echo("-" * len(header))
+        for task, info in sessions.items():
+            click.echo(
+                f"{task:30}  {info['provider']:10}  {info['target_id']} / {info['window_id']}"
+            )
+    else:
+        if not mp_sessions:
+            click.echo("No active sessions.")
 
 
 # --------------------------------------------------------------------------- #
@@ -311,6 +350,13 @@ def cmd_open(
     show_default=True,
     help="Show GUI dialog for missing fields (default: off)",
 )
+@click.option(
+    "--tabs/--windows",
+    "as_tabs",
+    default=False,
+    show_default=True,
+    help="Open one window with four tabs instead of four windows.",
+)
 def cmd_activate(
     session_title: str | None,
     prompt_text: str | None,
@@ -319,8 +365,9 @@ def cmd_activate(
     incognito: bool,
     layout: str,
     gui_prompt: bool,
+    as_tabs: bool,
 ) -> None:
-    """Open 4 LLM tabs and send the same prompt (⌃⌥R replacement)."""
+    """Open 4 LLM sessions and send the same prompt (⌃⌥R replacement)."""
     prune_stale_sessions_sync()
     from llm_burst.chrome_bootstrap import ensure_remote_debugging  # Added
 
@@ -376,21 +423,11 @@ def cmd_activate(
     providers = list(LLMProvider)  # All known providers for now
 
     # Helper coroutine for concurrent open/prompt
-    async def _open_and_prompt(
-        adapter, task_slug, prov, prompt, research_mode, incognito_mode
-    ):
-        """Open a provider window and send prompt."""
-        handle = await adapter.open_window(task_slug, prov)
-        opts = InjectOptions(
-            follow_up=False,
-            research=research_mode,
-            incognito=incognito_mode,
-        )
-        injector = get_injector(prov)
-        await injector(handle.page, prompt, opts)
-        return handle
+    # Helper: truncate names to a safe length for tab groups
+    def _truncate_name(name: str, limit: int = 80) -> str:
+        return name if len(name) <= limit else name[: limit - 1] + "…"
 
-    async def _async_activate() -> tuple[list[str], str]:
+    async def _async_activate(as_tabs: bool = False) -> tuple[list[str], str]:
         """Open all provider windows and send prompt while BrowserAdapter is alive."""
         # Late import to keep GAI optional
         from llm_burst.auto_namer import suggest_session_name
@@ -408,83 +445,186 @@ def cmd_activate(
             state.create_session(current_title)
 
         async with BrowserAdapter() as adapter:
-            # Open windows and send prompts concurrently
-            tasks = []
-            for prov in providers:
-                # Create stable internal slug for LiveSession based on initial title
-                task_slug = _task_slug(current_title, prov)
-                tasks.append(
-                    _open_and_prompt(
-                        adapter, task_slug, prov, prompt_text, research, incognito
-                    )
-                )
-
-            results = await asyncio.gather(*tasks, return_exceptions=True)
-
-            # Process results and attempt auto-naming
-            for prov, result in zip(providers, results):
-                if isinstance(result, Exception):
-                    click.echo(f"Failed to open {prov.name}: {result}", err=True)
-                    continue
-
-                handle = result
-                handles.append(handle)
-                opened_providers.append(prov.name.lower())
-
-                # Update state (linking LiveSession to MultiProviderSession)
+            if as_tabs:
+                # 1) Open the first provider as a new window
+                first_prov = providers[0]
+                first_slug = _task_slug(current_title, first_prov)
+                first_handle = await adapter.open_window(first_slug, first_prov)
+                handles.append(first_handle)
+                opened_providers.append(first_prov.name.lower())
                 state.add_tab_to_session(
-                    session_title,  # Use the initial title
-                    prov,
-                    handle.live.window_id,
-                    handle.live.target_id,
+                    session_title,
+                    first_prov,
+                    first_handle.live.window_id,
+                    first_handle.live.target_id,
                 )
 
-                # Attempt to get a name suggestion (only if auto-generated title and not yet suggested)
-                if auto_generated and suggested_name is None:
+                # Set initial tab/window titles for visibility
+                try:
+                    await set_window_title(first_handle.page, current_title)
+                except Exception:
+                    pass
+
+                # 2) Open remaining providers as tabs in the same window
+                for prov in providers[1:]:
+                    slug = _task_slug(current_title, prov)
                     try:
-                        suggested_name = await suggest_session_name(handle.page, prov)
-                    except Exception:
-                        pass
-
-            # If we used an auto-generated session title and got a suggestion, apply it
-            if auto_generated and suggested_name:
-                # Rename the MultiProviderSession, NOT the LiveSessions
-                if state.rename_session(current_title, suggested_name):
-                    click.echo(f"Session renamed to '{suggested_name}'")
-                    current_title = suggested_name
-
-                    # Update browser tab titles for display purposes
-                    for handle in handles:
-                        try:
-                            await set_window_title(handle.page, current_title)
-                        except Exception:
-                            pass
-            else:
-                # Ensure initial title is set if not auto-named
-                for handle in handles:
+                        handle = await adapter.open_tab_in_window(
+                            slug, prov, first_handle.live.target_id
+                        )
+                    except Exception as exc:
+                        click.echo(f"Failed to open {prov.name} tab: {exc}", err=True)
+                        continue
+                    handles.append(handle)
+                    opened_providers.append(prov.name.lower())
+                    state.add_tab_to_session(
+                        session_title, prov, handle.live.window_id, handle.live.target_id
+                    )
                     try:
                         await set_window_title(handle.page, current_title)
                     except Exception:
                         pass
 
-            # Flush state so that follow-up commands see the new data
+                # 3) Create a Chrome tab group and add all tabs
+                group_name = _truncate_name(current_title)
+                try:
+                    group_id = await adapter._get_or_create_group(
+                        group_name, "grey", first_handle.live.window_id
+                    )
+                except Exception as exc:
+                    group_id = None
+                    click.echo(f"Tab-group creation failed: {exc}", err=True)
+                if group_id is not None:
+                    for h in handles:
+                        try:
+                            await adapter._add_target_to_group(h.live.target_id, group_id)
+                            # Persist per-tab group id
+                            state.assign_session_to_group(h.live.task_name, group_id)
+                        except Exception:
+                            pass
+                    state.set_grouped(session_title, True)
+
+                # 4) Inject prompts into each tab
+                for h in handles:
+                    try:
+                        injector = get_injector(h.live.provider)
+                        opts = InjectOptions(
+                            follow_up=False, research=research, incognito=incognito
+                        )
+                        await injector(h.page, prompt_text, opts)
+                    except Exception as exc:
+                        click.echo(
+                            f"Injection failed for {h.live.provider.name}: {exc}", err=True
+                        )
+
+                # 5) Try Gemini name suggestion using the first successful handle
+                if auto_generated:
+                    for h in handles:
+                        try:
+                            suggested_name = await suggest_session_name(
+                                h.page, h.live.provider
+                            )
+                            if suggested_name:
+                                break
+                        except Exception:
+                            continue
+
+                # 6) Apply rename (session + tab-group title where possible)
+                if auto_generated and suggested_name:
+                    if state.rename_session(current_title, suggested_name):
+                        click.echo(f"Session renamed to '{suggested_name}'")
+                        current_title = suggested_name
+                        # Update titles in browser and group title
+                        for h in handles:
+                            try:
+                                await set_window_title(h.page, current_title)
+                            except Exception:
+                                pass
+                        if group_id is not None:
+                            try:
+                                await adapter._update_group_title(
+                                    group_id, _truncate_name(current_title)
+                                )
+                            except Exception:
+                                pass
+
+                state.persist_now()
+                return opened_providers, current_title
+
+            # WINDOWS MODE -------------------------------------------------
+            # 1) Open all windows first (no prompts)
+            for prov in providers:
+                slug = _task_slug(current_title, prov)
+                try:
+                    handle = await adapter.open_window(slug, prov)
+                except Exception as exc:
+                    click.echo(f"Failed to open {prov.name}: {exc}", err=True)
+                    continue
+                handles.append(handle)
+                opened_providers.append(prov.name.lower())
+                state.add_tab_to_session(
+                    session_title, prov, handle.live.window_id, handle.live.target_id
+                )
+                try:
+                    await set_window_title(handle.page, current_title)
+                except Exception:
+                    pass
+
+            state.persist_now()
+
+            # 2) Arrange windows before sending prompts (per requirement)
+            if not research and len(handles) > 1 and layout.lower() != "none":
+                try:
+                    from llm_burst.layout import arrange
+
+                    arrange(len(handles))
+                    click.echo("✓ Windows arranged")
+                except Exception:
+                    pass
+
+            # 3) Inject prompts into each window
+            for h in handles:
+                try:
+                    injector = get_injector(h.live.provider)
+                    opts = InjectOptions(
+                        follow_up=False, research=research, incognito=incognito
+                    )
+                    await injector(h.page, prompt_text, opts)
+                except Exception as exc:
+                    click.echo(
+                        f"Injection failed for {h.live.provider.name}: {exc}", err=True
+                    )
+
+            # 4) Attempt name suggestion from first handle (post-injection)
+            if auto_generated and handles:
+                try:
+                    suggested_name = await suggest_session_name(
+                        handles[0].page, handles[0].live.provider
+                    )
+                except Exception:
+                    suggested_name = None
+
+            # 5) Apply rename
+            if auto_generated and suggested_name:
+                if state.rename_session(current_title, suggested_name):
+                    click.echo(f"Session renamed to '{suggested_name}'")
+                    current_title = suggested_name
+                    for h in handles:
+                        try:
+                            await set_window_title(h.page, current_title)
+                        except Exception:
+                            pass
+
+            # Flush state
             state.persist_now()
             return opened_providers, current_title
 
-    opened, session_title = asyncio.run(_async_activate())
+    # Tabs mode is controlled via env for now (—tabs flag added below)
+    opened, session_title = asyncio.run(_async_activate(as_tabs=as_tabs))
 
     click.echo(f"✓ Session '{session_title}' activated with {len(opened)} provider(s)")
 
-    # Arrange windows unless research mode is requested
-    if not research and len(opened) > 1 and layout.lower() != "none":
-        try:
-            from llm_burst.layout import arrange
-
-            arrange(len(opened))
-            click.echo("✓ Windows arranged")
-        except Exception:
-            # Best-effort only
-            pass
+    # No-op: arrangement already handled earlier for windows mode
 
 
 # --------------------------------------------------------------------------- #
@@ -537,43 +677,49 @@ def cmd_follow_up(
 
     state = StateManager()
 
-    # Auto-select session when only one exists, or prompt for selection
-    if session_title is None:
-        sessions = list(state.list_sessions().keys())
-        if not sessions:
-            raise click.ClickException("No active sessions.")
-        if len(sessions) > 1:
-            # Interactive selection when multiple sessions exist
-            click.echo("Multiple active sessions:")
-            for i, session in enumerate(sessions, 1):
-                click.echo(f"  {i}. {session}")
+    # Read prompt text from STDIN if requested
+    if stdin:
+        prompt_text = sys.stdin.read()
 
-            # Prompt user to select
-            while True:
-                try:
-                    choice = click.prompt(
-                        "Select session number",
-                        type=click.IntRange(1, len(sessions)),
-                        show_choices=True,
-                    )
-                    session_title = sessions[choice - 1]
-                    break
-                except (click.BadParameter, click.Abort) as e:
-                    if isinstance(e, click.Abort):
-                        raise  # Re-raise abort (Ctrl+C)
-                    click.echo("Invalid selection. Please try again.")
-        else:
-            session_title = sessions[0]
+    # Get active sessions (after pruning)
+    active_sessions = list(state.list_sessions().keys())
+
+    if not active_sessions:
+        raise click.ClickException("No active sessions.")
+
+    # If a specific title was provided via CLI, validate it first
+    if session_title and session_title not in active_sessions:
+        raise click.ClickException(f"Session '{session_title}' not found or inactive.")
+
+    # Auto-select if only one session is active and no title was provided
+    if session_title is None and len(active_sessions) == 1:
+        session_title = active_sessions[0]
+
+    need_dialog = (session_title is None) or (prompt_text is None)
+
+    if need_dialog:
+        # Determine which sessions to display in the dialog for selection
+        # If we already have a session_title (either auto-selected or provided),
+        # we show it as the only option (pre-selected). Otherwise, show all options.
+        dialog_sessions = [session_title] if session_title else active_sessions
+
+        # Show the dialog
+        data = prompt_user(gui=gui_prompt, active_sessions=dialog_sessions)
+        
+        # Extract results
+        session_title = data.get("Selected Session") or session_title
+        prompt_text = data.get("Prompt Text") or data.get("prompt") or prompt_text
+
+    # Final validation
+    if session_title is None:
+        # This should ideally not happen if the dialog works correctly
+        raise click.UsageError("Session title is required.")
 
     sess = state.get_session(session_title)
     if sess is None:
+        # Final check just in case (e.g. if session closed between dialog and here)
         raise click.ClickException(f"Session '{session_title}' not found.")
 
-    if stdin:
-        prompt_text = sys.stdin.read()
-    if prompt_text is None:
-        data = prompt_user(gui=gui_prompt)
-        prompt_text = data.get("Prompt Text") or data.get("prompt")
     if not prompt_text or not prompt_text.strip():
         raise click.UsageError("Prompt text is required.")
 

@@ -1,0 +1,19 @@
+How involved would ti be to write an extension for chrome that merges all tabs in specific windows into a group together?
+
+We have data in our app like this:
+
+00:42:05 [INFO] llm_burst.layout: Windows arranged using CDP
+✓ Windows arranged
+(llm-burst) johnhughes@Watermelon llm-burst % uv run llm-burst list                    
+Task                            Provider    TargetID / WindowID
+---------------------------------------------------------------
+internal_gemini_ab42709f        GEMINI      BE0EA4F5CA6E214C697385D13BE9AB43 / 490764207
+internal_chatgpt_f6d11ebf       CHATGPT     DA2E8EDAB6658048830D1818DEFA2A75 / 490764211
+internal_claude_c919859e        CLAUDE      E883D48430F49CEC98A46A1E17252A64 / 490764209
+internal_grok_58e79214          GROK        D2C8A0C5FA78E680767AA37951450723 / 490764257
+internal_chatgpt_e1113984       CHATGPT     EE25AEE71E06CD2DA739B67F6B1F70E7 / 490764255
+internal_gemini_29b029c1        GEMINI      4E8558467FC2201C7862A4DADC729387 / 490764251
+internal_claude_93e5a8d5        CLAUDE      8EADF8C1C7C7200864C9F05E0E6745D0 / 490764253
+(llm-burst) johnhughes@Watermelon llm-burst % 
+
+Would it be possible to write an extension taht takes, say, four specific items on the list above and mergers those windows ids into one and puts all the resulting tabs in that window into one tab group? 

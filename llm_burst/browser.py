@@ -257,6 +257,58 @@ class BrowserAdapter:
         )
         return SessionHandle(live, page)
 
+    async def open_tab_in_window(
+        self,
+        task_name: str,
+        provider: LLMProvider,
+        opener_target_id: str,
+    ) -> SessionHandle:
+        """
+        Open a new tab in the same Chrome window as the target specified by
+        *opener_target_id*, navigate to the provider URL, and persist metadata.
+
+        Returns a SessionHandle.
+        """
+        await self._ensure_connection()
+
+        # Try re-attaching to an existing session first.
+        existing = self._state.get(task_name)
+        if existing:
+            page = await self._find_page_for_target(existing.target_id)
+            if page:
+                return SessionHandle(existing, page)
+            # If we cannot hydrate the Page, treat as stale and recreate.
+            self._state.remove(task_name)
+
+        # 1) Create a new tab using the opener target to keep it in the same window
+        target_id = await self._create_tab_in_window(opener_target_id)
+        page = await self._find_page_for_target(target_id)
+        if page is None:  # pragma: no cover
+            raise RuntimeError("Failed to obtain Playwright Page for new tab")
+
+        # 2) Navigate to the LLM landing URL
+        await page.goto(LLM_URLS[provider], wait_until="load")
+
+        # 3) Resolve window id for this new tab
+        cdp = await self._get_cdp_connection()
+        if not cdp:
+            raise RuntimeError("No CDP connection available")
+        try:
+            res = await cdp.send("Browser.getWindowForTarget", {"targetId": target_id})
+        except Exception:
+            res = {"windowId": 1}
+        window_id = res["windowId"]
+
+        # 4) Persist session & return handle
+        live = self._state.register(
+            task_name=task_name,
+            provider=provider,
+            target_id=target_id,
+            window_id=window_id,
+            page_guid=getattr(page, "guid", None),
+        )
+        return SessionHandle(live, page)
+
     # ---------------- Internal helpers ---------------- #
 
     async def _ensure_connection(self) -> None:
@@ -398,6 +450,27 @@ class BrowserAdapter:
         res = await cdp.send(
             "Target.createTarget", {"url": "about:blank", "newWindow": True}
         )
+        return res["targetId"]
+
+    async def _create_tab_in_window(self, opener_target_id: str) -> str:
+        """
+        Create a new browser tab in the same window as *opener_target_id* and
+        return the new targetId.
+
+        Implementation detail: use Target.createTarget with the 'openerId'
+        bound to the provided target. Chrome opens the new target in the same
+        window as the opener.
+        """
+        cdp = await self._get_cdp_connection()
+        if not cdp:
+            raise RuntimeError("No CDP connection available")
+        params = {
+            "url": "about:blank",
+            "newWindow": False,
+            "background": False,
+            "openerId": opener_target_id,
+        }
+        res = await cdp.send("Target.createTarget", params)
         return res["targetId"]
 
     async def _find_page_for_target(self, target_id: str) -> Optional[Page]:
@@ -577,6 +650,19 @@ class BrowserAdapter:
         if not cdp:
             return  # No CDP available
         await cdp.send("TabGroups.addTab", {"groupId": group_id, "tabId": target_id})
+
+    async def _update_group_title(self, group_id: int, title: str) -> None:
+        """Best-effort update of a tab group's title (no-op on unsupported builds)."""
+        if not self._tab_groups_supported:
+            return
+        cdp = await self._get_cdp_connection()
+        if not cdp:
+            return
+        try:
+            await cdp.send("TabGroups.update", {"groupId": group_id, "title": title})
+        except Exception:
+            # Ignore if the method is not available on this Chrome build
+            pass
 
     async def move_task_to_group(self, task_name: str, group_name: str) -> None:
         """
