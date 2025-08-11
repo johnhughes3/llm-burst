@@ -129,11 +129,12 @@ def _run_jxa_prompt(clipboard_text: str = "", debug: bool = False) -> Dict[str, 
     var response = alert.runModal;
     
     // Accept both modern and legacy "OK" codes; treat others as cancel
-    var okCode = 1000; // NSAlertFirstButtonReturn
+    // NOTE: NSAlertFirstButtonReturn and runModal both return strings in JXA
+    var okCode = $.NSAlertFirstButtonReturn || "1000";
     
     // Return JSON result as the script's value
     var result;
-    if (response !== okCode) { 
+    if (response != okCode) {  // Use != for type-coercing comparison
         // Return special marker for cancellation
         result = {"__cancelled__": true};
     } else {
