@@ -3,7 +3,7 @@
 import pytest
 import json
 from unittest.mock import patch, MagicMock
-from llm_burst.cli import _run_jxa_prompt, _bring_terminal_to_front
+from llm_burst.cli import _run_jxa_prompt
 
 
 class TestDialogKeyboardShortcuts:
@@ -74,15 +74,6 @@ class TestDialogKeyboardShortcuts:
         )
         assert "center()" in source or "window.center" in source, "Should center window"
 
-    @patch("subprocess.run")
-    def test_bring_terminal_to_front(self, mock_run):
-        """Test that Terminal activation helper works."""
-        _bring_terminal_to_front()
-
-        # Should have been called at least once to activate Terminal
-        assert mock_run.called
-        call_args = [str(arg) for call in mock_run.call_args_list for arg in call[0][0]]
-        assert any("Terminal" in arg or "activate" in arg for arg in call_args)
 
     @patch("subprocess.run")
     def test_dialog_cancellation_handling(self, mock_run):

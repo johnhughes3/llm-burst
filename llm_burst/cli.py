@@ -64,15 +64,20 @@ def _run_jxa_prompt(
         app.activateIgnoringOtherApps(true);
     }
     
-    // Step 2: Bring all windows to front
-    if (app.windows && app.windows.count() > 0) {
+    // Step 2: Bring all windows to front (if any exist)
+    try {
         var windows = app.windows;
-        for (var i = 0; i < windows.count(); i++) {
-            var window = windows.objectAtIndex(i);
-            if (window && window.makeKeyAndOrderFront) {
-                window.makeKeyAndOrderFront(null);
+        // Check if windows is actually an array-like object with count method
+        if (windows && typeof windows.count === 'function' && windows.count() > 0) {
+            for (var i = 0; i < windows.count(); i++) {
+                var window = windows.objectAtIndex(i);
+                if (window && window.makeKeyAndOrderFront) {
+                    window.makeKeyAndOrderFront(null);
+                }
             }
         }
+    } catch (e) {
+        // No windows or windows not accessible - that's okay
     }
     
     // Step 3: Set application to be active and frontmost
@@ -351,33 +356,6 @@ def _run_jxa_prompt(
         return None
 
 
-def _bring_terminal_to_front():
-    """Bring the Terminal app to front using osascript."""
-    try:
-        # Try to activate Terminal.app
-        subprocess.run(
-            ["osascript", "-e", 'tell application "Terminal" to activate'],
-            capture_output=True,
-            timeout=1,
-        )
-    except Exception:
-        # If Terminal fails, try to activate the current process
-        try:
-            subprocess.run(
-                [
-                    "osascript",
-                    "-e",
-                    'tell application "System Events" to set frontmost of (first process whose unix id is {}) to true'.format(
-                        os.getpid()
-                    ),
-                ],
-                capture_output=True,
-                timeout=1,
-            )
-        except Exception:
-            pass  # Silent fail if we can't bring to front
-
-
 def prompt_user(
     gui: bool | None = None,
     debug: bool = False,
@@ -467,10 +445,8 @@ def prompt_user(
         if debug:
             print(f"DEBUG: Failed to get clipboard: {e}", file=sys.stderr)
 
-    # Bring Terminal to front before showing dialog
-    _bring_terminal_to_front()
-
     # Try native JXA dialog first (most reliable on macOS)
+    # Note: Removed Terminal activation as it was interfering with dialog display
     if debug:
         print("DEBUG: Running JXA dialog...", file=sys.stderr)
     jxa_result = _run_jxa_prompt(
