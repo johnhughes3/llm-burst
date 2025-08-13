@@ -15,6 +15,7 @@ class ChromeStatus(NamedTuple):
     running: bool
     remote_debug: bool
     pids: tuple[int, ...]
+    debug_port: int | None
 
 
 def scan_chrome_processes(names: Iterable[str]) -> ChromeStatus:
@@ -39,6 +40,7 @@ def scan_chrome_processes(names: Iterable[str]) -> ChromeStatus:
 
         pids = []
         has_remote_debug = False
+        detected_port: int | None = None
 
         for line in result.stdout.splitlines():
             # Check if this line contains any Chrome process name
@@ -51,18 +53,28 @@ def scan_chrome_processes(names: Iterable[str]) -> ChromeStatus:
                         pids.append(pid)
 
                         # Check if this process has remote debugging flag
-                        if re.search(r"--remote-debugging-port(?:=\d+)?", line):
+                        m = re.search(r"--remote-debugging-port(?:=(\d+))?", line)
+                        if m:
                             has_remote_debug = True
+                            # Capture explicit port if present
+                            if m.group(1):
+                                try:
+                                    detected_port = int(m.group(1))
+                                except ValueError:
+                                    pass
                     except ValueError:
                         continue
 
         return ChromeStatus(
-            running=bool(pids), remote_debug=has_remote_debug, pids=tuple(pids)
+            running=bool(pids),
+            remote_debug=has_remote_debug,
+            pids=tuple(pids),
+            debug_port=detected_port,
         )
 
     except (subprocess.SubprocessError, OSError):
         # If we can't scan processes, assume nothing is running
-        return ChromeStatus(False, False, ())
+        return ChromeStatus(False, False, (), None)
 
 
 def quit_chrome(pids: Iterable[int]) -> bool:

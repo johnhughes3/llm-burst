@@ -24,6 +24,7 @@ from importlib import metadata
 from typing import Optional
 
 import click
+from dotenv import load_dotenv, find_dotenv
 
 from llm_burst.providers import get_injector, InjectOptions
 from llm_burst.constants import LLMProvider, TabColor
@@ -71,6 +72,14 @@ def _configure_logging(verbose: bool) -> None:
 def cli(ctx: click.Context, verbose: bool) -> None:  # noqa: D401  (Click demands plain name)
     """llm-burst – orchestrate multiple LLM chat sessions."""
     _configure_logging(verbose)
+    # Best-effort .env loading early so downstream modules see env (e.g., GEMINI_API_KEY)
+    try:
+        discovered = find_dotenv(usecwd=True)
+        if discovered:
+            load_dotenv(discovered)
+            _LOG.debug("Loaded .env at startup: %s", discovered)
+    except Exception:
+        pass
     ctx.ensure_object(dict)
 
 
@@ -446,10 +455,23 @@ def cmd_activate(
 
         async with BrowserAdapter() as adapter:
             if as_tabs:
-                # 1) Open the first provider as a new window
+                # 1) Prefer to open the first provider as a new TAB in an existing window
+                #    (to avoid spawning a separate window for the first tab)
                 first_prov = providers[0]
                 first_slug = _task_slug(current_title, first_prov)
-                first_handle = await adapter.open_window(first_slug, first_prov)
+                opener = await adapter.pick_existing_window_opener()
+                if opener:
+                    opener_target_id, _opener_window_id = opener
+                    try:
+                        first_handle = await adapter.open_tab_in_window(
+                            first_slug, first_prov, opener_target_id
+                        )
+                    except Exception:
+                        # Fallback: create a new window if tab creation fails
+                        first_handle = await adapter.open_window(first_slug, first_prov)
+                else:
+                    # No existing windows – create a new one as before
+                    first_handle = await adapter.open_window(first_slug, first_prov)
                 handles.append(first_handle)
                 opened_providers.append(first_prov.name.lower())
                 state.add_tab_to_session(
@@ -525,8 +547,10 @@ def cmd_activate(
                                 h.page, h.live.provider
                             )
                             if suggested_name:
+                                _LOG.info("Name suggestion produced: %s", suggested_name)
                                 break
                         except Exception:
+                            _LOG.debug("Name suggestion attempt failed for %s", h.live.provider)
                             continue
 
                 # 6) Apply rename (session + tab-group title where possible)
@@ -605,6 +629,8 @@ def cmd_activate(
                     suggested_name = await suggest_session_name(
                         handles[0].page, handles[0].live.provider
                     )
+                    if suggested_name:
+                        _LOG.info("Name suggestion produced: %s", suggested_name)
                 except Exception:
                     suggested_name = None
 
@@ -884,6 +910,8 @@ def cmd_chrome_status() -> None:
 
     click.echo(f"Chrome running       : {'Yes' if status.running else 'No'}")
     click.echo(f"Remote debugging flag: {'Yes' if status.remote_debug else 'No'}")
+    if status.remote_debug:
+        click.echo(f"Remote debugging port: {status.debug_port or '(unspecified)'}")
     click.echo(f"PIDs                 : {', '.join(map(str, status.pids)) or '-'}")
 
     # Exit 0 only when Chrome is running with the flag; 1 otherwise

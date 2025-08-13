@@ -113,10 +113,12 @@ class BrowserAdapter:
         self._chrome_proc: subprocess.Popen[str] | None = None
         self._user_data_dir: str | None = None  # Temp profile dir for dedicated Chrome
         self._cdp_session = (
-            None  # Cached Playwright CDPSession for Browser-domain commands
+            None  # Cached Playwright CDPSession (prefer browser-level session)
         )
         self._state = StateManager()
         self._tab_groups_supported: bool | None = None
+        # Track the remote debugging port we actually connect to; start with configured default
+        self._remote_port: int = CHROME_REMOTE_PORT
 
     # ---------------- Context manager plumbing ---------------- #
 
@@ -386,7 +388,7 @@ class BrowserAdapter:
         else:
             # Chrome claims to run with remote debug but connection failed → port mismatch?
             raise RuntimeError(
-                f"Unable to connect to Chrome remote debugging on port {CHROME_REMOTE_PORT}. "
+                f"Unable to connect to Chrome remote debugging on port {self._remote_port}. "
                 "Verify the port or set $CHROME_REMOTE_PORT to match the running instance."
             )
 
@@ -414,20 +416,45 @@ class BrowserAdapter:
         await self._probe_tab_groups()
 
     async def _get_websocket_endpoint(self) -> str | None:
-        """Fetch the WebSocket debugger URL from Chrome's /json/version endpoint."""
+        """Fetch the WebSocket debugger URL from Chrome's /json/version endpoint.
+
+        Tries the currently configured port, and if unreachable, attempts to
+        auto-detect the active remote debugging port from running Chrome
+        processes.
+        """
         import aiohttp
 
-        url = f"http://127.0.0.1:{CHROME_REMOTE_PORT}/json/version"
+        async def fetch(port: int) -> str | None:
+            url = f"http://127.0.0.1:{port}/json/version"
+            try:
+                async with aiohttp.ClientSession() as session:
+                    async with session.get(
+                        url, timeout=aiohttp.ClientTimeout(total=2)
+                    ) as resp:
+                        if resp.status == 200:
+                            data = await resp.json()
+                            return data.get("webSocketDebuggerUrl")
+            except Exception:
+                return None
+
+        # 1) Try current port
+        ws = await fetch(self._remote_port)
+        if ws:
+            return ws
+
+        # 2) Attempt to auto-detect a different port from Chrome processes
         try:
-            async with aiohttp.ClientSession() as session:
-                async with session.get(
-                    url, timeout=aiohttp.ClientTimeout(total=2)
-                ) as resp:
-                    if resp.status == 200:
-                        data = await resp.json()
-                        return data.get("webSocketDebuggerUrl")
+            from .chrome_utils import scan_chrome_processes
+            status = scan_chrome_processes(CHROME_PROCESS_NAMES)
+            if status.running and status.remote_debug and status.debug_port:
+                if status.debug_port != self._remote_port:
+                    self._remote_port = status.debug_port
+                    ws = await fetch(self._remote_port)
+                    if ws:
+                        return ws
         except Exception:
             pass
+
         return None
 
     def _launch_chrome_headful(self) -> None:
@@ -591,6 +618,17 @@ class BrowserAdapter:
         if self._cdp_session and not getattr(self._cdp_session, "_disposed", False):
             return self._cdp_session
 
+        # Preferred: create a browser-level CDP session when available.
+        # Some CDP domains (e.g. TabGroups) are only exposed at the browser level.
+        if self._browser and hasattr(self._browser, "new_browser_cdp_session"):
+            try:
+                self._cdp_session = await self._browser.new_browser_cdp_session()  # type: ignore[attr-defined]
+                return self._cdp_session
+            except Exception:
+                # Fall through to page-anchored session if browser-level session fails
+                pass
+
+        # Fallback: use a page-anchored CDP session.
         # Resolve an operational BrowserContext
         context = self._context
         if context is None and self._browser and self._browser.contexts:
@@ -623,14 +661,28 @@ class BrowserAdapter:
             self._tab_groups_supported = False
             return
 
+        # Robust detection via schema listing; fall back to probing if needed.
         try:
+            doms = await cdp.send("Schema.getDomains")
+            names = {d.get("name") for d in (doms or {}).get("domains", [])}
+            self._tab_groups_supported = "TabGroups" in names
+            if self._tab_groups_supported:
+                return
+        except Exception:
+            # Ignore and try probing directly
+            pass
+
+        try:
+            # Direct probe: expect either success or a deterministic "method not found" error
             await cdp.send("TabGroups.get", {"groupId": -1})
             self._tab_groups_supported = True
         except PlaywrightError as exc:
-            if "methodNotFound" in str(exc):
+            msg = str(exc).lower()
+            if "methodnotfound" in msg or "wasn't found" in msg or "wasnt found" in msg:
                 self._tab_groups_supported = False
             else:
-                self._tab_groups_supported = True  # assume true for other errors
+                # Any other error implies the domain exists but parameters were invalid
+                self._tab_groups_supported = True
         except Exception:
             self._tab_groups_supported = False
 
@@ -680,6 +732,34 @@ class BrowserAdapter:
         except Exception:
             # Ignore if the method is not available on this Chrome build
             pass
+
+    async def pick_existing_window_opener(self) -> Optional[tuple[str, int]]:
+        """
+        Return a (targetId, windowId) pair for any existing, visible page target.
+
+        Used to open the first provider as a tab in the user's current window
+        rather than creating a new window in --tabs mode.
+        """
+        await self._ensure_connection()
+        cdp = await self._get_cdp_connection()
+        if not cdp:
+            return None
+        try:
+            res = await cdp.send("Target.getTargets")
+            for ti in res.get("targetInfos", []):
+                if ti.get("type") != "page":
+                    continue
+                url = (ti.get("url") or "").lower()
+                if url.startswith("devtools://") or url.startswith("chrome://"):
+                    continue
+                target_id = ti.get("targetId")
+                if not target_id:
+                    continue
+                win = await cdp.send("Browser.getWindowForTarget", {"targetId": target_id})
+                return target_id, win.get("windowId", 1)
+        except Exception:
+            pass
+        return None
 
     async def move_task_to_group(self, task_name: str, group_name: str) -> None:
         """

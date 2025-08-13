@@ -125,11 +125,18 @@ STATE_FILE: Final[Path] = Path(
 # Gemini API Configuration
 # --------------------------------------------------------------------------- #
 
-# Gemini model to use for auto-naming
-GEMINI_MODEL_NAME: Final[str] = "gemini-2.0-flash-exp"
-
 # Environment variable for Gemini API key
 GEMINI_API_KEY_ENV: Final[str] = "GEMINI_API_KEY"
+
+# Optional override for the Gemini model used for auto-naming
+# e.g. export LLM_BURST_GEMINI_MODEL="gemini-1.5-flash"
+GEMINI_MODEL_ENV: Final[str] = "LLM_BURST_GEMINI_MODEL"
+
+# Default Gemini model to use for auto-naming
+# We will fall back to stable models if this one is unavailable at runtime.
+GEMINI_MODEL_NAME: Final[str] = os.environ.get(
+    GEMINI_MODEL_ENV, "gemini-2.5-flash-lite"
+)
 
 # Maximum characters to extract from conversation for naming
 AUTO_NAMING_MAX_CHARS: Final[int] = 10000

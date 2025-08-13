@@ -116,7 +116,11 @@ _CONVERSATION_SELECTORS: dict[LLMProvider, dict[str, str]] = {
 
 
 def _setup_gemini() -> Optional[genai.GenerativeModel]:
-    """Configure Gemini API and return model instance."""
+    """Configure Gemini API and return model instance.
+
+    Tries the configured model first, then falls back to stable models if
+    unavailable. Returns None if the API key is missing or model creation fails.
+    """
     # Re-check after our .env loading to ensure env is seeded
     api_key = os.getenv(GEMINI_API_KEY_ENV)
     if not api_key:
@@ -128,7 +132,7 @@ def _setup_gemini() -> Optional[genai.GenerativeModel]:
     genai.configure(api_key=api_key)
 
     # Configure for structured JSON output
-    generation_config = {
+    generation_config_json = {
         "temperature": 0.5,
         "top_p": 0.95,
         "top_k": 40,
@@ -145,11 +149,29 @@ def _setup_gemini() -> Optional[genai.GenerativeModel]:
         HarmCategory.HARM_CATEGORY_DANGEROUS_CONTENT: HarmBlockThreshold.BLOCK_NONE,
     }
 
-    return genai.GenerativeModel(
-        model_name=GEMINI_MODEL_NAME,
-        generation_config=generation_config,
-        safety_settings=safety_settings,
-    )
+    # Try configured model, then fall back to stable flashes if needed
+    candidates = [
+        GEMINI_MODEL_NAME,
+        "gemini-1.5-flash",
+        "gemini-1.5-flash-latest",
+    ]
+
+    last_err: Exception | None = None
+    for name in candidates:
+        try:
+            model = genai.GenerativeModel(
+                model_name=name,
+                generation_config=generation_config_json,
+                safety_settings=safety_settings,
+            )
+            _LOG.info("Gemini auto-naming using model: %s", name)
+            return model
+        except Exception as e:
+            last_err = e
+            _LOG.debug("Gemini model '%s' failed: %s", name, e)
+
+    _LOG.warning("Gemini model creation failed: %s", last_err)
+    return None
 
 
 # --------------------------------------------------------------------------- #
@@ -313,6 +335,19 @@ async def generate_task_name(
                                 raw_text = parts[0].get("text", "")
             except Exception:
                 pass
+
+        if not raw_text:
+            # Try 'parsed' attribute if structured outputs are enabled
+            if hasattr(response, "parsed") and response.parsed:
+                try:
+                    # Some library versions return parsed Pydantic-like objects or dicts
+                    parsed = response.parsed
+                    if isinstance(parsed, dict) and "task_name" in parsed:
+                        name = parsed.get("task_name")
+                        if isinstance(name, str) and name.strip():
+                            return name.strip()
+                except Exception:
+                    pass
 
         if not raw_text:
             _LOG.warning("Could not extract text from Gemini response")

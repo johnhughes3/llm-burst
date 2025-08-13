@@ -147,6 +147,59 @@ async def _paste_and_enter(
     await page.keyboard.press("Enter")
 
 
+def _build_chatgpt_injector(
+    submit_js: str,
+    followup_js: str | None,
+    submit_tpl: str,
+    follow_tpl: str | None,
+    use_paste: bool,
+    wait_for_selector: str | None,
+):
+    """
+    Build a ChatGPT-specific injector that handles research mode navigation.
+    """
+    
+    async def _chatgpt_inject(page: Page, prompt: str, opts: "InjectOptions") -> None:
+        # Research Prompts GPT URL
+        RESEARCH_URL = "https://chatgpt.com/g/g-p-68034199ee048191a6fe21d2dacdef09-research-prompts/project?model=gpt-5-pro"
+        
+        # If research mode is enabled and we're not on the Research Prompts page, navigate there
+        if opts.research and not page.url.startswith("https://chatgpt.com/g/g-p-"):
+            print(f"Research mode enabled. Navigating to Research Prompts GPT...")
+            await page.goto(RESEARCH_URL, wait_until="load")
+            
+            # Wait for the page to be ready
+            try:
+                await page.wait_for_selector(
+                    "#prompt-textarea, [data-testid='prompt-textarea'], .ProseMirror",
+                    timeout=15000
+                )
+                # Additional wait for UI to stabilize
+                await asyncio.sleep(1.0)
+            except PlaywrightTimeoutError:
+                raise RuntimeError("Timeout waiting for Research Prompts page to load")
+        
+        # Wait for critical selector if provided (robust readiness)
+        if wait_for_selector:
+            try:
+                await page.wait_for_selector(wait_for_selector, timeout=15000)
+            except PlaywrightTimeoutError:
+                raise RuntimeError(f"Timeout waiting for selector: {wait_for_selector}")
+        
+        # Select script & template
+        if opts.follow_up and followup_js and follow_tpl:
+            js_src, call_tpl = followup_js, follow_tpl
+        else:
+            js_src, call_tpl = submit_js, submit_tpl
+        
+        if use_paste:
+            await _paste_and_enter(page, prompt, opts, js_src, call_tpl)
+        else:
+            await _inject_js(page, prompt, opts, js_src, call_tpl)
+    
+    return _chatgpt_inject
+
+
 # --------------------------------------------------------------------------- #
 # Registry                                                                     #
 # --------------------------------------------------------------------------- #
@@ -203,4 +256,8 @@ def get_injector(provider: LLMProvider):
     except KeyError as exc:
         raise KeyError(f"Unknown provider: {provider}") from exc
 
+    # Special handling for ChatGPT with research mode
+    if provider == LLMProvider.CHATGPT:
+        return _build_chatgpt_injector(*cfg)
+    
     return _build_injector(*cfg)

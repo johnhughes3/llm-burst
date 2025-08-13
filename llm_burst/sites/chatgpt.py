@@ -39,22 +39,22 @@ SUBMIT_JS = r"""
       function handleResearchAndPrompt() {
         // RESEARCH MODE HANDLING (updated logic for new UI)
         if (useResearch === 'Yes') {
-          console.log('Research mode requested. Attempting to enable...');
+          console.log('Research mode requested. Enabling deep research mode...');
           
-          // NEW: Use dropdown-based approach for the updated UI
-          clickToolsDropdownAndSelectDeepResearch()
+          // Enable deep research mode (navigation handled in Python)
+          enableDeepResearchMode()
             .then(success => {
               if (success) {
-                console.log('Research mode enabled successfully');
+                console.log('Deep research mode enabled successfully');
                 // Wait a moment for research mode to activate
                 setTimeout(submitPrompt, 1200);
               } else {
-                console.warn('Research button not found. Continuing without research mode...');
+                console.warn('Could not enable deep research mode. Continuing with standard mode...');
                 submitPrompt();
               }
             })
             .catch(error => {
-              console.warn('Error enabling research mode:', error);
+              console.warn('Error enabling deep research mode:', error);
               submitPrompt();
             });
         } else {
@@ -63,123 +63,233 @@ SUBMIT_JS = r"""
         }
       }
       
-      // NEW: Updated function to click "Run deep research" from Tools dropdown
-      async function clickToolsDropdownAndSelectDeepResearch() {
-        console.log('🚀 Attempting to enable deep research...');
+      // NEW: Function to enable deep research mode using plus button
+      async function enableDeepResearchMode() {
+        console.log('🚀 Attempting to enable deep research mode...');
         
         function sleep(ms) {
           return new Promise(resolve => setTimeout(resolve, ms));
         }
         
+        // Helper to wait for element
+        async function waitForElement(selector, timeout = 5000) {
+          const start = Date.now();
+          while (Date.now() - start < timeout) {
+            const element = document.querySelector(selector);
+            if (element) return element;
+            await sleep(100);
+          }
+          return null;
+        }
+        
         try {
-          // Find the Tools button
-          const toolsButton = document.querySelector('#system-hint-button');
-          if (!toolsButton) {
-            console.log('Tools button not found');
-            return false;
-          }
+          // Method 1: Try plus button approach with fallback selectors
+          const plusButton = document.querySelector(
+            '[data-testid="composer-plus-btn"], ' +
+            'button[aria-label*="More" i], ' +
+            'button[aria-label*="Attach" i], ' +
+            'button[aria-label*="Plus" i]'
+          );
           
-          console.log('Found Tools button');
-          
-          // Open dropdown if not already open
-          const isOpen = toolsButton.getAttribute('aria-expanded') === 'true';
-          if (!isOpen) {
-            console.log('Opening Tools dropdown...');
-            toolsButton.click();
-            await sleep(500);
-          }
-          
-          // Wait for menu to render
-          await sleep(500);
-          
-          // Try direct click approach first
-          const menuItems = document.querySelectorAll('div[role="menuitemradio"]');
-          console.log(`Found ${menuItems.length} menu items`);
-          
-          // Find "Run deep research" item
-          let targetItem = null;
-          for (let i = 0; i < menuItems.length; i++) {
-            const text = menuItems[i].textContent?.trim() || '';
-            if (text.includes('Run deep research')) {
-              targetItem = menuItems[i];
-              console.log(`Found "Run deep research" at position ${i + 1}`);
-              break;
-            }
-          }
-          
-          // Fallback to 4th item
-          if (!targetItem && menuItems.length >= 4) {
-            targetItem = menuItems[3];
-            console.log('Using 4th menu item as fallback');
-          }
-          
-          if (targetItem) {
-            console.log('Clicking deep research option...');
-            targetItem.click();
-            await sleep(1000);
+          if (plusButton) {
+            console.log('Found plus button, clicking...');
+            plusButton.click();
             
-            // Check if dropdown closed (success indicator)
-            const finalState = toolsButton.getAttribute('aria-expanded');
-            if (finalState === 'false') {
-              console.log('Deep research enabled successfully!');
-              return true;
+            // Wait for menu to appear
+            const menu = await waitForElement('[role="menu"], [data-radix-portal], [role="listbox"]', 3000);
+            if (!menu) {
+              console.log('Menu did not appear after clicking plus button');
+              return await slashCommandFallback();
             }
+            
+            // Find and click "Deep research" option in the menu
+            const menuItems = document.querySelectorAll(
+              '[role="menuitemradio"], [role="menuitem"], [data-testid*="menu-item" i]'
+            );
+            console.log(`Found ${menuItems.length} menu items`);
+            
+            // Find the Deep research option
+            let deepResearchOption = null;
+            for (const item of menuItems) {
+              const text = item.textContent?.trim() || '';
+              if (text.toLowerCase().includes('deep research') || 
+                  text.toLowerCase().includes('research')) {
+                deepResearchOption = item;
+                console.log(`Found Deep research option: "${text}"`);
+                break;
+              }
+            }
+            
+            if (deepResearchOption) {
+              console.log('Clicking Deep research option...');
+              deepResearchOption.click();
+              
+              // Wait and verify activation
+              await sleep(500);
+              
+              // Check for activation indicators
+              const indicators = document.querySelectorAll(
+                '[aria-checked="true"], ' +
+                '[data-state="checked"], ' +
+                '.composer-mode-pill, ' +
+                '[data-testid*="research-active"]'
+              );
+              
+              if (indicators.length > 0) {
+                console.log('Deep research mode verified as active!');
+                await sleep(500); // Give UI time to stabilize
+                return true;
+              } else {
+                console.log('Deep research mode enabled (no verification indicator found)');
+                return true;
+              }
+            } else {
+              console.log('Deep research option not found in menu');
+            }
+          } else {
+            console.log('Plus button not found with any selector');
           }
           
-          // If direct click failed, try keyboard approach
-          console.log('Direct click failed, trying keyboard approach...');
-          return await keyboardApproach();
+          // Method 2: Fallback to slash command approach
+          console.log('Trying slash command fallback...');
+          return await slashCommandFallback();
           
         } catch (error) {
-          console.log('Error in dropdown approach:', error);
+          console.log('Error enabling deep research mode:', error);
           return false;
         }
       }
       
-      // Keyboard fallback for deep research
-      async function keyboardApproach() {
+      // Slash command fallback for deep research
+      async function slashCommandFallback() {
         try {
-          const toolsButton = document.querySelector('#system-hint-button');
-          if (!toolsButton) return false;
+          console.log('Using slash command approach...');
           
-          console.log('Using keyboard navigation...');
-          
-          // Focus the tools button
-          toolsButton.focus();
-          await new Promise(resolve => setTimeout(resolve, 200));
-          
-          // Navigate to "Run deep research" (4th item) using arrow keys
-          for (let i = 0; i < 4; i++) {
-            const arrowEvent = new KeyboardEvent('keydown', {
-              key: 'ArrowDown',
-              code: 'ArrowDown',
-              keyCode: 40,
-              bubbles: true,
-              cancelable: true
-            });
-            
-            document.activeElement.dispatchEvent(arrowEvent);
-            await new Promise(resolve => setTimeout(resolve, 300));
+          function sleep(ms) {
+            return new Promise(resolve => setTimeout(resolve, ms));
           }
           
-          // Press Enter to select
-          const enterEvent = new KeyboardEvent('keydown', {
-            key: 'Enter', 
-            code: 'Enter',
-            keyCode: 13,
+          // Helper to wait for element
+          async function waitForElement(selector, timeout = 5000) {
+            const start = Date.now();
+            while (Date.now() - start < timeout) {
+              const element = document.querySelector(selector);
+              if (element) return element;
+              await sleep(100);
+            }
+            return null;
+          }
+          
+          // Find the text area with better selectors
+          const textArea = document.querySelector(
+            '#prompt-textarea, ' +
+            '[data-testid="prompt-textarea"], ' +
+            '.ProseMirror, ' +
+            '[role="paragraph"]'
+          );
+          
+          if (!textArea) {
+            console.log('Text area not found for slash command');
+            return false;
+          }
+          
+          console.log('Found text area, focusing and typing slash...');
+          
+          // Click to focus the text area
+          textArea.click();
+          textArea.focus();
+          await sleep(200);
+          
+          // Clear any existing content
+          textArea.innerHTML = '';
+          
+          // Dispatch proper events for slash command
+          // First, dispatch beforeinput event
+          const beforeInputEvent = new InputEvent('beforeinput', {
+            inputType: 'insertText',
+            data: '/',
             bubbles: true,
             cancelable: true
           });
+          textArea.dispatchEvent(beforeInputEvent);
           
-          document.activeElement.dispatchEvent(enterEvent);
-          await new Promise(resolve => setTimeout(resolve, 500));
+          // Set the content
+          textArea.textContent = '/';
           
-          // Check success
-          const finalState = toolsButton.getAttribute('aria-expanded');
-          return finalState === 'false';
+          // Dispatch input event
+          const inputEvent = new InputEvent('input', {
+            inputType: 'insertText',
+            data: '/',
+            bubbles: true
+          });
+          textArea.dispatchEvent(inputEvent);
+          
+          // Also dispatch keydown for React/ProseMirror
+          const keydownEvent = new KeyboardEvent('keydown', {
+            key: '/',
+            code: 'Slash',
+            keyCode: 191,
+            bubbles: true,
+            cancelable: true
+          });
+          textArea.dispatchEvent(keydownEvent);
+          
+          // Wait for command menu to appear
+          const commandMenu = await waitForElement(
+            '[role="listbox"], ' +
+            '[role="menu"], ' +
+            '[data-radix-portal], ' +
+            '.command-menu, ' +
+            '[data-testid*="command-menu"]',
+            3000
+          );
+          
+          if (!commandMenu) {
+            console.log('Command menu did not appear after typing slash');
+            // Clear the slash
+            textArea.innerHTML = '';
+            textArea.dispatchEvent(new Event('input', { bubbles: true }));
+            return false;
+          }
+          
+          console.log('Command menu appeared, looking for Deep research option...');
+          
+          // Look for Deep research option within the command menu
+          const menuItems = commandMenu.querySelectorAll(
+            '[role="option"], ' +
+            '[role="menuitem"], ' +
+            '[data-testid*="menu-item"], ' +
+            'div[class*="item"], ' +
+            'button'
+          );
+          
+          let deepResearchOption = null;
+          for (const item of menuItems) {
+            const text = item.textContent?.trim() || '';
+            if (text.toLowerCase().includes('deep research') || 
+                text.toLowerCase() === 'deep research') {
+              deepResearchOption = item;
+              console.log(`Found Deep research option: "${text}"`);
+              break;
+            }
+          }
+          
+          if (deepResearchOption) {
+            console.log('Clicking Deep research option...');
+            deepResearchOption.click();
+            await sleep(1000);
+            console.log('Deep research enabled via slash command!');
+            return true;
+          } else {
+            console.log('Deep research option not found in command menu');
+            // Clear the slash from the text area
+            textArea.innerHTML = '';
+            textArea.dispatchEvent(new Event('input', { bubbles: true }));
+            return false;
+          }
           
         } catch (error) {
-          console.log('Keyboard approach failed:', error);
+          console.log('Slash command approach failed:', error);
           return false;
         }
       }
