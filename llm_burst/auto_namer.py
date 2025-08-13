@@ -69,7 +69,9 @@ try:
                 if load_dotenv():
                     _LOG.debug("Loaded .env from CWD.")
                 else:
-                    _LOG.debug("No .env found (checked explicit, repo, discovery, CWD).")
+                    _LOG.debug(
+                        "No .env found (checked explicit, repo, discovery, CWD)."
+                    )
 except Exception as e:
     _LOG.warning("Failed to load .env file: %s", e)
 

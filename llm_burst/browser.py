@@ -48,6 +48,7 @@ from .state import StateManager, LiveSession
 # Helper functions
 # --------------------------------------------------------------------------- #
 
+
 def bring_chrome_to_front() -> None:
     """Bring Chrome to the foreground on macOS using AppleScript."""
     try:
@@ -55,11 +56,16 @@ def bring_chrome_to_front() -> None:
         subprocess.run(
             ["osascript", "-e", 'tell application "Google Chrome" to activate'],
             capture_output=True,
-            timeout=2
+            timeout=2,
         )
-    except (subprocess.TimeoutExpired, subprocess.CalledProcessError, FileNotFoundError):
+    except (
+        subprocess.TimeoutExpired,
+        subprocess.CalledProcessError,
+        FileNotFoundError,
+    ):
         # Best effort - don't fail if this doesn't work
         pass
+
 
 # --------------------------------------------------------------------------- #
 # Constants
@@ -445,6 +451,7 @@ class BrowserAdapter:
         # 2) Attempt to auto-detect a different port from Chrome processes
         try:
             from .chrome_utils import scan_chrome_processes
+
             status = scan_chrome_processes(CHROME_PROCESS_NAMES)
             if status.running and status.remote_debug and status.debug_port:
                 if status.debug_port != self._remote_port:
@@ -755,7 +762,9 @@ class BrowserAdapter:
                 target_id = ti.get("targetId")
                 if not target_id:
                     continue
-                win = await cdp.send("Browser.getWindowForTarget", {"targetId": target_id})
+                win = await cdp.send(
+                    "Browser.getWindowForTarget", {"targetId": target_id}
+                )
                 return target_id, win.get("windowId", 1)
         except Exception:
             pass

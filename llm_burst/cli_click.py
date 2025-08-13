@@ -103,6 +103,7 @@ def cmd_list(output: str) -> None:
     sessions = get_running_sessions()
     # Also include multi-provider sessions (groups)
     from llm_burst.state import StateManager
+
     st = StateManager()
     mp_sessions = st.list_sessions()
     groups = st.list_groups()
@@ -123,7 +124,9 @@ def cmd_list(output: str) -> None:
                 for title, sess in mp_sessions.items()
             },
             "windows": sessions,
-            "groups": {gid: {"name": g.name, "color": g.color} for gid, g in groups.items()},
+            "groups": {
+                gid: {"name": g.name, "color": g.color} for gid, g in groups.items()
+            },
         }
         click.echo(json.dumps(payload, indent=2))
         return
@@ -229,17 +232,20 @@ def cmd_open(
     import sys
     import traceback
     import os
-    
+
     # Set debug environment variable for child processes
     if debug:
-        os.environ['LLM_BURST_DEBUG'] = '1'
+        os.environ["LLM_BURST_DEBUG"] = "1"
         print("DEBUG: Starting cmd_open with:", file=sys.stderr)
         print(f"  provider={provider}", file=sys.stderr)
         print(f"  task_name={task_name}", file=sys.stderr)
-        print(f"  prompt_text={prompt_text[:50] if prompt_text else None}", file=sys.stderr)
+        print(
+            f"  prompt_text={prompt_text[:50] if prompt_text else None}",
+            file=sys.stderr,
+        )
         print(f"  gui_prompt={gui_prompt}", file=sys.stderr)
         print(f"  stdin={stdin}", file=sys.stderr)
-    
+
     try:
         if debug:
             print("DEBUG: Pruning stale sessions...", file=sys.stderr)
@@ -256,13 +262,15 @@ def cmd_open(
             or (task_name is None and not force_new)
             or (prompt_text is None and not stdin)
         )
-        
+
         if debug:
             print(f"DEBUG: Need dialog? {need_dialog}", file=sys.stderr)
-            
+
         if need_dialog:
             if debug:
-                print(f"DEBUG: Calling prompt_user(gui={gui_prompt})...", file=sys.stderr)
+                print(
+                    f"DEBUG: Calling prompt_user(gui={gui_prompt})...", file=sys.stderr
+                )
             user_data = prompt_user(gui=gui_prompt, debug=debug)
             if debug:
                 print(f"DEBUG: prompt_user returned: {user_data}", file=sys.stderr)
@@ -422,6 +430,7 @@ def cmd_activate(
     # Stdin overrides everything for prompt text
     if stdin:
         import sys
+
         prompt_text = sys.stdin.read()
 
     if prompt_text is None or not prompt_text.strip():
@@ -500,7 +509,10 @@ def cmd_activate(
                     handles.append(handle)
                     opened_providers.append(prov.name.lower())
                     state.add_tab_to_session(
-                        session_title, prov, handle.live.window_id, handle.live.target_id
+                        session_title,
+                        prov,
+                        handle.live.window_id,
+                        handle.live.target_id,
                     )
                     try:
                         await set_window_title(handle.page, current_title)
@@ -519,7 +531,9 @@ def cmd_activate(
                 if group_id is not None:
                     for h in handles:
                         try:
-                            await adapter._add_target_to_group(h.live.target_id, group_id)
+                            await adapter._add_target_to_group(
+                                h.live.target_id, group_id
+                            )
                             # Persist per-tab group id
                             state.assign_session_to_group(h.live.task_name, group_id)
                         except Exception:
@@ -536,7 +550,8 @@ def cmd_activate(
                         await injector(h.page, prompt_text, opts)
                     except Exception as exc:
                         click.echo(
-                            f"Injection failed for {h.live.provider.name}: {exc}", err=True
+                            f"Injection failed for {h.live.provider.name}: {exc}",
+                            err=True,
                         )
 
                 # 5) Try Gemini name suggestion using the first successful handle
@@ -547,10 +562,14 @@ def cmd_activate(
                                 h.page, h.live.provider
                             )
                             if suggested_name:
-                                _LOG.info("Name suggestion produced: %s", suggested_name)
+                                _LOG.info(
+                                    "Name suggestion produced: %s", suggested_name
+                                )
                                 break
                         except Exception:
-                            _LOG.debug("Name suggestion attempt failed for %s", h.live.provider)
+                            _LOG.debug(
+                                "Name suggestion attempt failed for %s", h.live.provider
+                            )
                             continue
 
                 # 6) Apply rename (session + tab-group title where possible)
@@ -574,6 +593,7 @@ def cmd_activate(
 
                 # Bring Chrome to front after opening all tabs
                 from llm_burst.browser import bring_chrome_to_front
+
                 bring_chrome_to_front()
 
                 state.persist_now()
@@ -647,6 +667,7 @@ def cmd_activate(
 
             # Bring Chrome to front after everything is set up
             from llm_burst.browser import bring_chrome_to_front
+
             bring_chrome_to_front()
 
             # Flush state
@@ -739,7 +760,7 @@ def cmd_follow_up(
 
         # Show the dialog
         data = prompt_user(gui=gui_prompt, active_sessions=dialog_sessions)
-        
+
         # Extract results
         session_title = data.get("Selected Session") or session_title
         prompt_text = data.get("Prompt Text") or data.get("prompt") or prompt_text

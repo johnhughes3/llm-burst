@@ -55,8 +55,10 @@ def test_arrange_command_cli_runs_and_calls_arrange():
     from click.testing import CliRunner
 
     runner = CliRunner()
-    with patch("llm_burst.cli_click.prune_stale_sessions_sync", return_value=0), \
-         patch("llm_burst.layout.arrange") as mock_arrange:
+    with (
+        patch("llm_burst.cli_click.prune_stale_sessions_sync", return_value=0),
+        patch("llm_burst.layout.arrange") as mock_arrange,
+    ):
         result = runner.invoke(cli, ["arrange", "--max-windows", "3"])
         assert result.exit_code == 0
         assert "Windows arranged" in result.output
@@ -70,8 +72,10 @@ def test_cli_arrange_error_handling():
 
     runner = CliRunner()
 
-    with patch("llm_burst.cli_click.prune_stale_sessions_sync", return_value=0), \
-         patch("llm_burst.layout.arrange") as mock_arrange:
+    with (
+        patch("llm_burst.cli_click.prune_stale_sessions_sync", return_value=0),
+        patch("llm_burst.layout.arrange") as mock_arrange,
+    ):
         mock_arrange.side_effect = RuntimeError("Test error")
         result = runner.invoke(cli, ["arrange"])
 

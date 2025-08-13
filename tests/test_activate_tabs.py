@@ -15,7 +15,9 @@ from llm_burst.constants import LLMProvider
 @patch("llm_burst.cli_click.get_injector")
 @patch("llm_burst.browser.BrowserAdapter")
 @patch("llm_burst.cli_click.StateManager")
-def test_activate_tabs_mode_groups_and_opens_tabs(mock_state_cls, mock_adapter_cls, mock_get_injector):
+def test_activate_tabs_mode_groups_and_opens_tabs(
+    mock_state_cls, mock_adapter_cls, mock_get_injector
+):
     # Mock StateManager instance
     mock_state = MagicMock()
     mock_state.get_session.return_value = None
