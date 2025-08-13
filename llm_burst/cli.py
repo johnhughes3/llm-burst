@@ -30,13 +30,17 @@ from .constants import (
 from .browser import BrowserAdapter, SessionHandle
 
 
-def _run_jxa_prompt(clipboard_text: str = "", debug: bool = False, active_sessions: Optional[list[str]] = None) -> Dict[str, Any] | None:
+def _run_jxa_prompt(
+    clipboard_text: str = "",
+    debug: bool = False,
+    active_sessions: Optional[list[str]] = None,
+) -> Dict[str, Any] | None:
     """
     Run JXA (JavaScript for Automation) dialog using native macOS AppKit.
-    
+
     Returns dict with prompt data on success, None on failure/cancel.
     """
-    jxa_script = '''
+    jxa_script = """
     ObjC.import('AppKit');
     ObjC.import('Foundation');
 
@@ -46,7 +50,9 @@ def _run_jxa_prompt(clipboard_text: str = "", debug: bool = False, active_sessio
     if (typeof $.NSApplicationActivationPolicyRegular !== 'undefined') {
         app.setActivationPolicy($.NSApplicationActivationPolicyRegular);
     }
-    // Activate the running app (more reliable than NSApp.activate on CLI)
+    
+    // Enhanced activation to ensure dialog comes to front
+    // Step 1: Activate the application
     if (typeof $.NSRunningApplication !== 'undefined') {
         var me = $.NSRunningApplication.currentApplication;
         if (me && me.activateWithOptions) {
@@ -56,6 +62,28 @@ def _run_jxa_prompt(clipboard_text: str = "", debug: bool = False, active_sessio
         }
     } else {
         app.activateIgnoringOtherApps(true);
+    }
+    
+    // Step 2: Bring all windows to front
+    if (app.windows && app.windows.count() > 0) {
+        var windows = app.windows;
+        for (var i = 0; i < windows.count(); i++) {
+            var window = windows.objectAtIndex(i);
+            if (window && window.makeKeyAndOrderFront) {
+                window.makeKeyAndOrderFront(null);
+            }
+        }
+    }
+    
+    // Step 3: Set application to be active and frontmost
+    if (app.activateIgnoringOtherApps) {
+        app.activateIgnoringOtherApps(true);
+    }
+    
+    // Step 4: Ensure we're not in background-only mode
+    if (app.setActivationPolicy) {
+        // NSApplicationActivationPolicyRegular = 0
+        app.setActivationPolicy(0);
     }
 
     // Read clipboard text from NSPasteboard by default; allow env override
@@ -95,6 +123,12 @@ def _run_jxa_prompt(clipboard_text: str = "", debug: bool = False, active_sessio
         if (typeof $.NSEventModifierFlagCommand !== 'undefined') {
             okButton.setKeyEquivalentModifierMask($.NSEventModifierFlagCommand);
         }
+    }
+    
+    // Add Cancel button shortcut (Escape)
+    var cancelButton = alert.buttons.objectAtIndex(1);
+    if (cancelButton && cancelButton.setKeyEquivalent) {
+        cancelButton.setKeyEquivalent('\\x1b'); // Escape key
     }
 
     // Determine layout dimensions
@@ -152,16 +186,30 @@ def _run_jxa_prompt(clipboard_text: str = "", debug: bool = False, active_sessio
     textView.font = $.NSFont.systemFontOfSize(13);
     scrollView.documentView = textView;
 
-    // Checkboxes along the bottom
+    // Checkboxes along the bottom with keyboard shortcuts
     var researchCheck = $.NSButton.alloc.initWithFrame($.NSMakeRect(0, 14, 200, 18));
     researchCheck.setButtonType($.NSSwitchButton);
-    researchCheck.title = 'Research mode';
+    researchCheck.title = 'Research mode (⌘R)';
     researchCheck.state = StateOff;
+    // Set up keyboard shortcut for research mode
+    if (researchCheck.setKeyEquivalent) {
+        researchCheck.setKeyEquivalent('r');
+        if (typeof $.NSEventModifierFlagCommand !== 'undefined') {
+            researchCheck.setKeyEquivalentModifierMask($.NSEventModifierFlagCommand);
+        }
+    }
 
     var incognitoCheck = $.NSButton.alloc.initWithFrame($.NSMakeRect(220, 14, 200, 18));
     incognitoCheck.setButtonType($.NSSwitchButton);
-    incognitoCheck.title = 'Incognito mode';
+    incognitoCheck.title = 'Incognito mode (⌘I)';
     incognitoCheck.state = StateOff;
+    // Set up keyboard shortcut for incognito mode
+    if (incognitoCheck.setKeyEquivalent) {
+        incognitoCheck.setKeyEquivalent('i');
+        if (typeof $.NSEventModifierFlagCommand !== 'undefined') {
+            incognitoCheck.setKeyEquivalentModifierMask($.NSEventModifierFlagCommand);
+        }
+    }
 
     containerView.addSubview(scrollView);
     containerView.addSubview(researchCheck);
@@ -171,9 +219,51 @@ def _run_jxa_prompt(clipboard_text: str = "", debug: bool = False, active_sessio
     try {
         // Some macOS versions require a window before setting first responder
         alert.layout; // invoke 0-arg method via property access
-        alert.window.setInitialFirstResponder(textView);
+        
+        // Ensure the alert window comes to front
+        if (alert.window) {
+            // Make the window key and bring it to front
+            if (alert.window.makeKeyAndOrderFront) {
+                alert.window.makeKeyAndOrderFront(null);
+            }
+            
+            // Set the window level to ensure it's above other windows
+            // NSFloatingWindowLevel = 3, NSModalPanelWindowLevel = 8
+            if (alert.window.setLevel) {
+                var NSModalPanelWindowLevel = 8;
+                alert.window.setLevel(NSModalPanelWindowLevel);
+            }
+            
+            // Center the window on screen
+            if (alert.window.center) {
+                alert.window.center();
+            }
+            
+            // Set initial first responder
+            alert.window.setInitialFirstResponder(textView);
+        }
+        
+        // Enable standard text editing shortcuts in the text view
+        if (textView.setAutomaticTextReplacementEnabled) {
+            textView.setAutomaticTextReplacementEnabled(false);
+        }
+        if (textView.setAllowsUndo) {
+            textView.setAllowsUndo(true);
+        }
+        
+        // Set up tab key to move between fields
+        // Tab moves focus from textView -> sessionSelector (if exists) -> researchCheck -> incognitoCheck
+        // Shift+Tab moves in reverse
+        if (alert.window && alert.window.setAutorecalculatesKeyViewLoop) {
+            alert.window.setAutorecalculatesKeyViewLoop(true);
+        }
     } catch (e) {}
 
+    // Final activation right before showing dialog
+    if (app.activateIgnoringOtherApps) {
+        app.activateIgnoringOtherApps(true);
+    }
+    
     // Show dialog (0-arg methods are properties in JXA)
     var response = alert.runModal;
     
@@ -197,37 +287,45 @@ def _run_jxa_prompt(clipboard_text: str = "", debug: bool = False, active_sessio
         }
     }
     JSON.stringify(result);
-    '''
-    
+    """
+
     # Check debug mode
     if debug or os.getenv("LLM_BURST_DEBUG") == "1":
         debug = True
-    
+
     try:
         env = os.environ.copy()
         if clipboard_text:
-            env['LLM_BURST_CLIPBOARD'] = clipboard_text
-        
+            env["LLM_BURST_CLIPBOARD"] = clipboard_text
+
         if active_sessions:
-            env['LLM_BURST_ACTIVE_SESSIONS'] = json.dumps(active_sessions)
-        
+            env["LLM_BURST_ACTIVE_SESSIONS"] = json.dumps(active_sessions)
+
         if debug:
-            print(f"DEBUG: Running osascript with clipboard: {clipboard_text[:50] if clipboard_text else 'None'}...", file=sys.stderr)
-        
+            print(
+                f"DEBUG: Running osascript with clipboard: {clipboard_text[:50] if clipboard_text else 'None'}...",
+                file=sys.stderr,
+            )
+
         result = subprocess.run(
             ["/usr/bin/osascript", "-l", "JavaScript", "-e", jxa_script],
             capture_output=True,
             text=True,
             timeout=300,  # 5 minute timeout
-            env=env
+            env=env,
         )
-        
+
         if debug:
-            print(f"DEBUG: osascript returned code: {result.returncode}", file=sys.stderr)
-            print(f"DEBUG: stdout: {result.stdout[:100] if result.stdout else 'None'}", file=sys.stderr)
+            print(
+                f"DEBUG: osascript returned code: {result.returncode}", file=sys.stderr
+            )
+            print(
+                f"DEBUG: stdout: {result.stdout[:100] if result.stdout else 'None'}",
+                file=sys.stderr,
+            )
             if result.stderr:
                 print(f"DEBUG: stderr: {result.stderr[:200]}", file=sys.stderr)
-        
+
         if result.returncode == 0 and result.stdout:
             parsed = json.loads(result.stdout.strip())
             if debug:
@@ -243,14 +341,48 @@ def _run_jxa_prompt(clipboard_text: str = "", debug: bool = False, active_sessio
             if result.stderr:
                 print(f"JXA dialog error: {result.stderr}", file=sys.stderr)
             if debug:
-                print(f"DEBUG: Unexpected return code: {result.returncode}", file=sys.stderr)
+                print(
+                    f"DEBUG: Unexpected return code: {result.returncode}",
+                    file=sys.stderr,
+                )
             return None
     except (subprocess.TimeoutExpired, json.JSONDecodeError, Exception) as e:
         print(f"JXA dialog failed: {e}", file=sys.stderr)
         return None
 
 
-def prompt_user(gui: bool | None = None, debug: bool = False, active_sessions: Optional[list[str]] = None) -> Dict[str, Any]:
+def _bring_terminal_to_front():
+    """Bring the Terminal app to front using osascript."""
+    try:
+        # Try to activate Terminal.app
+        subprocess.run(
+            ["osascript", "-e", 'tell application "Terminal" to activate'],
+            capture_output=True,
+            timeout=1,
+        )
+    except Exception:
+        # If Terminal fails, try to activate the current process
+        try:
+            subprocess.run(
+                [
+                    "osascript",
+                    "-e",
+                    'tell application "System Events" to set frontmost of (first process whose unix id is {}) to true'.format(
+                        os.getpid()
+                    ),
+                ],
+                capture_output=True,
+                timeout=1,
+            )
+        except Exception:
+            pass  # Silent fail if we can't bring to front
+
+
+def prompt_user(
+    gui: bool | None = None,
+    debug: bool = False,
+    active_sessions: Optional[list[str]] = None,
+) -> Dict[str, Any]:
     """
     Launch a native macOS prompt and return the user's input.
 
@@ -273,7 +405,7 @@ def prompt_user(gui: bool | None = None, debug: bool = False, active_sessions: O
     if debug or os.getenv("LLM_BURST_DEBUG") == "1":
         debug = True
         print(f"DEBUG: prompt_user called with gui={gui}", file=sys.stderr)
-    
+
     # Decide whether to use GUI prompt
     if gui is None:
         # Default to NO dialog unless explicitly opted-in via env
@@ -283,7 +415,10 @@ def prompt_user(gui: bool | None = None, debug: bool = False, active_sessions: O
             "yes",
         }
         if debug:
-            print(f"DEBUG: gui is None, use_dialog={use_dialog} (from env)", file=sys.stderr)
+            print(
+                f"DEBUG: gui is None, use_dialog={use_dialog} (from env)",
+                file=sys.stderr,
+            )
     else:
         use_dialog = bool(gui)
         if debug:
@@ -293,7 +428,7 @@ def prompt_user(gui: bool | None = None, debug: bool = False, active_sessions: O
     no_dialog = os.getenv("LLM_BURST_NO_DIALOG", "").lower() in {"1", "true", "yes"}
     if debug:
         print(f"DEBUG: no_dialog={no_dialog}, use_dialog={use_dialog}", file=sys.stderr)
-        
+
     if no_dialog or not use_dialog:
         if debug:
             print("DEBUG: Skipping dialog, using clipboard", file=sys.stderr)
@@ -305,7 +440,10 @@ def prompt_user(gui: bool | None = None, debug: bool = False, active_sessions: O
                 print(f"DEBUG: Failed to get clipboard: {e}", file=sys.stderr)
         if clipboard_text:
             if debug:
-                print(f"DEBUG: Returning clipboard text: {clipboard_text[:50]}...", file=sys.stderr)
+                print(
+                    f"DEBUG: Returning clipboard text: {clipboard_text[:50]}...",
+                    file=sys.stderr,
+                )
             return {
                 "Prompt Text": clipboard_text,
                 "Research mode": False,
@@ -320,27 +458,38 @@ def prompt_user(gui: bool | None = None, debug: bool = False, active_sessions: O
     try:
         clipboard_text: str = pyperclip.paste()
         if debug:
-            print(f"DEBUG: Clipboard content: {clipboard_text[:50] if clipboard_text else 'None'}...", file=sys.stderr)
+            print(
+                f"DEBUG: Clipboard content: {clipboard_text[:50] if clipboard_text else 'None'}...",
+                file=sys.stderr,
+            )
     except Exception as e:
         clipboard_text = ""
         if debug:
             print(f"DEBUG: Failed to get clipboard: {e}", file=sys.stderr)
 
+    # Bring Terminal to front before showing dialog
+    _bring_terminal_to_front()
+
     # Try native JXA dialog first (most reliable on macOS)
     if debug:
         print("DEBUG: Running JXA dialog...", file=sys.stderr)
-    jxa_result = _run_jxa_prompt(clipboard_text, debug=debug, active_sessions=active_sessions)
+    jxa_result = _run_jxa_prompt(
+        clipboard_text, debug=debug, active_sessions=active_sessions
+    )
     if debug:
         print(f"DEBUG: JXA returned: {jxa_result}", file=sys.stderr)
-    
+
     if jxa_result is not None:
         # Check if user cancelled
         if jxa_result.get("__cancelled__"):
             if debug:
-                print(f"DEBUG: User cancelled dialog, exiting with code {PROMPT_CANCEL_EXIT}", file=sys.stderr)
+                print(
+                    f"DEBUG: User cancelled dialog, exiting with code {PROMPT_CANCEL_EXIT}",
+                    file=sys.stderr,
+                )
             sys.exit(PROMPT_CANCEL_EXIT)
         return jxa_result
-    
+
     # JXA failed - fall back to clipboard if available
     if clipboard_text:
         print(
@@ -352,7 +501,7 @@ def prompt_user(gui: bool | None = None, debug: bool = False, active_sessions: O
             "Research mode": False,
             "Incognito mode": False,
         }
-    
+
     # No clipboard content and dialog failed - treat as cancel
     sys.exit(PROMPT_CANCEL_EXIT)
 

@@ -83,37 +83,77 @@ SUBMIT_JS = r"""
         }
         
         try {
-          // Method 1: Try plus button approach with fallback selectors
-          const plusButton = document.querySelector(
-            '[data-testid="composer-plus-btn"], ' +
-            'button[aria-label*="More" i], ' +
-            'button[aria-label*="Attach" i], ' +
-            'button[aria-label*="Plus" i]'
-          );
+          // Primary method: Use plus button approach
+          // First, try to find the plus button with multiple possible selectors
+          let plusButton = document.querySelector('[data-testid="composer-plus-btn"]');
+          
+          if (!plusButton) {
+            // Try finding by aria-label or icon
+            const buttons = document.querySelectorAll('button');
+            for (const button of buttons) {
+              const ariaLabel = button.getAttribute('aria-label') || '';
+              const hasIcon = button.querySelector('svg path[d*="M12 5v14M5 12h14"]') || // Plus icon path
+                             button.querySelector('svg path[d*="M19 12h-14M12 19v-14"]'); // Alternative plus path
+              
+              if ((ariaLabel.toLowerCase().includes('attach') || 
+                   ariaLabel.toLowerCase().includes('plus') ||
+                   ariaLabel.toLowerCase().includes('more')) ||
+                  hasIcon) {
+                // Check if it's near the input area
+                const inputArea = document.querySelector('#prompt-textarea, .ProseMirror');
+                if (inputArea) {
+                  const inputRect = inputArea.getBoundingClientRect();
+                  const buttonRect = button.getBoundingClientRect();
+                  // Check if button is reasonably close to input (within 200px)
+                  if (Math.abs(buttonRect.top - inputRect.top) < 200) {
+                    plusButton = button;
+                    break;
+                  }
+                }
+              }
+            }
+          }
           
           if (plusButton) {
             console.log('Found plus button, clicking...');
             plusButton.click();
             
-            // Wait for menu to appear
-            const menu = await waitForElement('[role="menu"], [data-radix-portal], [role="listbox"]', 3000);
+            // Wait for menu to appear with multiple possible selectors
+            await sleep(300); // Small initial delay
+            const menu = await waitForElement(
+              '[role="menu"], [data-radix-portal], [role="listbox"], .popover-content, [data-state="open"]',
+              3000
+            );
+            
             if (!menu) {
               console.log('Menu did not appear after clicking plus button');
               return await slashCommandFallback();
             }
             
-            // Find and click "Deep research" option in the menu
-            const menuItems = document.querySelectorAll(
-              '[role="menuitemradio"], [role="menuitem"], [data-testid*="menu-item" i]'
+            console.log('Menu appeared, looking for Deep research option...');
+            
+            // Find menu items with broader selectors
+            let menuItems = menu.querySelectorAll(
+              '[role="menuitemradio"], [role="menuitem"], [role="option"], button'
             );
+            
+            // If no items found in menu, check the whole document (for portals)
+            if (menuItems.length === 0) {
+              menuItems = document.querySelectorAll(
+                '[role="menuitemradio"], [role="menuitem"], [role="option"]'
+              );
+            }
+            
             console.log(`Found ${menuItems.length} menu items`);
             
             // Find the Deep research option
             let deepResearchOption = null;
             for (const item of menuItems) {
               const text = item.textContent?.trim() || '';
-              if (text.toLowerCase().includes('deep research') || 
-                  text.toLowerCase().includes('research')) {
+              // More specific matching for "Deep research"
+              if (text === 'Deep research' || 
+                  text.toLowerCase() === 'deep research' ||
+                  (text.toLowerCase().includes('deep') && text.toLowerCase().includes('research'))) {
                 deepResearchOption = item;
                 console.log(`Found Deep research option: "${text}"`);
                 break;
@@ -124,39 +164,54 @@ SUBMIT_JS = r"""
               console.log('Clicking Deep research option...');
               deepResearchOption.click();
               
-              // Wait and verify activation
-              await sleep(500);
+              // Wait for activation
+              await sleep(800);
               
-              // Check for activation indicators
-              const indicators = document.querySelectorAll(
-                '[aria-checked="true"], ' +
-                '[data-state="checked"], ' +
-                '.composer-mode-pill, ' +
-                '[data-testid*="research-active"]'
-              );
+              // Verify activation by checking various indicators
+              const verifyActivation = () => {
+                // Check for checked state
+                const isChecked = deepResearchOption.getAttribute('aria-checked') === 'true' ||
+                                deepResearchOption.getAttribute('data-state') === 'checked';
+                
+                // Check for visual indicators
+                const visualIndicators = document.querySelectorAll(
+                  '.composer-mode-pill, [data-testid*="research"], .mode-indicator'
+                );
+                
+                // Check if menu closed (indicating selection was made)
+                const menuClosed = !document.querySelector('[role="menu"][data-state="open"]');
+                
+                return isChecked || visualIndicators.length > 0 || menuClosed;
+              };
               
-              if (indicators.length > 0) {
-                console.log('Deep research mode verified as active!');
-                await sleep(500); // Give UI time to stabilize
+              if (verifyActivation()) {
+                console.log('Deep research mode successfully activated!');
                 return true;
               } else {
-                console.log('Deep research mode enabled (no verification indicator found)');
+                console.log('Deep research mode enabled (awaiting confirmation)');
+                await sleep(500);
                 return true;
               }
             } else {
               console.log('Deep research option not found in menu');
             }
           } else {
-            console.log('Plus button not found with any selector');
+            console.log('Plus button not found after exhaustive search');
           }
           
-          // Method 2: Fallback to slash command approach
-          console.log('Trying slash command fallback...');
+          // Fallback to slash command approach if plus button fails
+          console.log('Falling back to slash command approach...');
           return await slashCommandFallback();
           
         } catch (error) {
           console.log('Error enabling deep research mode:', error);
-          return false;
+          // Try fallback on any error
+          try {
+            return await slashCommandFallback();
+          } catch (fallbackError) {
+            console.log('Fallback also failed:', fallbackError);
+            return false;
+          }
         }
       }
       
