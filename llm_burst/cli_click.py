@@ -519,26 +519,41 @@ def cmd_activate(
                     except Exception:
                         pass
 
-                # 3) Create a Chrome tab group and add all tabs
+                # 3) Create a Chrome tab group using the extension
                 group_name = _truncate_name(current_title)
-                try:
-                    group_id = await adapter._get_or_create_group(
-                        group_name, "grey", first_handle.live.window_id
-                    )
-                except Exception as exc:
-                    group_id = None
-                    click.echo(f"Tab-group creation failed: {exc}", err=True)
-                if group_id is not None:
+                extension_available = False
+                grouped_count = 0
+                
+                # Check if extension is available using the first tab
+                if handles:
+                    extension_available = await adapter.check_extension_available(handles[0].page)
+                    if not extension_available:
+                        click.echo(
+                            "Chrome tab grouping requires the LLM Burst Helper extension.\n"
+                            "To install: Open chrome://extensions, enable Developer mode, "
+                            "click 'Load unpacked', and select the 'chrome_ext' folder.",
+                            err=True
+                        )
+                
+                # Try to group tabs via extension
+                if extension_available:
                     for h in handles:
                         try:
-                            await adapter._add_target_to_group(
-                                h.live.target_id, group_id
+                            success = await adapter.group_tab_via_extension(
+                                h.page, group_name, "blue", current_title
                             )
-                            # Persist per-tab group id
-                            state.assign_session_to_group(h.live.task_name, group_id)
-                        except Exception:
-                            pass
-                    state.set_grouped(session_title, True)
+                            if success:
+                                grouped_count += 1
+                                # Track in state for consistency
+                                state.assign_session_to_group(h.live.task_name, 1)
+                        except Exception as exc:
+                            _LOG.debug(f"Failed to group tab {h.live.provider.name}: {exc}")
+                    
+                    if grouped_count > 0:
+                        state.set_grouped(session_title, True)
+                        click.echo(f"Grouped {grouped_count} tabs into '{group_name}'")
+                    else:
+                        click.echo("Tab grouping failed - tabs opened without groups", err=True)
 
                 # 4) Inject prompts into each tab
                 for h in handles:
@@ -577,19 +592,14 @@ def cmd_activate(
                     if state.rename_session(current_title, suggested_name):
                         click.echo(f"Session renamed to '{suggested_name}'")
                         current_title = suggested_name
-                        # Update titles in browser and group title
+                        # Update titles in browser
                         for h in handles:
                             try:
                                 await set_window_title(h.page, current_title)
                             except Exception:
                                 pass
-                        if group_id is not None:
-                            try:
-                                await adapter._update_group_title(
-                                    group_id, _truncate_name(current_title)
-                                )
-                            except Exception:
-                                pass
+                        # Note: Group title update would require extension support
+                        # Current extension doesn't support renaming existing groups
 
                 # Bring Chrome to front after opening all tabs
                 from llm_burst.browser import bring_chrome_to_front

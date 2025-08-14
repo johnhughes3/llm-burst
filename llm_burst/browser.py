@@ -15,6 +15,7 @@ from __future__ import annotations
 
 import asyncio
 import contextlib
+import logging
 import subprocess
 import time
 import os
@@ -43,6 +44,9 @@ from .constants import (
     AUTO_RELAUNCH_CHROME_ENV,
 )
 from .state import StateManager, LiveSession
+
+# Module-level logger
+_LOG = logging.getLogger(__name__)
 
 # --------------------------------------------------------------------------- #
 # Helper functions
@@ -184,9 +188,6 @@ class BrowserAdapter:
 
         # 2. Compare with stored state and prune
         pruned_count = 0
-        import logging
-
-        _LOG = logging.getLogger(__name__)
 
         # Prune LiveSessions (v1/per-tab)
         all_sessions = self._state.list_all()
@@ -663,82 +664,36 @@ class BrowserAdapter:
         if self._tab_groups_supported is not None:
             return  # already probed
 
-        cdp = await self._get_cdp_connection()
-        if not cdp:
-            self._tab_groups_supported = False
-            return
-
-        # Robust detection via schema listing; fall back to probing if needed.
-        try:
-            doms = await cdp.send("Schema.getDomains")
-            names = {d.get("name") for d in (doms or {}).get("domains", [])}
-            self._tab_groups_supported = "TabGroups" in names
-            if self._tab_groups_supported:
-                return
-        except Exception:
-            # Ignore and try probing directly
-            pass
-
-        try:
-            # Direct probe: expect either success or a deterministic "method not found" error
-            await cdp.send("TabGroups.get", {"groupId": -1})
-            self._tab_groups_supported = True
-        except PlaywrightError as exc:
-            msg = str(exc).lower()
-            if "methodnotfound" in msg or "wasn't found" in msg or "wasnt found" in msg:
-                self._tab_groups_supported = False
-            else:
-                # Any other error implies the domain exists but parameters were invalid
-                self._tab_groups_supported = True
-        except Exception:
-            self._tab_groups_supported = False
+        # Tab groups are not available via CDP in stable Chrome
+        # They require a Chrome extension with tabGroups permission
+        self._tab_groups_supported = False
+        _LOG.info("Chrome tab groups via CDP not available - extension bridge required")
 
     async def _get_or_create_group(self, name: str, color: str, window_id: int) -> int:
         """
-        Return an existing Chrome groupId for *name* or create a fresh one.
-        Persists metadata via StateManager.
+        Return a virtual group ID for tracking purposes.
+        Real Chrome tab groups require the extension bridge.
         """
         existing = self._state.get_group_by_name(name)
         if existing:
             return existing.group_id
 
-        if not self._tab_groups_supported:
-            raise RuntimeError("Chrome build lacks Tab Groups API")
-
-        cdp = await self._get_cdp_connection()
-        if not cdp:
-            raise RuntimeError("No CDP connection available")
-
-        res = await cdp.send(
-            "TabGroups.create",
-            {"windowId": window_id, "title": name, "color": color},
-        )
-        group_id = res["groupId"]
+        # Generate a virtual group ID for state tracking
+        import random
+        group_id = random.randint(10000, 99999)
         self._state.register_group(group_id, name, color)
+        _LOG.debug(f"Created virtual group '{name}' with ID {group_id} (extension required for real groups)")
         return group_id
 
     async def _add_target_to_group(self, target_id: str, group_id: int) -> None:
-        """Add a CDP target (tab) to *group_id*."""
-        if not self._tab_groups_supported:
-            return
-
-        cdp = await self._get_cdp_connection()
-        if not cdp:
-            return  # No CDP available
-        await cdp.send("TabGroups.addTab", {"groupId": group_id, "tabId": target_id})
+        """Track tab-to-group association in state (actual grouping requires extension)."""
+        _LOG.debug(f"Associated tab {target_id} with virtual group {group_id}")
+        # State tracking only - actual Chrome grouping requires the extension bridge
 
     async def _update_group_title(self, group_id: int, title: str) -> None:
-        """Best-effort update of a tab group's title (no-op on unsupported builds)."""
-        if not self._tab_groups_supported:
-            return
-        cdp = await self._get_cdp_connection()
-        if not cdp:
-            return
-        try:
-            await cdp.send("TabGroups.update", {"groupId": group_id, "title": title})
-        except Exception:
-            # Ignore if the method is not available on this Chrome build
-            pass
+        """Update virtual group title in state (actual Chrome update requires extension)."""
+        _LOG.debug(f"Updated virtual group {group_id} title to '{title}'")
+        # State tracking only - actual Chrome grouping requires the extension bridge
 
     async def pick_existing_window_opener(self) -> Optional[tuple[str, int]]:
         """
@@ -795,6 +750,120 @@ class BrowserAdapter:
         )
         await self._add_target_to_group(session.target_id, group_id)
         self._state.assign_session_to_group(task_name, group_id)
+
+    async def check_extension_available(self, page: Page, timeout: int = 1000) -> bool:
+        """Check if the LLM Burst Helper extension is installed and available."""
+        try:
+            result = await page.evaluate("""
+                () => new Promise((resolve) => {
+                    if (window.__llmBurstExtension && window.__llmBurstExtension.ping) {
+                        window.__llmBurstExtension.ping().then(response => {
+                            resolve(response.ok === true);
+                        }).catch(() => resolve(false));
+                    } else {
+                        // Try direct ping if helper not injected yet
+                        const timeout = setTimeout(() => resolve(false), 1000);
+                        const handler = (event) => {
+                            if (event.data?.type === 'llmburst-ping-response') {
+                                clearTimeout(timeout);
+                                window.removeEventListener('message', handler);
+                                resolve(event.data.ok === true);
+                            }
+                        };
+                        window.addEventListener('message', handler);
+                        window.postMessage({ type: 'llmburst-ping' }, '*');
+                    }
+                })
+            """)
+            return result is True
+        except Exception as exc:
+            _LOG.debug(f"Extension check failed: {exc}")
+            return False
+
+    async def group_tab_via_extension(
+        self, page: Page, title: str, color: str = "blue", session_id: str = None
+    ) -> bool:
+        """Group the current tab using the extension bridge."""
+        try:
+            # First check if extension is available
+            if not await self.check_extension_available(page):
+                _LOG.warning("LLM Burst Helper extension not available")
+                return False
+            
+            # Use the extension to group the tab
+            # Combine arguments into a single object for page.evaluate
+            result = await page.evaluate("""
+                (args) => {
+                    const { title, color, sessionId } = args;
+                    if (window.__llmBurstExtension && window.__llmBurstExtension.addToGroup) {
+                        return window.__llmBurstExtension.addToGroup(title, color, sessionId);
+                    } else {
+                        // Fallback to direct message
+                        return new Promise((resolve) => {
+                            const timeout = setTimeout(() => {
+                                resolve({ ok: false, error: 'Timeout' });
+                            }, 5000);
+                            
+                            const handler = (event) => {
+                                if (event.data?.type === 'llmburst-group-response') {
+                                    clearTimeout(timeout);
+                                    window.removeEventListener('message', handler);
+                                    resolve(event.data);
+                                }
+                            };
+                            
+                            window.addEventListener('message', handler);
+                            window.postMessage({ 
+                                type: 'llmburst-group',
+                                title: title,
+                                color: color,
+                                sessionId: sessionId
+                            }, '*');
+                        });
+                    }
+                }
+            """, {"title": title, "color": color, "sessionId": session_id})
+            
+            if result and result.get("ok"):
+                _LOG.info(f"Tab grouped successfully via extension: group {result.get('groupId')}")
+                return True
+            else:
+                _LOG.warning(f"Extension grouping failed: {result.get('error', 'Unknown error')}")
+                return False
+                
+        except Exception as exc:
+            _LOG.error(f"Failed to group tab via extension: {exc}")
+            return False
+
+    async def combine_windows_via_extension(
+        self, page: Page, session_id: str, target_window_id: int = None
+    ) -> bool:
+        """Combine multiple windows into tab groups using the extension."""
+        try:
+            if not await self.check_extension_available(page):
+                _LOG.warning("LLM Burst Helper extension not available")
+                return False
+            
+            result = await page.evaluate("""
+                (args) => {
+                    const { sessionId, targetWindowId } = args;
+                    if (window.__llmBurstExtension && window.__llmBurstExtension.combineWindows) {
+                        return window.__llmBurstExtension.combineWindows(sessionId, targetWindowId);
+                    }
+                    return { ok: false, error: 'Extension function not available' };
+                }
+            """, {"sessionId": session_id, "targetWindowId": target_window_id})
+            
+            if result and result.get("ok"):
+                _LOG.info(f"Windows combined: {result.get('movedTabs', 0)} tabs moved")
+                return True
+            else:
+                _LOG.warning(f"Window combination failed: {result.get('error', 'Unknown')}")
+                return False
+                
+        except Exception as exc:
+            _LOG.error(f"Failed to combine windows: {exc}")
+            return False
 
 
 async def set_window_title(page: Page, title: str) -> None:

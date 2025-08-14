@@ -1,0 +1,67 @@
+{
+  "manifest_version": 3,
+  "name": "LLM Burst Helper",
+  "version": "1.0.0",
+  "description": "Manages tabs and windows for llm-burst, including tab grouping and window management.",
+  "permissions": [
+    "tabs",
+    "tabGroups",
+    "windows",
+    "storage",
+    "activeTab"
+  ],
+  "host_permissions": [
+    "https://gemini.google.com/*",
+    "https://claude.ai/*",
+    "https://chat.openai.com/*",
+    "https://chatgpt.com/*",
+    "https://grok.com/*",
+    "https://*.x.ai/*",
+    "https://*.x.com/*",
+    "https://www.nytimes.com/*",
+    "https://nytimes.com/*",
+    "https://www.cnn.com/*",
+    "https://cnn.com/*",
+    "http://localhost/*",
+    "http://127.0.0.1/*"
+  ],
+  "background": {
+    "service_worker": "background.js",
+    "type": "module"
+  },
+  "content_scripts": [
+    {
+      "matches": [
+        "https://gemini.google.com/*",
+        "https://claude.ai/*",
+        "https://chat.openai.com/*",
+        "https://chatgpt.com/*",
+        "https://grok.com/*",
+        "https://*.x.ai/*",
+        "https://*.x.com/*",
+        "https://www.nytimes.com/*",
+        "https://nytimes.com/*",
+        "https://www.cnn.com/*",
+        "https://cnn.com/*",
+        "http://localhost/*",
+        "http://127.0.0.1/*"
+      ],
+      "js": ["content.js"],
+      "run_at": "document_start",
+      "all_frames": false
+    }
+  ],
+  "action": {
+    "default_title": "LLM Burst Helper",
+    "default_icon": {
+      "16": "icon16.png",
+      "48": "icon48.png",
+      "128": "icon128.png"
+    }
+  },
+  "icons": {
+    "16": "icon16.png",
+    "48": "icon48.png",
+    "128": "icon128.png"
+  }
+}
