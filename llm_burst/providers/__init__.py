@@ -162,9 +162,28 @@ def _build_chatgpt_injector(
     async def _chatgpt_inject(page: Page, prompt: str, opts: "InjectOptions") -> None:
         # Research Prompts GPT URL
         RESEARCH_URL = "https://chatgpt.com/g/g-p-68034199ee048191a6fe21d2dacdef09-research-prompts/project?model=gpt-5-pro"
+        # Incognito mode URL
+        INCOGNITO_URL = "https://chatgpt.com/?temporary-chat=true&model=gpt-5-thinking"
+
+        # If incognito mode is enabled and we're not already on a temporary chat, navigate there
+        if opts.incognito and "temporary-chat=true" not in page.url:
+            print("Incognito mode enabled. Navigating to temporary chat...")
+            await page.goto(INCOGNITO_URL, wait_until="load")
+
+            # Wait for the page to be ready
+            try:
+                await page.wait_for_selector(
+                    "#prompt-textarea, [data-testid='prompt-textarea'], .ProseMirror",
+                    timeout=15000,
+                )
+                # Additional wait for UI to stabilize
+                await asyncio.sleep(1.0)
+            except PlaywrightTimeoutError:
+                raise RuntimeError("Timeout waiting for incognito mode page to load")
 
         # If research mode is enabled and we're not on the Research Prompts page, navigate there
-        if opts.research and not page.url.startswith("https://chatgpt.com/g/g-p-"):
+        # Note: Research mode takes precedence over incognito mode if both are enabled
+        elif opts.research and not page.url.startswith("https://chatgpt.com/g/g-p-"):
             print("Research mode enabled. Navigating to Research Prompts GPT...")
             await page.goto(RESEARCH_URL, wait_until="load")
 

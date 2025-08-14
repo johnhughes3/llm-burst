@@ -342,13 +342,12 @@ async function findAndPrepareTextarea() {
   console.log("Finding and preparing input element...");
   
   try {
-    // Find input element with multiple selectors - now includes contenteditable
+    // Find input element with multiple selectors - prioritize textarea before contenteditable
     const inputElement = await waitUntil(() => (
       document.querySelector('textarea[aria-label="Ask Grok anything"]') ||
-      document.querySelector('textarea[placeholder*="Ask" i][placeholder*="Grok" i]') ||
-      document.querySelector('form textarea') ||
-      document.querySelector('[contenteditable="true"]') ||  // New Grok UI uses contenteditable
-      document.querySelector('.ProseMirror[contenteditable="true"]')  // More specific selector
+      document.querySelector('textarea') ||
+      document.querySelector('[contenteditable="true"]') ||  // Fallback: contenteditable
+      document.querySelector('.ProseMirror[contenteditable="true"]')  // Fallback: specific selector
     ), 3000, 100);
     
     if (!inputElement) {
@@ -431,65 +430,23 @@ async function executeTextInput(inputElement, text) {
       sel.removeAllRanges();
       sel.addRange(range);
     } else {
-      // Original textarea logic
-      const isMac = navigator.platform.toLowerCase().includes("mac");
-      const metaKey = isMac ? "Meta" : "Control";
-      const metaKeyProps = isMac ? { metaKey: true } : { ctrlKey: true };
+      // Simplified textarea logic
+      // Clear the textarea value
+      inputElement.value = '';
       
-      // Meta key down (Cmd/Ctrl)
-      inputElement.dispatchEvent(new KeyboardEvent("keydown", { 
-        key: metaKey, 
-        code: isMac ? "MetaLeft" : "ControlLeft", 
-        ...metaKeyProps, 
-        bubbles: true,
-        cancelable: true 
-      }));
-      
-      // V key down
-      inputElement.dispatchEvent(new KeyboardEvent("keydown", { 
-        key: "v", 
-        code: "KeyV", 
-        ...metaKeyProps, 
-        bubbles: true,
-        cancelable: true 
-      }));
-      
-      // Set value directly
+      // Set the textarea value directly
       inputElement.value = text;
       
-      // Dispatch input event (critical for React)
+      // Dispatch a single input event
       inputElement.dispatchEvent(new InputEvent("input", { 
         bubbles: true,
         cancelable: true, 
-        inputType: "insertFromPaste", 
+        inputType: "insertText", 
         data: text 
       }));
       
-      // Position cursor at end of text
+      // Position cursor at end
       inputElement.selectionStart = inputElement.selectionEnd = text.length;
-      
-      // Key up events in reverse order
-      inputElement.dispatchEvent(new KeyboardEvent("keyup", { 
-        key: "v", 
-        code: "KeyV",
-        ...metaKeyProps, 
-        bubbles: true,
-        cancelable: true 
-      }));
-      
-      inputElement.dispatchEvent(new KeyboardEvent("keyup", { 
-        key: metaKey, 
-        code: isMac ? "MetaLeft" : "ControlLeft",
-        ...metaKeyProps, 
-        bubbles: true,
-        cancelable: true
-      }));
-      
-      // Final change event
-      inputElement.dispatchEvent(new Event("change", { 
-        bubbles: true,
-        cancelable: true 
-      }));
     }
     
     await wait(50); // Brief pause after input sequence
@@ -611,59 +568,127 @@ async function clickSubmitButton(inputElement) {
     // First try to find the button within the same form as the input element
     const form = inputElement.closest('form');
     
-    // Multiple strategies to find the submit button
-    // Note: Submit button may not exist until text is entered, so we wait for it
-    const submitButton = await waitUntil(() => {
-      // Within form - prioritize aria-label="Submit" over type="submit" 
-      // because Grok has a Search button with type="submit" that we want to avoid
-      if (form) {
-        // First look for explicit Submit button
-        const submitBtn = form.querySelector('button[aria-label="Submit"]:not([disabled])');
-        if (submitBtn) return submitBtn;
-        
-        // Then check for submit type that's NOT the search button
-        const formButtons = Array.from(form.querySelectorAll('button[type="submit"]:not([disabled])'));
-        const nonSearchSubmit = formButtons.find(btn => {
-          const ariaLabel = btn.getAttribute('aria-label');
-          return ariaLabel !== 'Search'; // Exclude the search button
-        });
-        if (nonSearchSubmit) return nonSearchSubmit;
+    // Helper function to check if button is truly interactive
+    const isButtonReady = (button) => {
+      if (!button) return false;
+      
+      // Check basic availability
+      if (button.disabled || button.hasAttribute('disabled')) {
+        console.log("Button found but disabled:", button);
+        return false;
       }
       
-      // Global selectors (backup) - prioritize aria-label="Submit"
-      const submitBtn = document.querySelector('button[aria-label="Submit"]:not([disabled])');
-      if (submitBtn) return submitBtn;
+      // Check visibility
+      const style = window.getComputedStyle(button);
+      if (style.display === 'none' || style.visibility === 'hidden' || style.opacity === '0') {
+        console.log("Button found but not visible:", button);
+        return false;
+      }
       
-      // Look for submit buttons that are NOT search
-      const allSubmitBtns = Array.from(document.querySelectorAll('button[type="submit"]:not([disabled])'));
+      // Check if button is in viewport and has dimensions
+      const rect = button.getBoundingClientRect();
+      if (rect.width === 0 || rect.height === 0) {
+        console.log("Button found but has no dimensions:", button);
+        return false;
+      }
+      
+      console.log("Button ready:", {
+        element: button,
+        ariaLabel: button.getAttribute('aria-label'),
+        type: button.type,
+        text: button.textContent?.trim(),
+        rect: rect
+      });
+      
+      return true;
+    };
+    
+    // Multiple strategies to find the submit button with enhanced logging
+    // Note: Submit button may not exist until text is entered, so we wait for it
+    console.log("Waiting for submit button to appear and become ready...");
+    const submitButton = await waitUntil(() => {
+      console.log("Polling for submit button...");
+      
+      // PRIMARY SELECTOR: button[aria-label="Submit"] - this is the most reliable
+      const primarySubmitBtn = document.querySelector('button[aria-label="Submit"]');
+      if (primarySubmitBtn && isButtonReady(primarySubmitBtn)) {
+        console.log("✓ Found primary submit button via aria-label");
+        return primarySubmitBtn;
+      }
+      
+      // Within form - check for Submit button first
+      if (form) {
+        console.log("Checking within form for submit button...");
+        
+        // Look for submit buttons that are NOT search within the form
+        const formButtons = Array.from(form.querySelectorAll('button[type="submit"]'));
+        const nonSearchSubmit = formButtons.find(btn => {
+          const ariaLabel = btn.getAttribute('aria-label');
+          return ariaLabel !== 'Search' && isButtonReady(btn); // Exclude search button
+        });
+        if (nonSearchSubmit) {
+          console.log("✓ Found form submit button (non-search)");
+          return nonSearchSubmit;
+        }
+      }
+      
+      // Global backup selectors
+      console.log("Checking global selectors...");
+      
+      // Look for submit buttons that are NOT search globally
+      const allSubmitBtns = Array.from(document.querySelectorAll('button[type="submit"]'));
       const nonSearchSubmit = allSubmitBtns.find(btn => {
         const ariaLabel = btn.getAttribute('aria-label');
-        return ariaLabel !== 'Search';
+        return ariaLabel !== 'Search' && isButtonReady(btn);
       });
-      if (nonSearchSubmit) return nonSearchSubmit;
+      if (nonSearchSubmit) {
+        console.log("✓ Found global submit button (non-search)");
+        return nonSearchSubmit;
+      }
       
-      // Last resort: look for send icon
-      return Array.from(document.querySelectorAll('button:not([disabled])'))
-        .find(btn => {
+      // Last resort: look for send icon or submit text
+      console.log("Trying fallback selectors (send icon/submit text)...");
+      const fallbackButtons = Array.from(document.querySelectorAll('button'))
+        .filter(btn => {
+          if (!isButtonReady(btn)) return false;
+          
           const hasSendIcon = btn.querySelector('svg path[d*="M2.01 21L23 12 2.01 3"]'); // Send icon
           const text = (btn.textContent || '').trim().toLowerCase();
           const hasSubmitText = text === 'submit' || text === 'send';
           return hasSendIcon || hasSubmitText;
         });
-    }, 5000, 100); // Increased timeout since button appears after text entry
+      
+      if (fallbackButtons.length > 0) {
+        console.log("✓ Found fallback submit button");
+        return fallbackButtons[0];
+      }
+      
+      console.log("No suitable submit button found in this polling cycle");
+      return null;
+    }, 8000, 200); // Increased timeout to 8 seconds and polling interval to 200ms for better reliability
     
     if (!submitButton) {
-      throw new Error("Submit button not found or not enabled");
+      console.error("Submit button search exhausted. Available buttons:", 
+        Array.from(document.querySelectorAll('button')).map(btn => ({
+          tag: btn.tagName,
+          type: btn.type,
+          ariaLabel: btn.getAttribute('aria-label'),
+          text: btn.textContent?.trim(),
+          disabled: btn.disabled,
+          visible: window.getComputedStyle(btn).display !== 'none'
+        }))
+      );
+      throw new Error("Submit button not found, not enabled, or not visible");
     }
     
-    console.log("Submit button found, clicking...");
+    console.log("Submit button found and ready, clicking...");
     window.simulateButtonClick(submitButton);
     
     // Brief wait for submission to start
     await wait(100);
     
     // Success is presumed if we get this far
-    console.log("✓ Submit button clicked");
+    console.log("✓ Submit button clicked successfully");
   } catch (error) {
     throw new Error(`Submit button interaction failed: ${error.message}`);
   }
