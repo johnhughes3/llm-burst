@@ -75,7 +75,7 @@ def bring_chrome_to_front() -> None:
 # Constants
 # --------------------------------------------------------------------------- #
 
-_CDP_BOOT_TIMEOUT = 8.0  # Seconds to wait for Chrome to expose CDP
+_CDP_BOOT_TIMEOUT = 12.0  # Seconds to wait for Chrome to expose CDP (allows for timeout retries)
 _CDP_POLL_INTERVAL = 0.25  # Poll interval while waiting
 _PAGE_DISCOVERY_TIMEOUT = 4.0  # Max seconds to wait for Playwright Page materialisation
 
@@ -350,10 +350,14 @@ class BrowserAdapter:
         if ws_endpoint:
             try:
                 self._browser = await self._playwright.chromium.connect_over_cdp(
-                    ws_endpoint
+                    ws_endpoint, timeout=3000  # 3s timeout to allow multiple retries
                 )
-            except PlaywrightError:
+            except PlaywrightError as e:
+                _LOG.warning(f"Failed to connect to CDP endpoint: {e}")
                 ws_endpoint = None  # Could not connect
+            except asyncio.TimeoutError:
+                _LOG.warning("CDP connection timed out after 3 seconds")
+                ws_endpoint = None
 
         # Early success
         if self._browser:
@@ -393,10 +397,22 @@ class BrowserAdapter:
             # No Chrome at all – launch a dedicated instance
             self._launch_chrome_headful()
         else:
-            # Chrome claims to run with remote debug but connection failed → port mismatch?
+            # Chrome claims to run with remote debug but connection failed
+            _LOG.error(
+                f"Chrome appears to have remote debugging on port {self._remote_port} "
+                "but Playwright cannot connect to it."
+            )
             raise RuntimeError(
-                f"Unable to connect to Chrome remote debugging on port {self._remote_port}. "
-                "Verify the port or set $CHROME_REMOTE_PORT to match the running instance."
+                f"Cannot connect to Chrome's remote debugging port {self._remote_port}.\n\n"
+                "This usually happens when:\n"
+                "1. Chrome was started with a different debugging port\n"
+                "2. The Chrome profile is locked or corrupted\n"
+                "3. There's a version mismatch between Chrome and Playwright\n\n"
+                "To fix this issue:\n"
+                "• Quit Chrome completely and run: llm-burst chrome-launch\n"
+                "• Or restart Chrome manually with: --remote-debugging-port=9222\n"
+                "• If the issue persists, try: pkill -f 'Google Chrome' && llm-burst chrome-launch\n\n"
+                "Note: We detected Chrome running with remote debugging, but cannot establish a connection."
             )
 
         # 3️⃣ Wait for the freshly launched Chrome to expose CDP and connect
@@ -406,11 +422,13 @@ class BrowserAdapter:
             if ws_endpoint:
                 try:
                     self._browser = await self._playwright.chromium.connect_over_cdp(
-                        ws_endpoint
+                        ws_endpoint, timeout=3000  # 3s timeout to allow multiple retries
                     )
                     break
-                except PlaywrightError:
-                    pass
+                except PlaywrightError as e:
+                    _LOG.debug(f"CDP connection attempt failed: {e}")
+                except asyncio.TimeoutError:
+                    _LOG.debug("CDP connection attempt timed out")
             await asyncio.sleep(_CDP_POLL_INTERVAL)
 
         if not self._browser:

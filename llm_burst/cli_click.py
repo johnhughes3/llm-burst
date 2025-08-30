@@ -385,6 +385,7 @@ def cmd_activate(
     as_tabs: bool,
 ) -> None:
     """Open 4 LLM sessions and send the same prompt (⌃⌥R replacement)."""
+    import sys
     prune_stale_sessions_sync()
     from llm_burst.chrome_bootstrap import ensure_remote_debugging  # Added
 
@@ -434,9 +435,11 @@ def cmd_activate(
         prompt_text = sys.stdin.read()
 
     if prompt_text is None or not prompt_text.strip():
-        raise click.UsageError(
-            "Prompt text required (via --prompt-text, --stdin, or dialog)"
+        click.echo(
+            "Error: prompt text required (via --prompt-text, --stdin, or dialog)",
+            err=True,
         )
+        sys.exit(2)
 
     providers = list(LLMProvider)  # All known providers for now
 

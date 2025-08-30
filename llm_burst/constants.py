@@ -91,6 +91,8 @@ CHROME_EXECUTABLE: Final[str] = os.environ.get(
 CHROME_PROCESS_NAMES: Final[tuple[str, ...]] = (
     "Google Chrome",
     "Google Chrome Helper",
+    "Google Chrome Beta",
+    "Google Chrome Canary",
 )
 
 # Environment variable that, when set to "1", "true" or "yes", tells llm-burst

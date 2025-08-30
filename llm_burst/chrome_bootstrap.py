@@ -90,8 +90,12 @@ def _show_relaunch_dialog() -> bool:
             # Any runtime failure => fall back to console prompt
             pass
 
-    # Console fallback (best effort)
+    # Console fallback (best effort) – avoid blocking when no TTY
     try:
+        # If there's no interactive TTY, immediately decline (lets caller handle message)
+        if not sys.stdin.isatty():
+            return False
+
         answer = input(
             "\nllm-burst needs to restart Google Chrome with remote debugging "
             f"(port {CHROME_REMOTE_PORT}). Incognito windows will be lost.\n"
@@ -99,7 +103,7 @@ def _show_relaunch_dialog() -> bool:
         ).strip()
         return answer.lower() in {"y", "yes"}
     except EOFError:
-        # Non-interactive shell (e.g. CI) → treat as decline
+        # Non-interactive shell (e.g. CI, Keyboard Maestro) → decline
         return False
 
 
@@ -132,6 +136,18 @@ def ensure_remote_debugging() -> None:
 
     # Case 3 – Running without remote debugging: ask the user.
     if not _show_relaunch_dialog():
+        # Provide a clear, actionable error message for non-interactive contexts
+        print(
+            (
+                "Error: Chrome is running without --remote-debugging-port.\n"
+                "LLM Burst cannot attach to an existing Chrome without this flag.\n\n"
+                "Fix options:\n"
+                "  1) Quit Chrome, then run: llm-burst chrome-launch\n"
+                "  2) Manually start Chrome with: --remote-debugging-port=%d\n"
+            )
+            % CHROME_REMOTE_PORT,
+            file=sys.stderr,
+        )
         sys.exit(PROMPT_CANCEL_EXIT)
 
     print("Quitting existing Chrome instance…")
