@@ -579,7 +579,11 @@ async function autoNamePrompt(text, { timeoutMs = 15000, modelOverride } = {}) {
     console.warn('[llm-burst] Auto-naming failed: No Gemini API key configured');
     return { ok: false, error: 'No Gemini API key configured in Options' };
   }
-  const model = (modelOverride || geminiModel || 'models/gemini-1.5-flash').trim();
+  // Normalize model name - ensure it has "models/" prefix
+  let model = (modelOverride || geminiModel || 'gemini-1.5-flash').trim();
+  if (!model.startsWith('models/')) {
+    model = 'models/' + model;
+  }
   console.log('[llm-burst] Auto-naming with model:', model);
 
   const prompt = [
@@ -589,7 +593,8 @@ async function autoNamePrompt(text, { timeoutMs = 15000, modelOverride } = {}) {
     String(text).slice(0, 10000) // cap input size
   ].join('\n');
 
-  const url = `https://generativelanguage.googleapis.com/v1beta/${encodeURIComponent(model)}:generateContent?key=${encodeURIComponent(apiKey)}`;
+  // Build URL with proper model path - don't encode the forward slash in "models/"
+  const url = `https://generativelanguage.googleapis.com/v1beta/${model}:generateContent?key=${encodeURIComponent(apiKey)}`;
   const controller = new AbortController();
   const t = setTimeout(() => controller.abort(), timeoutMs);
 
