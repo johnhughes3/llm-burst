@@ -297,6 +297,14 @@
   gap: calc(var(--spacing) * 1.5);
 }
 
+/* Inline providers layout */
+.providers--inline {
+  display: flex;
+  gap: calc(var(--spacing) * 1);
+  flex-wrap: wrap;
+  margin-top: calc(var(--spacing) * 1);
+}
+
 .provider-card {
   position: relative;
   padding: calc(var(--spacing) * 1.5);
@@ -309,6 +317,14 @@
   flex-direction: column;
   align-items: center;
   gap: calc(var(--spacing) * 0.5);
+}
+
+/* Compact provider cards for inline display */
+.provider-card--compact {
+  padding: calc(var(--spacing) * 1) calc(var(--spacing) * 1.5);
+  flex-direction: row;
+  gap: calc(var(--spacing) * 0.75);
+  min-width: 80px;
 }
 
 .provider-card:hover {
@@ -340,6 +356,12 @@
   color: white;
 }
 
+.provider-card--compact .provider-card__icon {
+  width: 20px;
+  height: 20px;
+  font-size: 10px;
+}
+
 .provider-card--selected .provider-card__icon {
   background: linear-gradient(135deg, var(--accent-primary) 0%, #6366f1 100%);
 }
@@ -348,6 +370,10 @@
   font-size: 12px;
   font-weight: 500;
   color: var(--text-secondary);
+}
+
+.provider-card--compact .provider-card__name {
+  font-size: 11px;
 }
 
 .provider-card--selected .provider-card__name {

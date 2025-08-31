@@ -240,15 +240,16 @@
   // Wait for provider elements to exist in DOM
   async function waitForProviderElements() {
     return new Promise(resolve => {
-      // Check if elements already exist
-      if (document.querySelector('.provider-card__checkbox')) {
+      // Check if elements already exist - try both old and new class names
+      const selector = '.provider-card__checkbox, .provider-pill__checkbox';
+      if (document.querySelector(selector)) {
         resolve();
         return;
       }
       
       // Otherwise wait for them to be created
       const observer = new MutationObserver(() => {
-        if (document.querySelector('.provider-card__checkbox')) {
+        if (document.querySelector(selector)) {
           observer.disconnect();
           resolve();
         }
@@ -265,7 +266,8 @@
 
   function getSelectedProviders() {
     const keys = [];
-    document.querySelectorAll('.provider-card__checkbox:checked').forEach(cb => {
+    // Check both old and new class names
+    document.querySelectorAll('.provider-card__checkbox:checked, .provider-pill__checkbox:checked').forEach(cb => {
       const provider = cb.getAttribute('data-provider');
       if (provider) keys.push(provider);
     });
@@ -274,12 +276,20 @@
 
   function setProviders(providerKeys) {
     const set = new Set(providerKeys || []);
-    document.querySelectorAll('.provider-card__checkbox').forEach(cb => {
+    // Check both old and new class names
+    document.querySelectorAll('.provider-card__checkbox, .provider-pill__checkbox').forEach(cb => {
       const provider = cb.getAttribute('data-provider');
       cb.checked = set.has(provider);
+      
+      // Handle both card and pill styles
       const card = cb.closest('.provider-card');
       if (card) {
         card.classList.toggle('provider-card--selected', cb.checked);
+      }
+      
+      const pill = cb.closest('.provider-pill');
+      if (pill) {
+        pill.classList.toggle('provider-pill--selected', cb.checked);
       }
     });
   }
