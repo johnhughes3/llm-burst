@@ -1,6 +1,7 @@
 /* Launcher-specific styles */
 @import 'base.css';
 @import 'components.css';
+@import 'providers-inline.css';
 
 /* Full page launcher mode */
 .app {

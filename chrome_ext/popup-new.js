@@ -218,6 +218,10 @@
     try {
       const data = await chrome.storage?.sync?.get?.(['settings']) || {};
       const settings = data.settings || {};
+      
+      // Wait for DOM elements to be ready
+      await waitForProviderElements();
+      
       if (typeof settings.defaultResearch === 'boolean' && els.research) {
         els.research.checked = settings.defaultResearch;
       }
@@ -225,11 +229,38 @@
         els.incognito.checked = settings.defaultIncognito;
       }
       if (Array.isArray(settings.defaultProviders)) {
+        console.log('[llm-burst] Loading default providers:', settings.defaultProviders);
         setProviders(settings.defaultProviders);
       }
-    } catch {
-      // ignore errors
+    } catch (e) {
+      console.error('[llm-burst] Failed to load defaults:', e);
     }
+  }
+  
+  // Wait for provider elements to exist in DOM
+  async function waitForProviderElements() {
+    return new Promise(resolve => {
+      // Check if elements already exist
+      if (document.querySelector('.provider-card__checkbox')) {
+        resolve();
+        return;
+      }
+      
+      // Otherwise wait for them to be created
+      const observer = new MutationObserver(() => {
+        if (document.querySelector('.provider-card__checkbox')) {
+          observer.disconnect();
+          resolve();
+        }
+      });
+      observer.observe(document.body, { childList: true, subtree: true });
+      
+      // Timeout after 5 seconds
+      setTimeout(() => {
+        observer.disconnect();
+        resolve();
+      }, 5000);
+    });
   }
 
   function getSelectedProviders() {
@@ -289,6 +320,12 @@
   function updateUIState() {
     const isNew = !els.sessionSelect || els.sessionSelect.value === '__new__';
     state.isNewSession = isNew;
+    
+    // Add/remove class on app container for layout adjustment
+    const app = document.querySelector('.app');
+    if (app) {
+      app.classList.toggle('app--existing-conversation', !isNew);
+    }
     
     // Update conditional sections
     const conditionalSections = ['providerSection', 'optionsSection', 'titleSection'];
@@ -462,8 +499,15 @@
         state.isComposing = false;
       });
       
-      // Save draft on blur
+      // Save draft on blur and auto-generate title if needed
       els.prompt.addEventListener('blur', () => {
+        // Clear any pending title generation timer
+        if (titleGenerateTimer) {
+          clearTimeout(titleGenerateTimer);
+          titleGenerateTimer = null;
+        }
+        
+        // Save draft
         if (state.draftTimer) {
           clearTimeout(state.draftTimer);
         }
@@ -471,6 +515,12 @@
         if (text !== state.lastDraftText) {
           state.lastDraftText = text;
           saveDraft(text);
+        }
+        
+        // Auto-generate title on blur if conditions are met
+        if (state.isNewSession && !state.titleDirty && 
+            text.trim().length > 20 && !els.groupTitle.value) {
+          generateTitle();
         }
       });
     }
@@ -512,6 +562,11 @@
             els.prompt.focus();
             setStatus('Pasted from clipboard', 'success');
             setTimeout(clearStatus, 2000);
+            
+            // Auto-generate title after paste if conditions are met
+            if (state.isNewSession && !state.titleDirty && text.trim().length > 20) {
+              setTimeout(() => generateTitle(), 500);
+            }
           } else {
             setStatus('Clipboard is empty', 'error');
             setTimeout(clearStatus, 2000);
@@ -546,6 +601,47 @@
         }
       }
     });
+    
+    // Keyboard shortcuts for research and incognito
+    document.addEventListener('keydown', (e) => {
+      // Don't trigger if typing in input/textarea
+      const activeElement = document.activeElement;
+      const isTyping = activeElement && 
+        (activeElement.tagName === 'INPUT' || 
+         activeElement.tagName === 'TEXTAREA');
+      
+      // Use Alt key to avoid conflicts (Alt+R for research, Alt+I for incognito)
+      if (!isTyping && e.altKey && !e.ctrlKey && !e.metaKey) {
+        if (e.key === 'r' || e.key === 'R') {
+          e.preventDefault();
+          if (els.research) {
+            els.research.checked = !els.research.checked;
+            els.research.dispatchEvent(new Event('change', { bubbles: true }));
+            // Visual feedback
+            flashElement(els.research.closest('.toggle'));
+          }
+        } else if (e.key === 'i' || e.key === 'I') {
+          e.preventDefault();
+          if (els.incognito) {
+            els.incognito.checked = !els.incognito.checked;
+            els.incognito.dispatchEvent(new Event('change', { bubbles: true }));
+            // Visual feedback
+            flashElement(els.incognito.closest('.toggle'));
+          }
+        }
+      }
+    });
+  }
+  
+  // Flash element for visual feedback
+  function flashElement(element) {
+    if (!element) return;
+    element.style.transition = 'background-color 200ms';
+    const originalBg = element.style.backgroundColor;
+    element.style.backgroundColor = 'rgba(79, 140, 255, 0.3)';
+    setTimeout(() => {
+      element.style.backgroundColor = originalBg;
+    }, 200);
   }
 
   // Capture element references

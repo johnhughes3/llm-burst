@@ -64,7 +64,21 @@
   padding: calc(var(--spacing) * 3);
   display: flex;
   flex-direction: column;
-  gap: calc(var(--spacing) * 3);
+  gap: 0; /* Remove fixed gap - use margins instead */
+}
+
+/* Dynamic gap management */
+.main > .section:not(.section--hidden) {
+  margin-bottom: calc(var(--spacing) * 2);
+}
+
+.main > .section:last-child {
+  margin-bottom: 0;
+}
+
+/* Compact mode for existing conversations */
+.app--existing-conversation .main {
+  gap: calc(var(--spacing) * 1.5);
 }
 
 /* Section styles */
@@ -73,13 +87,8 @@
 }
 
 .section--hidden {
-  opacity: 0;
-  max-height: 0;
-  overflow: hidden;
-  margin: 0;
-  padding: 0;
-  pointer-events: none;
-  transition: all 300ms var(--animation-timing);
+  display: none !important;
+  content-visibility: hidden; /* Performance optimization */
 }
 
 .section__label {

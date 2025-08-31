@@ -1,6 +1,7 @@
 /* Popup-specific styles */
 @import 'base.css';
 @import 'components.css';
+@import 'providers-inline.css';
 
 /* Popup constraints */
 html, body {

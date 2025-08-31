@@ -1,4 +1,4 @@
-// UI rendering module with safe DOM construction
+// UI rendering module with single-line providers and advanced dropdown
 export function detectMode() {
   const url = window.location.href;
   return url.includes('launcher.html') ? 'launcher' : 'popup';
@@ -6,7 +6,7 @@ export function detectMode() {
 
 // Safe DOM construction helper
 const ALLOWED_EVENTS = ['click', 'change', 'input', 'focus', 'blur', 'keydown', 'compositionstart', 'compositionend'];
-const BOOLEAN_ATTRS = ['checked', 'disabled', 'hidden', 'selected', 'readonly'];
+const BOOLEAN_ATTRS = ['checked', 'disabled', 'hidden', 'selected', 'readonly', 'open'];
 
 function createElement(tag, attrs = {}, children = []) {
   const el = document.createElement(tag);
@@ -37,7 +37,7 @@ function createElement(tag, attrs = {}, children = []) {
       el.setAttribute('for', val);
     } else {
       // Sanitize attribute value
-      el.setAttribute(key, String(val).replace(/[<>"']/g, ''));
+      el.setAttribute(key, String(val).replace(/[<>\"']/g, ''));
     }
   });
   
@@ -141,122 +141,108 @@ function createPromptSection() {
   return section;
 }
 
-// Create options section (Research & Incognito)
-function createOptionsSection() {
-  const section = createElement('div', { 
-    className: 'section',
-    id: 'optionsSection'
+// Create single-line provider selection
+function createProvidersInline() {
+  const providers = [
+    { id: 'CHATGPT', name: 'ChatGPT' },
+    { id: 'CLAUDE', name: 'Claude' },
+    { id: 'GEMINI', name: 'Gemini' },
+    { id: 'GROK', name: 'Grok' }
+  ];
+  
+  const section = createElement('div', {
+    className: 'section providers-inline-section',
+    id: 'providerSection'
   }, [
-    createElement('div', { className: 'options' }, [
-      // Research toggle
-      createElement('label', { className: 'toggle' }, [
-        createElement('input', {
-          type: 'checkbox',
-          className: 'toggle__input',
-          id: 'research',
-          'data-option': 'research'
-        }),
-        createElement('div', { className: 'toggle__switch' }, [
-          createElement('div', { className: 'toggle__slider' })
-        ]),
-        createElement('div', { className: 'toggle__content' }, [
-          createElement('span', {}, ['🔍']),
-          createElement('span', {}, ['Research'])
+    createElement('div', { className: 'providers-inline' }, [
+      createElement('span', { className: 'providers-inline__label' }, ['AI:']),
+      ...providers.map(provider => 
+        createElement('label', {
+          className: 'provider-pill',
+          'data-provider': provider.id
+        }, [
+          createElement('input', {
+            type: 'checkbox',
+            className: 'provider-pill__checkbox',
+            id: `prov-${provider.id.toLowerCase()}`,
+            'data-provider': provider.id
+          }),
+          createElement('span', {}, [provider.name])
         ])
-      ]),
-      // Incognito toggle
-      createElement('label', { className: 'toggle' }, [
-        createElement('input', {
-          type: 'checkbox',
-          className: 'toggle__input',
-          id: 'incognito',
-          'data-option': 'incognito'
-        }),
-        createElement('div', { className: 'toggle__switch' }, [
-          createElement('div', { className: 'toggle__slider' })
-        ]),
-        createElement('div', { className: 'toggle__content' }, [
-          createElement('span', {}, ['🕵️']),
-          createElement('span', {}, ['Incognito'])
-        ])
-      ])
+      )
     ])
   ]);
   
   return section;
 }
 
-// Create provider selection section
-function createProviderSection() {
-  const providers = [
-    { id: 'CHATGPT', name: 'ChatGPT', icon: 'C' },
-    { id: 'CLAUDE', name: 'Claude', icon: 'Cl' },
-    { id: 'GEMINI', name: 'Gemini', icon: 'G' },
-    { id: 'GROK', name: 'Grok', icon: 'Gr' }
-  ];
-  
+// Create advanced options section (collapsible)
+function createAdvancedSection() {
   const section = createElement('div', {
     className: 'section',
-    id: 'providerSection'
+    id: 'advancedSection'
   }, [
-    createElement('h3', { className: 'section__label' }, ['AI Providers']),
-    createElement('div', { className: 'providers' }, 
-      providers.map(provider => 
-        createElement('label', {
-          className: 'provider-card',
-          'data-provider': provider.id
-        }, [
-          createElement('input', {
-            type: 'checkbox',
-            className: 'provider-card__checkbox',
-            id: `prov-${provider.id.toLowerCase()}`,
-            'data-provider': provider.id
-            // Don't hardcode checked state - let defaults load from storage
-          }),
-          createElement('div', { className: 'provider-card__icon' }, [provider.icon]),
-          createElement('span', { className: 'provider-card__name' }, [provider.name]),
-          createElement('div', { className: 'provider-card__check' })
+    createElement('details', { className: 'advanced-options', id: 'advancedOptions' }, [
+      createElement('summary', { className: 'advanced-options__toggle' }, [
+        'Advanced Options'
+      ]),
+      createElement('div', { className: 'advanced-options__content' }, [
+        // Options section (Research & Incognito)
+        createElement('div', { className: 'options-row', id: 'optionsSection' }, [
+          createElement('label', { className: 'option-inline' }, [
+            createElement('input', {
+              type: 'checkbox',
+              className: 'option-inline__checkbox',
+              id: 'research',
+              'data-option': 'research'
+            }),
+            createElement('span', {}, ['🔍 Research'])
+          ]),
+          createElement('label', { className: 'option-inline' }, [
+            createElement('input', {
+              type: 'checkbox',
+              className: 'option-inline__checkbox',
+              id: 'incognito',
+              'data-option': 'incognito'
+            }),
+            createElement('span', {}, ['🕵️ Incognito'])
+          ]),
+          createElement('span', { className: 'keyboard-hints' }, [
+            'Alt+R / Alt+I'
+          ])
+        ]),
+        // Title section
+        createElement('div', { className: 'title-row', id: 'titleSection' }, [
+          createElement('label', {
+            className: 'section__label',
+            for: 'groupTitle'
+          }, ['Session Title']),
+          createElement('div', { className: 'title-input-group' }, [
+            createElement('input', {
+              type: 'text',
+              className: 'title-input',
+              id: 'groupTitle',
+              placeholder: 'Auto-generated from prompt...',
+              maxlength: '80',
+              'aria-label': 'Session title',
+              'aria-describedby': 'titleHint'
+            }),
+            createElement('button', {
+              className: 'btn btn--icon',
+              id: 'autonameBtn',
+              'aria-label': 'Auto-generate title'
+            }, [
+              createElement('span', { 
+                className: 'spinner',
+                id: 'autonameSpinner',
+                hidden: true
+              }),
+              createElement('span', { id: 'autonameIcon' }, ['↻'])
+            ])
+          ])
         ])
-      )
-    )
-  ]);
-  
-  return section;
-}
-
-// Create title section
-function createTitleSection() {
-  const section = createElement('div', {
-    className: 'section',
-    id: 'titleSection'
-  }, [
-    createElement('div', { className: 'prompt__header' }, [
-      createElement('label', {
-        className: 'section__label',
-        for: 'groupTitle'
-      }, ['Session Title']),
-      createElement('button', {
-        className: 'btn btn--icon',
-        id: 'autonameBtn',
-        'aria-label': 'Auto-generate title'
-      }, [
-        createElement('span', { 
-          className: 'spinner',
-          id: 'autonameSpinner',
-          hidden: true
-        }),
-        createElement('span', { id: 'autonameIcon' }, ['↻'])
       ])
-    ]),
-    createElement('input', {
-      type: 'text',
-      className: 'title-input',
-      id: 'groupTitle',
-      placeholder: 'Auto-generated from prompt...',
-      maxlength: '80',
-      'aria-label': 'Session title',
-      'aria-describedby': 'titleHint'
-    })
+    ])
   ]);
   
   return section;
@@ -304,9 +290,8 @@ export function renderApp({ mode = 'popup' } = {}) {
     createElement('main', { className: 'main' }, [
       createSessionSection(),
       createPromptSection(),
-      createOptionsSection(),
-      createProviderSection(),
-      createTitleSection(),
+      createProvidersInline(),
+      createAdvancedSection(),
       createStatusSection(),
       createSendButton(mode)
     ])
@@ -316,11 +301,11 @@ export function renderApp({ mode = 'popup' } = {}) {
   document.body.innerHTML = '';
   document.body.appendChild(app);
   
-  // Add event listener for provider card selection
-  document.querySelectorAll('.provider-card').forEach(card => {
-    const checkbox = card.querySelector('.provider-card__checkbox');
+  // Add event listeners for provider pills
+  document.querySelectorAll('.provider-pill').forEach(pill => {
+    const checkbox = pill.querySelector('.provider-pill__checkbox');
     
-    card.addEventListener('click', (e) => {
+    pill.addEventListener('click', (e) => {
       if (e.target === checkbox) return; // Let checkbox handle its own click
       e.preventDefault(); // Prevent label's default behavior
       checkbox.checked = !checkbox.checked;
@@ -328,13 +313,8 @@ export function renderApp({ mode = 'popup' } = {}) {
     });
     
     checkbox.addEventListener('change', () => {
-      card.classList.toggle('provider-card--selected', checkbox.checked);
+      pill.classList.toggle('provider-pill--selected', checkbox.checked);
     });
-    
-    // Set initial state
-    if (checkbox.checked) {
-      card.classList.add('provider-card--selected');
-    }
   });
   
   // Initialize UI state based on session
@@ -353,20 +333,16 @@ function updateUIState() {
   const isNewSession = !sessionSelect || sessionSelect.value === '__new__';
   
   // Elements to hide/show based on state
-  const conditionalSections = ['providerSection', 'optionsSection', 'titleSection'];
-  
-  conditionalSections.forEach(id => {
-    const element = document.getElementById(id);
-    if (element) {
-      if (isNewSession) {
-        element.classList.remove('section--hidden');
-        element.setAttribute('aria-hidden', 'false');
-      } else {
-        element.classList.add('section--hidden');
-        element.setAttribute('aria-hidden', 'true');
-      }
+  const advancedSection = document.getElementById('advancedSection');
+  if (advancedSection) {
+    if (isNewSession) {
+      advancedSection.classList.remove('section--hidden');
+      advancedSection.setAttribute('aria-hidden', 'false');
+    } else {
+      advancedSection.classList.add('section--hidden');
+      advancedSection.setAttribute('aria-hidden', 'true');
     }
-  });
+  }
   
   // Update send button text
   const sendButtonText = document.getElementById('sendButtonText');
