@@ -256,15 +256,25 @@
   // Load sessions from storage
   async function loadSessions() {
     try {
-      const result = await chrome.storage.local.get('sessions');
-      const sessions = result.sessions || [];
+      const result = await chrome.storage.local.get(['sessions', 'sessionOrder']);
+      const sessions = result.sessions || {};
+      const order = result.sessionOrder || Object.keys(sessions);
       
-      if (sessions.length > 0 && els.sessionSelect) {
-        sessions.forEach(session => {
-          const option = document.createElement('option');
-          option.value = session.id;
-          option.textContent = session.title || `Session ${session.id}`;
-          els.sessionSelect.appendChild(option);
+      if (els.sessionSelect) {
+        // Clear ALL options except "New conversation"
+        while (els.sessionSelect.options.length > 1) {
+          els.sessionSelect.remove(1);
+        }
+        
+        // Add sessions in order
+        order.forEach(sessionId => {
+          const session = sessions[sessionId];
+          if (session) {
+            const option = document.createElement('option');
+            option.value = sessionId;
+            option.textContent = session.title || `Session ${sessionId}`;
+            els.sessionSelect.appendChild(option);
+          }
         });
       }
       
@@ -317,15 +327,26 @@
     const requestId = ++state.currentAutonameRequestId;
     setSpinnerVisible(true);
     
-    const result = await sendMessage('llmburst-autoname', { prompt });
-    
-    if (requestId !== state.currentAutonameRequestId) return;
-    
-    setSpinnerVisible(false);
-    
-    if (result.ok && result.title && !state.titleDirty) {
-      els.groupTitle.value = result.title;
-      els.groupTitle.classList.add('animate-slide-in');
+    try {
+      const result = await sendMessage('llmburst-autoname', { text: prompt });
+      
+      if (requestId !== state.currentAutonameRequestId) {
+        setSpinnerVisible(false);
+        return;
+      }
+      
+      if (result.ok && result.title && !state.titleDirty) {
+        els.groupTitle.value = result.title;
+        els.groupTitle.classList.add('animate-slide-in');
+      } else if (!result.ok) {
+        console.error('[llm-burst] Title generation failed:', result.error);
+      }
+    } catch (e) {
+      console.error('[llm-burst] Title generation error:', e);
+    } finally {
+      if (requestId === state.currentAutonameRequestId) {
+        setSpinnerVisible(false);
+      }
     }
   }
 
@@ -406,15 +427,20 @@
     
     // Prompt textarea
     if (els.prompt) {
+      let titleGenerateTimer = null;
+      
       els.prompt.addEventListener('input', () => {
         updateClearButton();
         updateCharCount();
         autoExpandTextarea();
         scheduleDraftSave();
         
-        // Auto-generate title on first input
-        if (state.isNewSession && !state.titleDirty && els.prompt.value.length > 20) {
-          generateTitle();
+        // Debounced title generation - trigger after 30 chars
+        if (state.isNewSession && !state.titleDirty && els.prompt.value.length > 30) {
+          if (titleGenerateTimer) clearTimeout(titleGenerateTimer);
+          titleGenerateTimer = setTimeout(() => {
+            generateTitle();
+          }, 1000); // Wait 1 second after user stops typing
         }
       });
       

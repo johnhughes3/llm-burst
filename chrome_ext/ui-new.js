@@ -322,6 +322,7 @@ export function renderApp({ mode = 'popup' } = {}) {
     
     card.addEventListener('click', (e) => {
       if (e.target === checkbox) return; // Let checkbox handle its own click
+      e.preventDefault(); // Prevent label's default behavior
       checkbox.checked = !checkbox.checked;
       checkbox.dispatchEvent(new Event('change', { bubbles: true }));
     });
