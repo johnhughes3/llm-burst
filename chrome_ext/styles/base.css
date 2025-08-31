@@ -5,7 +5,7 @@
   --bg-tertiary: #1a2030;
   --border: #232a3a;
   --text-primary: #e6edf3;
-  --text-secondary: #7f8ca3;
+  --text-secondary: #a8aeb8;  /* Improved contrast for WCAG AA */
   --accent-primary: #4f8cff;
   --accent-success: #34d399;
   --accent-danger: #ef4444;

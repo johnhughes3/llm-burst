@@ -5,22 +5,39 @@ export function detectMode() {
 }
 
 // Safe DOM construction helper
+const ALLOWED_EVENTS = ['click', 'change', 'input', 'focus', 'blur', 'keydown', 'compositionstart', 'compositionend'];
+const BOOLEAN_ATTRS = ['checked', 'disabled', 'hidden', 'selected', 'readonly'];
+
 function createElement(tag, attrs = {}, children = []) {
   const el = document.createElement(tag);
   
-  // Set attributes
+  // Set attributes safely
   Object.entries(attrs).forEach(([key, val]) => {
     if (key === 'className') {
       el.className = val;
     } else if (key === 'innerHTML') {
       // Skip innerHTML for safety
       console.warn('innerHTML not allowed, use text or child elements');
+    } else if (key === 'style' && typeof val === 'string') {
+      // Allow style string for specific cases
+      el.style.cssText = val;
     } else if (key.startsWith('data-')) {
       el.dataset[key.slice(5)] = val;
-    } else if (key === 'checked' || key === 'disabled' || key === 'hidden') {
+    } else if (key.startsWith('on') && typeof val === 'function') {
+      // Validate event handlers
+      const eventName = key.slice(2).toLowerCase();
+      if (ALLOWED_EVENTS.includes(eventName)) {
+        el.addEventListener(eventName, val);
+      } else {
+        console.warn(`Event handler ${key} not allowed`);
+      }
+    } else if (BOOLEAN_ATTRS.includes(key)) {
       el[key] = val;
+    } else if (key === 'for') {
+      el.setAttribute('for', val);
     } else {
-      el.setAttribute(key, val);
+      // Sanitize attribute value
+      el.setAttribute(key, String(val).replace(/[<>"']/g, ''));
     }
   });
   
@@ -64,7 +81,8 @@ function createSessionSection() {
     }, ['Session']),
     createElement('select', {
       className: 'session-select',
-      id: 'sessionSelect'
+      id: 'sessionSelect',
+      'aria-label': 'Select conversation session'
     }, [
       createElement('option', { value: '__new__', selected: true }, ['New conversation'])
     ])
@@ -82,7 +100,7 @@ function createPromptSection() {
         for: 'prompt'
       }, [
         'Prompt',
-        createElement('span', { className: 'section__hint' }, ['⌘+Enter to send'])
+        createElement('span', { className: 'section__hint', id: 'promptHint' }, ['⌘+Enter to send'])
       ]),
       createElement('div', { className: 'prompt__actions' }, [
         createElement('button', {
@@ -102,7 +120,9 @@ function createPromptSection() {
       className: 'prompt__textarea',
       id: 'prompt',
       placeholder: 'Paste or type your prompt...',
-      rows: '8'
+      rows: '8',
+      'aria-label': 'Enter your prompt',
+      'aria-describedby': 'promptHint'
     }),
     createElement('div', { className: 'prompt__footer' }, [
       createElement('span', { 
@@ -233,7 +253,9 @@ function createTitleSection() {
       className: 'title-input',
       id: 'groupTitle',
       placeholder: 'Auto-generated from prompt...',
-      maxlength: '80'
+      maxlength: '80',
+      'aria-label': 'Session title',
+      'aria-describedby': 'titleHint'
     })
   ]);
   

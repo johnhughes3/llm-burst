@@ -12,6 +12,9 @@
     charCount: 0,
     isNewSession: true
   };
+  
+  // Store cleanup functions for event listeners
+  const cleanupFunctions = [];
 
   // Utility: wait
   function sleep(ms) { return new Promise(r => setTimeout(r, ms)); }
@@ -148,16 +151,21 @@
     }
   }
 
-  // Auto-expand textarea
-  function autoExpandTextarea() {
-    if (!els.prompt) return;
-    
-    requestAnimationFrame(() => {
-      els.prompt.style.height = 'auto';
-      const newHeight = Math.min(els.prompt.scrollHeight, state.isNewSession ? 200 : 400);
-      els.prompt.style.height = newHeight + 'px';
-    });
-  }
+  // Auto-expand textarea with performance optimization
+  const autoExpandTextarea = (() => {
+    let rafId = null;
+    return function() {
+      if (!els.prompt) return;
+      if (rafId) cancelAnimationFrame(rafId);
+      
+      rafId = requestAnimationFrame(() => {
+        els.prompt.style.height = 'auto';
+        const newHeight = Math.min(els.prompt.scrollHeight, state.isNewSession ? 200 : 400);
+        els.prompt.style.height = newHeight + 'px';
+        rafId = null;
+      });
+    };
+  })();
 
   async function handleClear() {
     const text = els.prompt.value;
@@ -177,15 +185,43 @@
     setTimeout(clearStatus, 2000);
   }
 
+  // Clipboard prefill (best-effort)
+  async function prefillFromClipboard() {
+    try {
+      const current = els.prompt.value.trim();
+      if (current.length > 0) return;
+      
+      // First check for saved draft
+      const draft = await loadDraft();
+      if (draft) {
+        els.prompt.value = draft;
+        els.prompt.dispatchEvent(new Event('input', { bubbles: true }));
+        setStatus('Draft restored', 'info');
+        setTimeout(clearStatus, 2000);
+        return;
+      }
+      
+      // Try clipboard (often fails without user gesture)
+      const text = await navigator.clipboard.readText();
+      if (text && text.trim().length > 0) {
+        els.prompt.value = text.trim();
+        els.prompt.dispatchEvent(new Event('input', { bubbles: true }));
+      }
+    } catch (e) {
+      // Expected when popup opens without user gesture
+      console.debug('[llm-burst] Clipboard prefill not available');
+    }
+  }
+  
   // Load defaults from storage
   async function loadDefaults() {
     try {
       const data = await chrome.storage?.sync?.get?.(['settings']) || {};
       const settings = data.settings || {};
-      if (typeof settings.defaultResearch === 'boolean') {
+      if (typeof settings.defaultResearch === 'boolean' && els.research) {
         els.research.checked = settings.defaultResearch;
       }
-      if (typeof settings.defaultIncognito === 'boolean') {
+      if (typeof settings.defaultIncognito === 'boolean' && els.incognito) {
         els.incognito.checked = settings.defaultIncognito;
       }
       if (Array.isArray(settings.defaultProviders)) {
@@ -504,6 +540,17 @@
     els.draftStatus = document.getElementById('draftStatus');
   }
 
+  // Cleanup function to remove all event listeners
+  function cleanup() {
+    cleanupFunctions.forEach(fn => fn());
+    cleanupFunctions.length = 0;
+    
+    if (state.draftTimer) {
+      clearTimeout(state.draftTimer);
+      state.draftTimer = null;
+    }
+  }
+  
   // Initialize
   async function init() {
     // Wait for DOM to be ready
@@ -517,20 +564,18 @@
     await loadDefaults();
     await loadSessions();
     
-    // Try to restore draft
-    const draft = await loadDraft();
-    if (draft && els.prompt) {
-      els.prompt.value = draft;
-      els.prompt.dispatchEvent(new Event('input', { bubbles: true }));
-      setStatus('Draft restored', 'info');
-      setTimeout(clearStatus, 2000);
-    }
+    // Try prefill from clipboard or draft
+    await prefillFromClipboard();
     
     // Focus prompt
     if (els.prompt) {
       els.prompt.focus();
     }
   }
+  
+  // Cleanup on unload
+  window.addEventListener('unload', cleanup);
+  cleanupFunctions.push(() => window.removeEventListener('unload', cleanup));
 
   // Start when DOM is ready
   if (document.readyState === 'loading') {
