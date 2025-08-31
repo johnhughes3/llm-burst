@@ -176,13 +176,15 @@
             els.groupTitle.value = title;
           }
         } else {
-          // Fallback to timestamp format DD-HH:MM when auto-naming fails
+          // Fallback to timestamp format MMM-DD HH:MM when auto-naming fails
           if (!els.groupTitle.value) {
             const now = new Date();
+            const months = ['Jan', 'Feb', 'Mar', 'Apr', 'May', 'Jun', 'Jul', 'Aug', 'Sep', 'Oct', 'Nov', 'Dec'];
+            const month = months[now.getMonth()];
             const day = String(now.getDate()).padStart(2, '0');
             const hours = String(now.getHours()).padStart(2, '0');
             const minutes = String(now.getMinutes()).padStart(2, '0');
-            els.groupTitle.value = `${day}-${hours}:${minutes}`;
+            els.groupTitle.value = `${month}-${day} ${hours}:${minutes}`;
           }
         }
       }
