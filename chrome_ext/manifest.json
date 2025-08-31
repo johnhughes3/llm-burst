@@ -8,7 +8,8 @@
     "tabGroups",
     "windows",
     "storage",
-    "activeTab"
+    "activeTab",
+    "clipboardRead"
   ],
   "host_permissions": [
     "https://gemini.google.com/*",
@@ -18,6 +19,7 @@
     "https://grok.com/*",
     "https://*.x.ai/*",
     "https://*.x.com/*",
+    "https://generativelanguage.googleapis.com/*",
     "https://www.nytimes.com/*",
     "https://nytimes.com/*",
     "https://www.cnn.com/*",
@@ -46,19 +48,29 @@
         "http://localhost/*",
         "http://127.0.0.1/*"
       ],
-      "js": ["content.js"],
+      "js": [
+        "content/injectors/utils.js",
+        "content/injectors/chatgpt.js",
+        "content/injectors/claude.js",
+        "content/injectors/gemini.js",
+        "content/injectors/grok.js",
+        "content/router.js",
+        "content.js"
+      ],
       "run_at": "document_start",
       "all_frames": false
     }
   ],
   "action": {
     "default_title": "LLM Burst Helper",
+    "default_popup": "popup.html",
     "default_icon": {
       "16": "icon16.png",
       "48": "icon48.png",
       "128": "icon128.png"
     }
   },
+  "options_page": "options.html",
   "icons": {
     "16": "icon16.png",
     "48": "icon48.png",
