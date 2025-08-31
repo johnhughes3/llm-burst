@@ -42,17 +42,21 @@
   // Clipboard prefill (best-effort)
   async function prefillFromClipboard() {
     try {
-      // navigator.clipboard.readText may require permission; it's fine if it fails
       const current = els.prompt.value.trim();
       if (current.length > 0) return; // Don't override user input
+      
+      // Try to read clipboard - this often fails due to permission requirements
+      // Chrome requires user gesture for clipboard access in extensions
       const text = await navigator.clipboard.readText();
       if (text && text.trim().length > 0) {
         els.prompt.value = text.trim();
         // Trigger input handlers
         els.prompt.dispatchEvent(new Event('input', { bubbles: true }));
       }
-    } catch {
-      // ignore
+    } catch (e) {
+      // Clipboard read failed - this is expected when popup opens without user gesture
+      // Users can still paste manually with Cmd+V
+      console.debug('[llm-burst] Clipboard prefill not available (requires user gesture)');
     }
   }
 
@@ -165,10 +169,21 @@
       // Ignore out-of-date responses
       if (requestId !== state.currentAutonameRequestId) return;
 
-      if (resp && resp.ok && !state.titleDirty && els.sessionSelect.value === '__new__') {
-        const title = sanitizeTitle(resp.title);
-        if (title && !els.groupTitle.value) {
-          els.groupTitle.value = title;
+      if (!state.titleDirty && els.sessionSelect.value === '__new__') {
+        if (resp && resp.ok) {
+          const title = sanitizeTitle(resp.title);
+          if (title && !els.groupTitle.value) {
+            els.groupTitle.value = title;
+          }
+        } else {
+          // Fallback to timestamp format DD-HH:MM when auto-naming fails
+          if (!els.groupTitle.value) {
+            const now = new Date();
+            const day = String(now.getDate()).padStart(2, '0');
+            const hours = String(now.getHours()).padStart(2, '0');
+            const minutes = String(now.getMinutes()).padStart(2, '0');
+            els.groupTitle.value = `${day}-${hours}:${minutes}`;
+          }
         }
       }
     } finally {
@@ -269,11 +284,33 @@
     });
 
     els.sendButton.addEventListener('click', handleSend);
+    
+    // Paste button handler - with user gesture, clipboard should work
+    els.pasteBtn.addEventListener('click', async () => {
+      try {
+        const text = await navigator.clipboard.readText();
+        if (text && text.trim().length > 0) {
+          els.prompt.value = text.trim();
+          els.prompt.dispatchEvent(new Event('input', { bubbles: true }));
+          els.prompt.focus();
+          setStatus('Pasted from clipboard', 'success');
+          setTimeout(clearStatus, 2000);
+        } else {
+          setStatus('Clipboard is empty', 'error');
+          setTimeout(clearStatus, 2000);
+        }
+      } catch (e) {
+        setStatus('Failed to read clipboard', 'error');
+        console.error('[llm-burst] Paste button failed:', e);
+        setTimeout(clearStatus, 2000);
+      }
+    });
   }
 
   function captureElements() {
     els.openOptions = document.getElementById('openOptions');
     els.prompt = document.getElementById('prompt');
+    els.pasteBtn = document.getElementById('pasteBtn');
     els.research = document.getElementById('research');
     els.incognito = document.getElementById('incognito');
 

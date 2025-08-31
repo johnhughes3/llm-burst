@@ -16,9 +16,12 @@
 
   <main class="container">
     <section class="section">
-      <label for="prompt" class="label">Prompt</label>
+      <div class="row" style="align-items: center; justify-content: space-between;">
+        <label for="prompt" class="label">Prompt</label>
+        <button id="pasteBtn" type="button" class="icon-button" title="Paste from clipboard" style="padding: 4px 8px; font-size: 12px;">📋 Paste</button>
+      </div>
       <textarea id="prompt" class="textarea" rows="8" placeholder="Paste or type your prompt..."></textarea>
-      <div class="hint">We will try to prefill from your clipboard if permitted.</div>
+      <div class="hint">Tip: Use the paste button or Cmd+V to paste from clipboard</div>
     </section>
 
     <section class="section options">

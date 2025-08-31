@@ -576,9 +576,11 @@ async function autoNamePrompt(text, { timeoutMs = 15000, modelOverride } = {}) {
   ]);
   const apiKey = (geminiApiKey || '').trim();
   if (!apiKey) {
+    console.warn('[llm-burst] Auto-naming failed: No Gemini API key configured');
     return { ok: false, error: 'No Gemini API key configured in Options' };
   }
   const model = (modelOverride || geminiModel || 'models/gemini-1.5-flash').trim();
+  console.log('[llm-burst] Auto-naming with model:', model);
 
   const prompt = [
     'Create a short, concise conversation title (ideally 4–8 words) for the following prompt.',
@@ -615,10 +617,14 @@ async function autoNamePrompt(text, { timeoutMs = 15000, modelOverride } = {}) {
 
     if (!resp.ok) {
       const errText = await resp.text().catch(() => '');
-      return { ok: false, error: `Gemini API error: ${resp.status} ${resp.statusText} ${errText}`.trim() };
+      const errorMsg = `Gemini API error: ${resp.status} ${resp.statusText} ${errText}`.trim();
+      console.error('[llm-burst] Auto-naming API error:', errorMsg);
+      return { ok: false, error: errorMsg };
     }
 
     const data = await resp.json();
+    console.log('[llm-burst] Auto-naming API response:', data);
+    
     const textOut =
       data?.candidates?.[0]?.content?.parts?.[0]?.text ||
       data?.candidates?.[0]?.output ||
@@ -626,11 +632,14 @@ async function autoNamePrompt(text, { timeoutMs = 15000, modelOverride } = {}) {
 
     const title = sanitizeTitle(textOut);
     if (!title) {
+      console.warn('[llm-burst] Auto-naming failed: Empty title from API');
       return { ok: false, error: 'No title returned by Gemini API' };
     }
+    console.log('[llm-burst] Auto-naming successful:', title);
     return { ok: true, title };
   } catch (e) {
     const msg = e?.name === 'AbortError' ? 'Auto-naming timed out' : (e?.message || String(e));
+    console.error('[llm-burst] Auto-naming exception:', msg, e);
     return { ok: false, error: msg };
   }
 }

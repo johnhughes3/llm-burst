@@ -70,6 +70,15 @@
       "128": "icon128.png"
     }
   },
+  "commands": {
+    "_execute_action": {
+      "suggested_key": {
+        "default": "Ctrl+Shift+R",
+        "mac": "Command+Shift+R"
+      },
+      "description": "Open LLM Burst"
+    }
+  },
   "options_page": "options.html",
   "icons": {
     "16": "icon16.png",
