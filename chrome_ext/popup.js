@@ -6,6 +6,9 @@
     titleDirty: false,
     sending: false,
     currentAutonameRequestId: 0,
+    draftTimer: null,
+    lastDraftText: '',
+    isComposing: false,
   };
 
   // Utility: wait
@@ -39,6 +42,90 @@
     els.autonameSpinner.hidden = !visible;
   }
 
+  // Draft management functions
+  async function saveDraft(text) {
+    // Don't save empty drafts
+    if (!text || !text.trim()) {
+      await clearDraft();
+      return;
+    }
+    
+    // Limit draft size to 10KB
+    if (text.length > 10240) {
+      text = text.substring(0, 10240);
+    }
+    
+    try {
+      await chrome.storage.session.set({
+        draft: {
+          text,
+          timestamp: Date.now(),
+        }
+      });
+    } catch (e) {
+      console.error('[llm-burst] Failed to save draft:', e);
+    }
+  }
+
+  async function loadDraft() {
+    try {
+      const data = await chrome.storage.session.get(['draft']);
+      if (data.draft && data.draft.text) {
+        // Check if draft is recent (within 24 hours)
+        const age = Date.now() - (data.draft.timestamp || 0);
+        if (age < 24 * 60 * 60 * 1000) {
+          return data.draft.text;
+        }
+      }
+    } catch (e) {
+      console.error('[llm-burst] Failed to load draft:', e);
+    }
+    return null;
+  }
+
+  async function clearDraft() {
+    try {
+      await chrome.storage.session.remove(['draft']);
+    } catch (e) {
+      console.error('[llm-burst] Failed to clear draft:', e);
+    }
+  }
+
+  function scheduleDraftSave() {
+    if (state.draftTimer) {
+      clearTimeout(state.draftTimer);
+    }
+    state.draftTimer = setTimeout(() => {
+      const text = els.prompt.value;
+      if (text !== state.lastDraftText) {
+        state.lastDraftText = text;
+        saveDraft(text);
+      }
+    }, 750); // 750ms debounce
+  }
+
+  function updateClearButton() {
+    if (els.clearBtn) {
+      els.clearBtn.style.display = els.prompt.value.trim() ? '' : 'none';
+    }
+  }
+
+  async function handleClear() {
+    const text = els.prompt.value;
+    if (text.length > 100) {
+      if (!confirm('Clear draft? This cannot be undone.')) {
+        return;
+      }
+    }
+    els.prompt.value = '';
+    els.prompt.dispatchEvent(new Event('input', { bubbles: true }));
+    await clearDraft();
+    updateClearButton();
+    els.prompt.focus();
+    setStatus('Draft cleared', 'info');
+    setTimeout(clearStatus, 2000);
+  }
+
   // Clipboard prefill (best-effort)
   async function prefillFromClipboard() {
     try {
@@ -47,6 +134,17 @@
       
       // Try to read clipboard - this often fails due to permission requirements
       // Chrome requires user gesture for clipboard access in extensions
+      // First check for saved draft
+      const draft = await loadDraft();
+      if (draft) {
+        els.prompt.value = draft;
+        els.prompt.dispatchEvent(new Event('input', { bubbles: true }));
+        setStatus('Draft restored', 'info');
+        setTimeout(clearStatus, 2000);
+        return;
+      }
+      
+      // Otherwise try clipboard
       const text = await navigator.clipboard.readText();
       if (text && text.trim().length > 0) {
         els.prompt.value = text.trim();
@@ -236,6 +334,8 @@
           return;
         }
         setStatus('Session started.', 'success');
+        // Clear draft after successful send
+        await clearDraft();
         // Close popup to get out of the way
         await sleep(300);
         window.close();
@@ -249,6 +349,8 @@
           return;
         }
         setStatus('Follow-up sent.', 'success');
+        // Clear draft after successful send
+        await clearDraft();
         await sleep(300);
         window.close();
       }
@@ -283,6 +385,52 @@
       // Reset auto-name state if title not edited by user
       if (!state.titleDirty) scheduleAutoName();
       clearStatus();
+      updateClearButton();
+      scheduleDraftSave();
+    });
+
+    // Keyboard shortcuts
+    els.prompt.addEventListener('keydown', (e) => {
+      // Ignore during IME composition
+      if (state.isComposing) return;
+      
+      // Check for Cmd/Ctrl+Enter
+      if (e.key === 'Enter' && (e.metaKey || e.ctrlKey)) {
+        e.preventDefault();
+        handleSend();
+      }
+    });
+
+    // IME composition handling
+    els.prompt.addEventListener('compositionstart', () => {
+      state.isComposing = true;
+    });
+
+    els.prompt.addEventListener('compositionend', () => {
+      state.isComposing = false;
+    });
+
+    // Save draft immediately on blur
+    els.prompt.addEventListener('blur', () => {
+      if (state.draftTimer) {
+        clearTimeout(state.draftTimer);
+      }
+      const text = els.prompt.value;
+      if (text !== state.lastDraftText) {
+        state.lastDraftText = text;
+        saveDraft(text);
+      }
+    });
+
+    // Save draft when page visibility changes
+    document.addEventListener('visibilitychange', () => {
+      if (document.hidden) {
+        const text = els.prompt.value;
+        if (text && text !== state.lastDraftText) {
+          state.lastDraftText = text;
+          saveDraft(text);
+        }
+      }
     });
 
     els.sendButton.addEventListener('click', handleSend);
@@ -292,6 +440,13 @@
       try {
         const text = await navigator.clipboard.readText();
         if (text && text.trim().length > 0) {
+          // Only paste if prompt is empty or user confirms
+          const currentText = els.prompt.value.trim();
+          if (currentText && currentText !== text.trim()) {
+            if (!confirm('Replace current text with clipboard content?')) {
+              return;
+            }
+          }
           els.prompt.value = text.trim();
           els.prompt.dispatchEvent(new Event('input', { bubbles: true }));
           els.prompt.focus();
@@ -307,12 +462,18 @@
         setTimeout(clearStatus, 2000);
       }
     });
+
+    // Clear button handler
+    if (els.clearBtn) {
+      els.clearBtn.addEventListener('click', handleClear);
+    }
   }
 
   function captureElements() {
     els.openOptions = document.getElementById('openOptions');
     els.prompt = document.getElementById('prompt');
     els.pasteBtn = document.getElementById('pasteBtn');
+    els.clearBtn = document.getElementById('clearBtn');
     els.research = document.getElementById('research');
     els.incognito = document.getElementById('incognito');
 
@@ -335,6 +496,13 @@
     bindEvents();
     updateNewSessionVisibility();
     setStatus('Loading sessions...', 'info');
+    
+    // Update keyboard shortcut hint based on platform
+    const shortcutKey = document.getElementById('shortcutKey');
+    if (shortcutKey) {
+      const isMac = navigator.platform.toUpperCase().indexOf('MAC') >= 0;
+      shortcutKey.textContent = isMac ? 'Cmd+Enter' : 'Ctrl+Enter';
+    }
 
     await Promise.all([
       loadDefaults(),
@@ -346,9 +514,21 @@
     els.prompt.focus();
     clearStatus();
 
+    // Update clear button visibility
+    updateClearButton();
+
     // Attempt auto-naming if prompt has content and user hasn't edited title
     scheduleAutoName();
   }
 
-  document.addEventListener('DOMContentLoaded', init);
+  // Wait for both DOM and dynamic content to be ready
+  if (document.readyState === 'loading') {
+    document.addEventListener('DOMContentLoaded', () => {
+      // Give ui.js time to render
+      setTimeout(init, 50);
+    });
+  } else {
+    // DOM already loaded, but still wait for ui.js
+    setTimeout(init, 50);
+  }
 })();
