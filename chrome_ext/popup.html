@@ -4,14 +4,11 @@
   <meta charset="utf-8">
   <title>LLM Burst</title>
   <meta name="viewport" content="width=device-width, initial-scale=1">
-  <link rel="stylesheet" href="popup.css">
+  <link rel="stylesheet" href="styles/popup.css">
 </head>
 <body>
   <!-- Content will be rendered by ui.js -->
-  <script type="module">
-    import { renderApp, detectMode } from './ui.js';
-    renderApp({ mode: detectMode() });
-  </script>
-  <script src="popup.js"></script>
+  <script type="module" src="init.js"></script>
+  <script src="popup-new.js"></script>
 </body>
 </html>

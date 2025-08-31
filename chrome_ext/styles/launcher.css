@@ -1,0 +1,66 @@
+/* Launcher-specific styles */
+@import 'base.css';
+@import 'components.css';
+
+/* Full page launcher mode */
+.app {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  padding: calc(var(--spacing) * 3);
+  min-height: 100vh;
+  background: linear-gradient(135deg, var(--bg-primary) 0%, #131722 100%);
+}
+
+/* Centered container with max width */
+.main {
+  max-width: 480px;
+  width: 100%;
+  background: var(--bg-secondary);
+  border-radius: calc(var(--radius) * 2);
+  border: 1px solid var(--border);
+  box-shadow: 0 20px 25px -5px rgba(0, 0, 0, 0.5), 0 10px 10px -5px rgba(0, 0, 0, 0.2);
+  padding: calc(var(--spacing) * 3);
+  gap: calc(var(--spacing) * 3);
+}
+
+/* Larger elements for launcher */
+.header {
+  border-radius: calc(var(--radius) * 2) calc(var(--radius) * 2) 0 0;
+  margin: calc(var(--spacing) * -3) calc(var(--spacing) * -3) 0;
+  padding: calc(var(--spacing) * 3);
+}
+
+/* Providers in single row for wider space */
+.providers {
+  grid-template-columns: repeat(4, 1fr);
+}
+
+/* Larger prompt area */
+.prompt__textarea {
+  min-height: 150px;
+  max-height: 400px;
+}
+
+/* Show keyboard shortcut in launcher */
+.send-button__shortcut {
+  display: block;
+}
+
+/* Backdrop blur effect */
+.app::before {
+  content: '';
+  position: fixed;
+  top: 0;
+  left: 0;
+  right: 0;
+  bottom: 0;
+  background: radial-gradient(circle at 50% 50%, rgba(79, 140, 255, 0.1) 0%, transparent 70%);
+  pointer-events: none;
+  z-index: 0;
+}
+
+.main {
+  position: relative;
+  z-index: 1;
+}

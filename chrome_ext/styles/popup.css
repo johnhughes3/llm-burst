@@ -1,0 +1,59 @@
+/* Popup-specific styles */
+@import 'base.css';
+@import 'components.css';
+
+/* Popup constraints */
+html, body {
+  width: 360px;
+  min-height: 560px;
+  margin: 0;
+  padding: 0;
+  overflow-x: hidden;
+}
+
+/* Adjust app container for popup */
+.app {
+  min-height: 560px;
+  background: var(--bg-secondary);
+}
+
+/* Compact spacing for popup */
+.main {
+  padding: calc(var(--spacing) * 2);
+  gap: calc(var(--spacing) * 2);
+}
+
+.header {
+  padding: calc(var(--spacing) * 1.5);
+}
+
+/* Adjust provider grid for narrow width */
+.providers {
+  grid-template-columns: repeat(2, 1fr);
+  gap: var(--spacing);
+}
+
+/* Smaller prompt textarea in popup */
+.prompt__textarea {
+  min-height: 100px;
+  max-height: 200px;
+}
+
+/* Compact sections */
+.section {
+  margin-bottom: calc(var(--spacing) * 2);
+}
+
+/* Hide keyboard shortcut in popup */
+.send-button__shortcut {
+  display: none;
+}
+
+/* Compact toggle options */
+.options {
+  gap: var(--spacing);
+}
+
+.toggle {
+  padding: calc(var(--spacing) * 1.5);
+}
