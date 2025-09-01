@@ -474,21 +474,13 @@
     
     // Prompt textarea
     if (els.prompt) {
-      let titleGenerateTimer = null;
-      
       els.prompt.addEventListener('input', () => {
         updateClearButton();
         updateCharCount();
         autoExpandTextarea();
         scheduleDraftSave();
         
-        // Debounced title generation - trigger after 30 chars
-        if (state.isNewSession && !state.titleDirty && els.prompt.value.length > 30) {
-          if (titleGenerateTimer) clearTimeout(titleGenerateTimer);
-          titleGenerateTimer = setTimeout(() => {
-            generateTitle();
-          }, 1000); // Wait 1 second after user stops typing
-        }
+        // Removed auto-naming on every keystroke - now only triggered by explicit actions
       });
       
       // Keyboard shortcut
@@ -509,14 +501,8 @@
         state.isComposing = false;
       });
       
-      // Save draft on blur and auto-generate title if needed
+      // Save draft on blur
       els.prompt.addEventListener('blur', () => {
-        // Clear any pending title generation timer
-        if (titleGenerateTimer) {
-          clearTimeout(titleGenerateTimer);
-          titleGenerateTimer = null;
-        }
-        
         // Save draft
         if (state.draftTimer) {
           clearTimeout(state.draftTimer);
@@ -527,11 +513,7 @@
           saveDraft(text);
         }
         
-        // Auto-generate title on blur if conditions are met
-        if (state.isNewSession && !state.titleDirty && 
-            text.trim().length > 20 && !els.groupTitle.value) {
-          generateTitle();
-        }
+        // Removed auto-generate title on blur - now only triggered by explicit actions
       });
     }
     
@@ -550,9 +532,15 @@
       });
     }
     
-    // Send button
+    // Send button - with title generation on send
     if (els.sendButton) {
-      els.sendButton.addEventListener('click', handleSend);
+      els.sendButton.addEventListener('click', async () => {
+        // Generate title before sending if needed
+        if (state.isNewSession && !state.titleDirty && !els.groupTitle.value && els.prompt.value.trim().length > 20) {
+          await generateTitle();  // Properly await title generation
+        }
+        handleSend();  // Always call handleSend after title generation (if needed)
+      });
     }
     
     // Paste button
@@ -598,6 +586,16 @@
     if (settingsBtn) {
       settingsBtn.addEventListener('click', () => {
         chrome.runtime.openOptionsPage();
+      });
+    }
+    
+    // Advanced options toggle - trigger title generation when opened
+    if (els.advancedOptions) {
+      els.advancedOptions.addEventListener('toggle', () => {
+        if (els.advancedOptions.open && state.isNewSession && !state.titleDirty && 
+            !els.groupTitle.value && els.prompt.value.trim().length > 20) {
+          generateTitle();
+        }
       });
     }
     
@@ -670,6 +668,7 @@
     els.sendButton = document.getElementById('sendButton');
     els.charCount = document.getElementById('charCount');
     els.draftStatus = document.getElementById('draftStatus');
+    els.advancedOptions = document.getElementById('advancedOptions');
   }
 
   // Cleanup function to remove all event listeners

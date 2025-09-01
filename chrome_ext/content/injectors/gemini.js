@@ -43,50 +43,77 @@
   // ---------------------------------------------------------------------------
   function enableDeepResearch(onSuccess, onFailure) {
     try {
-      // Method 1: Try toolbar button first
-      const toolbarButtons = Array.from(document.querySelectorAll('button.toolbox-drawer-item-button'))
-        .filter(button => {
-          const labelDiv = button.querySelector('.toolbox-drawer-button-label');
-          return labelDiv && labelDiv.textContent.trim() === 'Deep Research';
-        });
+      // First click the Tools button to open the tools panel
+      const toolsButton = document.querySelector('button[aria-label="Tools"]') ||
+                         Array.from(document.querySelectorAll('button')).find(b => {
+                           const text = b.textContent || '';
+                           return text.trim() === 'Tools' || text.includes('Tools');
+                         });
+      
+      if (toolsButton) {
+        console.log('Found Tools button, clicking to open tools panel');
+        toolsButton.click();
+        
+        // Set a timeout to prevent hanging if panel doesn't appear
+        const panelTimeout = setTimeout(() => {
+          console.log('Tools panel timeout - trying fallback methods');
+          onFailure();
+        }, 3000); // 3 second timeout for panel to appear
+        
+        // Wait for the tools panel to appear and find Deep Research
+        setTimeout(() => {
+          clearTimeout(panelTimeout); // Clear timeout if we reach this point
+          
+          // Look for Deep Research button in the panel
+          const deepResearchButton = Array.from(document.querySelectorAll('button')).find(button => {
+            const text = button.textContent || '';
+            // Look for button with "Deep Research" text or travel_explore icon
+            const hasText = text.includes('Deep Research');
+            const hasIcon = button.querySelector('img[src*="travel_explore"], svg[data-icon*="travel"], [aria-label*="Deep Research"]');
+            return hasText || hasIcon;
+          });
+          
+          if (deepResearchButton) {
+            console.log('Found Deep Research button in tools panel, clicking it');
+            deepResearchButton.click();
+            setTimeout(onSuccess, 500);
+          } else {
+            console.log('Deep Research button not found in tools panel');
+            // Try fallback methods
+            
+            // Method 2: Try button with the travel_explore icon directly
+            const iconButtons = Array.from(document.querySelectorAll('button')).filter(button => {
+              const icon = button.querySelector('mat-icon[data-mat-icon-name="travel_explore"]');
+              return icon !== null;
+            });
 
-      if (toolbarButtons.length > 0) {
-        console.log('Found Deep Research button in toolbar, clicking it');
-        toolbarButtons[0].click();
-        setTimeout(onSuccess, 500);
-        return;
+            if (iconButtons.length > 0) {
+              console.log('Found Deep Research button by icon, clicking it');
+              iconButtons[0].click();
+              setTimeout(onSuccess, 500);
+              return;
+            }
+            
+            // Method 3: Any button containing Deep Research text
+            const anyButtons = Array.from(document.querySelectorAll('button')).filter(button => {
+              const text = button.textContent || '';
+              return text.includes('Deep Research');
+            });
+
+            if (anyButtons.length > 0) {
+              console.log('Found Deep Research button by text content, clicking it');
+              anyButtons[0].click();
+              setTimeout(onSuccess, 500);
+              return;
+            }
+            
+            onFailure();
+          }
+        }, 500); // Wait for tools panel to appear
+      } else {
+        console.log('Could not find Tools button');
+        onFailure();
       }
-
-      // Method 2: Try button with the icon
-      const iconButtons = Array.from(document.querySelectorAll('button'))
-        .filter(button => {
-          const icon = button.querySelector('mat-icon[data-mat-icon-name="travel_explore"]');
-          return icon !== null;
-        });
-
-      if (iconButtons.length > 0) {
-        console.log('Found Deep Research button by icon, clicking it');
-        iconButtons[0].click();
-        setTimeout(onSuccess, 500);
-        return;
-      }
-
-      // Method 3: Any button containing Deep Research text
-      const anyButtons = Array.from(document.querySelectorAll('button'))
-        .filter(button => {
-          const text = button.textContent || '';
-          return text.includes('Deep Research');
-        });
-
-      if (anyButtons.length > 0) {
-        console.log('Found Deep Research button by text content, clicking it');
-        anyButtons[0].click();
-        setTimeout(onSuccess, 500);
-        return;
-      }
-
-      console.log('Could not find Deep Research button');
-      onFailure();
     } catch (error) {
       console.error(`Error enabling Deep Research: ${error}`);
       onFailure();
@@ -231,25 +258,65 @@
     }
   }
 
-  function automateGeminiChat(messageText, enableResearch) {
+  function enableTemporaryChat(onSuccess, onFailure) {
+    try {
+      // Look for Temporary chat button in sidebar
+      const tempChatButton = document.querySelector('button[aria-label="Temporary chat"]') ||
+                            Array.from(document.querySelectorAll('button')).find(b => {
+                              const text = b.textContent || '';
+                              return text.includes('Temporary chat');
+                            });
+      
+      if (tempChatButton) {
+        console.log('Found Temporary chat button, clicking it');
+        tempChatButton.click();
+        setTimeout(onSuccess, 500);
+      } else {
+        console.log('Could not find Temporary chat button');
+        onFailure();
+      }
+    } catch (error) {
+      console.error(`Error enabling Temporary chat: ${error}`);
+      onFailure();
+    }
+  }
+
+  function automateGeminiChat(messageText, enableResearch, enableIncognito) {
     return new Promise((resolve, reject) => {
       try {
-        // Step 1: Check if we need to enable Deep Research first
-        if (enableResearch === 'Yes') {
-          console.log('Research mode requested, will enable Deep Research first');
-          // Enable research before model selection to avoid dropdown conflicts
-          enableDeepResearch(() => {
-            // Continue with model selection after enabling research
-            selectModelAndProceed(messageText, resolve, reject);
+        // Step 1: Check if we need to enable Temporary Chat (incognito) first
+        if (enableIncognito === 'Yes') {
+          console.log('Incognito mode requested, will enable Temporary chat first');
+          enableTemporaryChat(() => {
+            console.log('Temporary chat enabled successfully');
+            // Continue with research check
+            handleResearchAndProceed();
           }, () => {
-            // If research enabling fails, still try to continue with model selection
-            console.log('Could not enable Deep Research, continuing with model selection');
-            selectModelAndProceed(messageText, resolve, reject);
+            console.log('Could not enable Temporary chat, continuing anyway');
+            handleResearchAndProceed();
           });
         } else {
-          // Skip research step, go directly to model selection
-          console.log('Regular mode requested, proceeding to model selection');
-          selectModelAndProceed(messageText, resolve, reject);
+          handleResearchAndProceed();
+        }
+        
+        function handleResearchAndProceed() {
+          // Step 2: Check if we need to enable Deep Research
+          if (enableResearch === 'Yes') {
+            console.log('Research mode requested, will enable Deep Research');
+            // Enable research before model selection to avoid dropdown conflicts
+            enableDeepResearch(() => {
+              // Continue with model selection after enabling research
+              selectModelAndProceed(messageText, resolve, reject);
+            }, () => {
+              // If research enabling fails, still try to continue with model selection
+              console.log('Could not enable Deep Research, continuing with model selection');
+              selectModelAndProceed(messageText, resolve, reject);
+            });
+          } else {
+            // Skip research step, go directly to model selection
+            console.log('Regular mode requested, proceeding to model selection');
+            selectModelAndProceed(messageText, resolve, reject);
+          }
         }
       } catch (error) {
         reject(`Error in automation process: ${error}`);
@@ -331,7 +398,8 @@
     submit: async ({ prompt, options }) => {
       await ensureEditorReady(15000).catch(() => {});
       const research = options && options.research ? 'Yes' : 'No';
-      return automateGeminiChat(String(prompt || ''), research);
+      const incognito = options && options.incognito ? 'Yes' : 'No';
+      return automateGeminiChat(String(prompt || ''), research, incognito);
     },
     followup: async ({ prompt }) => {
       await ensureEditorReady(15000).catch(() => {});

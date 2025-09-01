@@ -108,23 +108,70 @@
           handleResearchAndPrompt();
         }
 
-        // Enable deep research via plus menu with slash command fallback
+        // Enable research mode by selecting Pro Research model
         async function enableDeepResearchMode() {
-          console.log('🚀 Attempting to enable deep research mode...');
+          console.log('🚀 Attempting to enable research mode by selecting Pro model...');
 
           function sleep(ms) { return new Promise(resolve => setTimeout(resolve, ms)); }
-          async function waitForElement(selector, timeout = 5000) {
+          async function waitForElement(selector, timeout = 5000, maxRetries = 50) {
             const start = Date.now();
-            while (Date.now() - start < timeout) {
+            let retries = 0;
+            while (Date.now() - start < timeout && retries < maxRetries) {
               const el = document.querySelector(selector);
               if (el) return el;
               await sleep(100);
+              retries++;
+            }
+            if (retries >= maxRetries) {
+              console.log(`Max retries (${maxRetries}) reached while waiting for element: ${selector}`);
             }
             return null;
           }
 
           try {
-            // Try to find the plus button
+            // First try: Select Pro Research model from model selector
+            let modelButton = document.querySelector('button[aria-label*="Model selector"]') ||
+                             document.querySelector('button[aria-haspopup="menu"]') ||
+                             Array.from(document.querySelectorAll('button')).find(b => 
+                               b.textContent && (b.textContent.includes('ChatGPT') || b.textContent.includes('GPT'))
+                             );
+            
+            if (modelButton) {
+              console.log('Found model selector button, clicking...');
+              modelButton.click();
+              await sleep(500);
+              
+              // Look for Pro Research option in the menu
+              const menuItems = document.querySelectorAll('[role="menuitem"]');
+              let proOption = null;
+              
+              for (const item of menuItems) {
+                const text = (item.textContent || '').trim();
+                // Look for "Pro Research-grade intelligence" or similar
+                if ((text.includes('Pro') && text.toLowerCase().includes('research')) ||
+                    text.toLowerCase().includes('research-grade')) {
+                  proOption = item;
+                  console.log(`Found Pro Research option: "${text}"`);
+                  break;
+                }
+              }
+              
+              if (proOption) {
+                console.log('Clicking Pro Research option...');
+                proOption.click();
+                await sleep(500);
+                console.log('Pro Research model selected successfully!');
+                return true;
+              } else {
+                console.log('Pro Research option not found in model menu');
+                // Close the menu if it's still open
+                const escapeEvent = new KeyboardEvent('keydown', { key: 'Escape', keyCode: 27 });
+                document.dispatchEvent(escapeEvent);
+                await sleep(300);
+              }
+            }
+            
+            // Fallback: Try to find the plus button (old approach)
             let plusButton = document.querySelector('[data-testid="composer-plus-btn"]');
 
             if (!plusButton) {
@@ -252,12 +299,17 @@
             console.log('Using slash command approach...');
 
             function sleep(ms) { return new Promise(resolve => setTimeout(resolve, ms)); }
-            async function waitForElement(selector, timeout = 5000) {
+            async function waitForElement(selector, timeout = 5000, maxRetries = 50) {
               const start = Date.now();
-              while (Date.now() - start < timeout) {
+              let retries = 0;
+              while (Date.now() - start < timeout && retries < maxRetries) {
                 const el = document.querySelector(selector);
                 if (el) return el;
                 await sleep(100);
+                retries++;
+              }
+              if (retries >= maxRetries) {
+                console.log(`Max retries (${maxRetries}) reached while waiting for element: ${selector}`);
               }
               return null;
             }
