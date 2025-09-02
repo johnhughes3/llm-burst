@@ -7,7 +7,7 @@
 html, body {
   width: 360px;
   min-height: 650px;  /* Increased to ensure send button is visible */
-  max-height: 800px;  /* Prevent overly tall popup on some screens */
+  max-height: min(800px, 90vh);  /* Prevent overly tall popup; responsive on large screens */
   margin: 0;
   padding: 0;
   overflow-x: hidden;
@@ -31,20 +31,17 @@ html, body {
   flex-direction: column;
 }
 
-/* Ensure send button section stays at bottom */
+/* Ensure the last content section can push content above the send button */
 .section:last-child {
   margin-top: auto;  /* Push to bottom */
-  position: sticky;
-  bottom: 0;
-  background: var(--bg-secondary);
-  padding-bottom: calc(var(--spacing) * 2);
 }
 
 /* Ensure the primary send button remains visible at the bottom */
 .send-button {
   position: sticky;
   bottom: 0;
-  z-index: 10;
+  z-index: 20; /* Above section backgrounds */
+  background: linear-gradient(135deg, var(--accent-primary) 0%, #6366f1 100%);
 }
 
 .header {

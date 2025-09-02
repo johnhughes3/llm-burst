@@ -47,3 +47,25 @@ If the extension isn't working:
 3. **Reload the extension**: Click the refresh button on the extension card
 4. **Check permissions**: Make sure the site you're testing is in the manifest
 5. **Check console**: Open DevTools and look for any error messages
+
+## Quick QA: Research & Incognito Toggles
+
+Use this checklist to verify end-to-end behavior.
+
+- ChatGPT Research
+  - In the popup, enable Research and include ChatGPT as a provider.
+  - Confirm ChatGPT shows the “Pro Research‑grade intelligence” model (or equivalent indicator).
+
+- Gemini Research
+  - Enable Research and include Gemini.
+  - Confirm the Tools panel indicates “Deep Research” is active.
+
+- Gemini Incognito (Temporary chat)
+  - Enable Incognito and include Gemini.
+  - Confirm the UI indicates “Temporary chat” mode after navigation.
+
+- Claude Research
+  - Enable Research and include Claude.
+  - Confirm the Research button becomes active before submission.
+
+If any steps fail, capture a screenshot and open an issue with the page URL and visible UI state.
