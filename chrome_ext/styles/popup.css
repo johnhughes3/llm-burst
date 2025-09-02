@@ -6,7 +6,8 @@
 /* Popup constraints */
 html, body {
   width: 360px;
-  min-height: 600px;  /* Increased to ensure send button is visible */
+  min-height: 650px;  /* Increased to ensure send button is visible */
+  max-height: 800px;  /* Prevent overly tall popup on some screens */
   margin: 0;
   padding: 0;
   overflow-x: hidden;
@@ -14,7 +15,7 @@ html, body {
 
 /* Adjust app container for popup */
 .app {
-  min-height: 600px;  /* Match body height */
+  min-height: 650px;  /* Match body height */
   background: var(--bg-secondary);
   display: flex;
   flex-direction: column;
@@ -37,6 +38,13 @@ html, body {
   bottom: 0;
   background: var(--bg-secondary);
   padding-bottom: calc(var(--spacing) * 2);
+}
+
+/* Ensure the primary send button remains visible at the bottom */
+.send-button {
+  position: sticky;
+  bottom: 0;
+  z-index: 10;
 }
 
 .header {
