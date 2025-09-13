@@ -294,8 +294,9 @@ export function renderApp({ mode = 'popup' } = {}) {
     createElement('main', { className: 'main' }, [
       createSessionSection(),
       createPromptSection(),
-      createOptionsSection(),  // Research & Incognito back in main view
-      // Inline footer directly under options so notices appear beneath toggles
+      createOptionsSection(),  // Research & Incognito
+      createAdvancedSection(), // Advanced directly after toggles
+      // Notices go beneath Advanced Options to free vertical space above
       createElement('div', { className: 'prompt__footer', id: 'inlinePromptFooter' }, [
         createElement('span', { 
           className: 'prompt__char-count',
@@ -309,7 +310,6 @@ export function renderApp({ mode = 'popup' } = {}) {
           'aria-live': 'polite'
         }, ['Draft saved'])
       ]),
-      createAdvancedSection(), // Providers and Title in advanced
       createStatusSection()
     ]),
     // Keep the send button outside the scroll area so content never

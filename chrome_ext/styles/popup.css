@@ -89,8 +89,11 @@ html, body {
 
 /* Trim space after the prompt specifically in popup */
 #promptSection { margin-bottom: calc(var(--spacing) * 0.5) !important; }
-/* Pull options closer to prompt */
-#optionsSection { margin-top: 0 !important; }
+/* Pull options closer to prompt and keep equal spacing to Advanced */
+#optionsSection { 
+  margin-top: 0 !important; 
+  margin-bottom: calc(var(--spacing) * 0.5) !important; /* equals prompt→options */
+}
 
 /* Compact prompt header and textarea */
 .prompt__header { margin-bottom: var(--spacing) !important; }
