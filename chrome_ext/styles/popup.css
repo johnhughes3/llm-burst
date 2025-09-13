@@ -38,15 +38,20 @@ html, body {
 
 /* Footer send bar stays outside the scroll area */
 .send-bar {
-  padding: calc(var(--spacing) * 1.25);
+  padding: calc(var(--spacing) * 1.0);
   border-top: 1px solid var(--border);
   background: var(--bg-secondary);
 }
-.send-button { background: linear-gradient(135deg, var(--accent-primary) 0%, #6366f1 100%); }
+.send-button { 
+  background: linear-gradient(135deg, var(--accent-primary) 0%, #6366f1 100%);
+  padding: calc(var(--spacing) * 1.5) calc(var(--spacing) * 2.5); /* slightly shorter */
+}
 
 .header {
-  padding: calc(var(--spacing) * 1.5);
+  padding: calc(var(--spacing) * 1.25);
 }
+.header__logo-icon { width: 28px; height: 28px; }
+.header__brand { font-size: 16px; }
 
 /* Adjust provider grid for narrow width */
 .providers {
