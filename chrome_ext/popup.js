@@ -225,9 +225,15 @@
       if (typeof settings.defaultIncognito === 'boolean' && els.incognito) {
         els.incognito.checked = settings.defaultIncognito;
       }
-      if (Array.isArray(settings.defaultProviders)) {
+      if (Array.isArray(settings.defaultProviders) && settings.defaultProviders.length > 0) {
         console.log('[llm-burst] Loading default providers:', settings.defaultProviders);
         setProviders(settings.defaultProviders);
+        if (els.research?.checked) {
+          deselectProvider('GROK');
+        }
+      } else {
+        // No saved defaults: select all providers for a new conversation
+        ensureDefaultProvidersForNewSession();
       }
     } catch (e) {
       console.error('[llm-burst] Failed to load defaults:', e);
@@ -289,6 +295,38 @@
         pill.classList.toggle('provider-pill--selected', cb.checked);
       }
     });
+  }
+
+  function getAllProviderIds() {
+    const ids = new Set();
+    document.querySelectorAll('.provider-card__checkbox, .provider-pill__checkbox').forEach(cb => {
+      const id = cb.getAttribute('data-provider');
+      if (id) ids.add(id);
+    });
+    return Array.from(ids);
+  }
+
+  function deselectProvider(id) {
+    const sel = `.provider-card__checkbox[data-provider="${id}"] , .provider-pill__checkbox[data-provider="${id}"]`;
+    document.querySelectorAll(sel).forEach(cb => {
+      cb.checked = false;
+      const card = cb.closest('.provider-card');
+      if (card) card.classList.remove('provider-card--selected');
+      const pill = cb.closest('.provider-pill');
+      if (pill) pill.classList.remove('provider-pill--selected');
+    });
+  }
+
+  function ensureDefaultProvidersForNewSession() {
+    const isNew = !els.sessionSelect || els.sessionSelect.value === '__new__';
+    if (!isNew) return;
+    const selected = getSelectedProviders();
+    if (selected.length === 0) {
+      setProviders(getAllProviderIds());
+    }
+    if (els.research?.checked) {
+      deselectProvider('GROK');
+    }
   }
 
   // Load sessions from storage
@@ -566,7 +604,16 @@
         }
       });
     }
-    
+
+    // Research toggle: on enabling, deselect GROK once (user can reselect)
+    if (els.research) {
+      els.research.addEventListener('change', () => {
+        if (els.research.checked) {
+          deselectProvider('GROK');
+        }
+      });
+    }
+
     // Clear button
     if (els.clearBtn) {
       els.clearBtn.addEventListener('click', handleClear);
