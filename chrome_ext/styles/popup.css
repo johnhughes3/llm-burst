@@ -23,6 +23,7 @@ html, body {
   background: var(--bg-secondary);
   display: flex;
   flex-direction: column;
+  overflow: hidden; /* prevent children from creating extra scroll space */
 }
 
 /* Compact spacing for popup */
@@ -101,6 +102,10 @@ html, body {
   margin-top: 0 !important; 
   margin-bottom: calc(var(--spacing) * 0.5) !important; /* equals prompt→options */
 }
+
+/* Ensure advanced block + inline footer don't reserve extra space */
+#advancedSection { margin-bottom: 0 !important; }
+#inlinePromptFooter { margin-top: calc(var(--spacing) * 0.5); margin-bottom: 0; }
 
 /* Compact prompt header and textarea */
 .prompt__header { margin-bottom: var(--spacing) !important; }
