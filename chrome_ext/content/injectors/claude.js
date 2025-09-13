@@ -41,13 +41,13 @@
   // ---------------------------------------------------------------------------
   // Helper functions for Research and Incognito modes
   // ---------------------------------------------------------------------------
-  async function enableResearchMode(onSuccess, onFailure) {
+  async function enableResearchMode() {
     try {
       console.log('Attempting to enable Research mode on Claude...');
 
-      // Wait for the Research button to appear (up to 10 seconds)
+      // Wait for the Research button to appear (up to 15 seconds - longer for multi-tab scenarios)
       let researchButton = null;
-      const maxAttempts = 20;
+      const maxAttempts = 30;
 
       for (let i = 0; i < maxAttempts; i++) {
         // Try multiple selectors for the Research button
@@ -74,36 +74,37 @@
         researchButton.click();
 
         // Wait to verify activation
-        setTimeout(() => {
-          // Check if research mode is active (button might change state)
-          const isActive = researchButton.getAttribute('aria-pressed') === 'true' ||
-                          researchButton.classList.contains('active') ||
-                          document.querySelector('[data-state="active"][aria-label="Research"]');
+        await wait(700);
 
-          if (isActive) {
-            console.log('✅ Research mode successfully activated on Claude');
-          } else {
-            console.log('⚠️ Research button clicked, activation status unclear');
-          }
-          onSuccess();
-        }, 500);
+        // Check if research mode is active (button might change state)
+        const isActive = researchButton.getAttribute('aria-pressed') === 'true' ||
+                        researchButton.classList.contains('active') ||
+                        document.querySelector('[data-state="active"][aria-label="Research"]');
+
+        if (isActive) {
+          console.log('✅ Research mode successfully activated on Claude');
+          return true;
+        } else {
+          console.log('⚠️ Research button clicked, activation status unclear');
+          return true; // Still return true since we clicked it
+        }
       } else {
-        console.log('Could not find Research button after waiting');
-        onFailure();
+        console.log('Could not find Research button after waiting 15 seconds');
+        return false;
       }
     } catch (error) {
       console.error(`Error enabling Research mode: ${error}`);
-      onFailure();
+      return false;
     }
   }
 
-  async function enableIncognitoMode(onSuccess, onFailure) {
+  async function enableIncognitoMode() {
     try {
       console.log('Attempting to enable Incognito mode on Claude...');
 
-      // Wait for the incognito button to appear (up to 10 seconds)
+      // Wait for the incognito button to appear (up to 15 seconds - longer for multi-tab scenarios)
       let incognitoButton = null;
-      const maxAttempts = 20;
+      const maxAttempts = 30;
 
       for (let i = 0; i < maxAttempts; i++) {
         // Try multiple selectors for the incognito button
@@ -133,27 +134,43 @@
         console.log('Found Incognito button, clicking...', incognitoButton);
         incognitoButton.click();
 
-        // Wait to verify activation by checking URL or UI changes
-        setTimeout(() => {
-          const isIncognito = window.location.href.includes('incognito') ||
-                             document.querySelector('.incognito-indicator') ||
-                             document.body.textContent.includes('Incognito chat') ||
-                             document.body.textContent.includes('whoever you are');
+        // Wait for page to update and verify activation
+        await wait(1500); // Increased wait time for page update
 
-          if (isIncognito) {
-            console.log('✅ Incognito mode successfully activated on Claude');
+        const isIncognito = window.location.href.includes('incognito') ||
+                           document.querySelector('.incognito-indicator') ||
+                           document.body.textContent.includes('Incognito chat') ||
+                           document.body.textContent.includes('whoever you are');
+
+        if (isIncognito) {
+          console.log('✅ Incognito mode successfully activated on Claude');
+
+          // Wait a bit more for the page to fully stabilize after incognito activation
+          await wait(1000);
+          return true;
+        } else {
+          console.log('⚠️ Incognito button clicked but activation not confirmed, waiting longer...');
+
+          // Try waiting a bit more and check again
+          await wait(2000);
+          const isIncognitoRetry = window.location.href.includes('incognito') ||
+                                   document.body.textContent.includes('Incognito chat');
+
+          if (isIncognitoRetry) {
+            console.log('✅ Incognito mode activated after additional wait');
+            return true;
           } else {
-            console.log('⚠️ Incognito button clicked, activation status unclear');
+            console.log('❌ Incognito mode activation failed');
+            return false;
           }
-          onSuccess();
-        }, 1000); // Longer wait for page to update
+        }
       } else {
-        console.log('Could not find Incognito button after waiting');
-        onFailure();
+        console.log('Could not find Incognito button after waiting 15 seconds');
+        return false;
       }
     } catch (error) {
       console.error(`Error enabling Incognito mode: ${error}`);
-      onFailure();
+      return false;
     }
   }
 
@@ -184,32 +201,28 @@
 
       // Step 1: Enable incognito mode if requested (must be done first)
       if (enableIncognito) {
-        await enableIncognitoMode(() => {
+        const incognitoSuccess = await enableIncognitoMode();
+        if (incognitoSuccess) {
           console.log('Incognito mode enabled successfully');
-        }, () => {
+          // Extra wait after incognito to ensure page is fully ready
+          await wait(1000);
+        } else {
           console.log('Could not enable Incognito mode, continuing anyway');
-        });
+        }
       }
 
       // Step 2: Enable research mode if requested
-      let automationChain = Promise.resolve();
-
       if (enableResearch) {
-        automationChain = automationChain.then(() => {
-          return new Promise((innerResolve) => {
-            enableResearchMode(() => {
-              console.log('Research mode enabled successfully');
-              innerResolve();
-            }, () => {
-              console.log('Could not enable Research mode, continuing anyway');
-              innerResolve();
-            });
-          });
-        });
+        const researchSuccess = await enableResearchMode();
+        if (researchSuccess) {
+          console.log('Research mode enabled successfully');
+        } else {
+          console.log('Could not enable Research mode, continuing anyway');
+        }
       }
 
-      // Step 2: Insert text and submit
-      automationChain
+      // Step 3: Insert text and submit
+      const automationChain = Promise.resolve()
         .then(() => {
           try {
             const editor = document.querySelector('.ProseMirror');
