@@ -305,6 +305,11 @@
   margin-top: calc(var(--spacing) * 1);
 }
 
+/* Force single-line layout when space allows */
+.providers--nowrap {
+  flex-wrap: nowrap;
+}
+
 .provider-card {
   position: relative;
   padding: calc(var(--spacing) * 1.5);
@@ -321,10 +326,11 @@
 
 /* Compact provider cards for inline display */
 .provider-card--compact {
-  padding: calc(var(--spacing) * 1) calc(var(--spacing) * 1.5);
+  padding: calc(var(--spacing) * 0.75) calc(var(--spacing) * 1);
   flex-direction: row;
-  gap: calc(var(--spacing) * 0.75);
-  min-width: 80px;
+  gap: calc(var(--spacing) * 0.5);
+  min-width: 72px;
+  flex: 1 1 0;
 }
 
 .provider-card:hover {
@@ -370,6 +376,9 @@
   font-size: 12px;
   font-weight: 500;
   color: var(--text-secondary);
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
 }
 
 .provider-card--compact .provider-card__name {
@@ -417,6 +426,27 @@
   color: var(--text-primary);
   font-size: 14px;
   transition: all var(--animation-duration) var(--animation-timing);
+}
+
+/* Inline title row */
+.title-inline {
+  display: flex;
+  align-items: center;
+  gap: calc(var(--spacing) * 1);
+}
+
+.section__label--inline {
+  margin: 0;
+  white-space: nowrap;
+}
+
+.title-input--inline {
+  flex: 1 1 auto;
+  min-width: 0;
+}
+
+.title-inline__refresh {
+  margin-left: auto;
 }
 
 .title-input:focus {

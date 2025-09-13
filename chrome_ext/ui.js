@@ -78,11 +78,11 @@ function createSessionSection() {
     createElement('label', { 
       className: 'section__label',
       for: 'sessionSelect'
-    }, ['Session']),
+    }, ['Chat']),
     createElement('select', {
       className: 'session-select',
       id: 'sessionSelect',
-      'aria-label': 'Select conversation session'
+      'aria-label': 'Select chat'
     }, [
       createElement('option', { value: '__new__', selected: true }, ['New conversation'])
     ])
@@ -192,10 +192,9 @@ function createAdvancedSection() {
         'Advanced Options'
       ]),
       createElement('div', { className: 'advanced-options__content' }, [
-        // Provider selection - now on one line but with card appearance
+        // Provider selection on one line (no explicit label)
         createElement('div', { id: 'providerSection' }, [
-          createElement('h3', { className: 'section__label' }, ['AI Providers']),
-          createElement('div', { className: 'providers providers--inline' }, 
+          createElement('div', { className: 'providers providers--inline providers--nowrap' }, 
             providers.map(provider => 
               createElement('label', {
                 className: 'provider-card provider-card--compact',
@@ -215,15 +214,24 @@ function createAdvancedSection() {
             )
           )
         ]),
-        // Title section
+        // Title section (inline: label, input, refresh at right)
         createElement('div', { className: 'title-row', id: 'titleSection' }, [
-          createElement('div', { className: 'prompt__header' }, [
+          createElement('div', { className: 'title-inline' }, [
             createElement('label', {
-              className: 'section__label',
+              className: 'section__label section__label--inline',
               for: 'groupTitle'
-            }, ['Session Title']),
+            }, ['Chat']),
+            createElement('input', {
+              type: 'text',
+              className: 'title-input title-input--inline',
+              id: 'groupTitle',
+              placeholder: 'Auto-generated from prompt...',
+              maxlength: '80',
+              'aria-label': 'Chat title',
+              'aria-describedby': 'titleHint'
+            }),
             createElement('button', {
-              className: 'btn btn--icon',
+              className: 'btn btn--icon title-inline__refresh',
               id: 'autonameBtn',
               'aria-label': 'Auto-generate title'
             }, [
@@ -234,16 +242,7 @@ function createAdvancedSection() {
               }),
               createElement('span', { id: 'autonameIcon' }, ['↻'])
             ])
-          ]),
-          createElement('input', {
-            type: 'text',
-            className: 'title-input',
-            id: 'groupTitle',
-            placeholder: 'Auto-generated from prompt...',
-            maxlength: '80',
-            'aria-label': 'Session title',
-            'aria-describedby': 'titleHint'
-          })
+          ])
         ])
       ])
     ])
@@ -384,6 +383,6 @@ function updateUIState() {
   // Adjust textarea rows
   const promptTextarea = document.getElementById('prompt');
   if (promptTextarea) {
-    promptTextarea.rows = isNewSession ? 8 : 12;
+    promptTextarea.rows = isNewSession ? 6 : 10;
   }
 }
