@@ -79,6 +79,403 @@ function withTimeout(promise, ms, message = 'Operation timed out') {
   ]);
 }
 
+// ============================================================================
+// Chrome Debugger (CDP) helpers for trusted clicks
+// ============================================================================
+
+const CDP_VERSION = '1.3';
+
+function dbgAttach(tabId) {
+  return new Promise((resolve, reject) => {
+    chrome.debugger.attach({ tabId }, CDP_VERSION, () => {
+      if (chrome.runtime.lastError) return reject(new Error(chrome.runtime.lastError.message));
+      resolve();
+    });
+  });
+}
+
+function dbgDetach(tabId) {
+  return new Promise((resolve) => {
+    chrome.debugger.detach({ tabId }, () => resolve());
+  });
+}
+
+function dbgSend(tabId, method, params = {}) {
+  return new Promise((resolve, reject) => {
+    chrome.debugger.sendCommand({ tabId }, method, params, (result) => {
+      if (chrome.runtime.lastError) return reject(new Error(chrome.runtime.lastError.message));
+      resolve(result);
+    });
+  });
+}
+
+async function dbgEval(tabId, expression) {
+  const res = await dbgSend(tabId, 'Runtime.evaluate', {
+    expression,
+    returnByValue: true,
+    awaitPromise: true
+  });
+  if (res?.exceptionDetails) {
+    throw new Error('Evaluation failed');
+  }
+  return res?.result?.value ?? null;
+}
+
+async function dbgWaitFor(tabId, expression, { timeout = 3000, interval = 100 } = {}) {
+  const start = Date.now();
+  while (Date.now() - start < timeout) {
+    try {
+      const v = await dbgEval(tabId, expression);
+      if (v) return v;
+    } catch { /* ignore */ }
+    await delay(interval);
+  }
+  return null;
+}
+
+async function dbgGetCenterXYBySelector(tabId, selector) {
+  const expr = `(() => {
+    const el = document.querySelector(${JSON.stringify(selector)});
+    if (!el) return null;
+    const r = el.getBoundingClientRect();
+    if (!r || !r.width || !r.height) return null;
+    el.scrollIntoView({ block: 'center', inline: 'center', behavior: 'instant' });
+    const rr = el.getBoundingClientRect();
+    return { x: Math.round(rr.left + rr.width/2), y: Math.round(rr.top + rr.height/2) };
+  })();`;
+  return dbgEval(tabId, expr);
+}
+
+async function dbgGetCenterXYForMenuItem(tabId, labels = ['deep research', 'research']) {
+  const expr = `(() => {
+    const labs = ${JSON.stringify(labels.map((s) => s.toLowerCase()))};
+    const norm = (s) => (s || '').toLowerCase().replace(/\s+/g, ' ').trim();
+
+    // First check in portal/overlay containers
+    const portals = document.querySelectorAll('[data-radix-portal], [data-radix-popper-content-wrapper], [role="dialog"]');
+    let root = document;
+    if (portals.length > 0) {
+      root = portals[portals.length - 1]; // Use the most recent portal
+    }
+
+    // Expanded selector to catch all possible menu items
+    const selectors = [
+      '[role="menuitemradio"]',
+      '[role="menuitem"]',
+      '[role="option"]',
+      '[data-radix-collection-item]',
+      'button[role="menuitemradio"]',
+      'button[role="menuitem"]',
+      'div[role="menuitemradio"]',
+      'div[role="menuitem"]'
+    ];
+
+    const items = Array.from(root.querySelectorAll(selectors.join(', ')));
+
+    // Also check in the main document if we didn't find in portal
+    if (items.length === 0 && root !== document) {
+      items.push(...Array.from(document.querySelectorAll(selectors.join(', '))));
+    }
+
+    console.log('[CDP] Found', items.length, 'menu items');
+
+    for (const el of items) {
+      const txt = norm(el.innerText || el.textContent || '');
+      const aria = norm(el.getAttribute('aria-label') || '');
+
+      console.log('[CDP] Checking item:', txt || aria);
+
+      if (labs.some((l) => txt.includes(l) || aria.includes(l))) {
+        console.log('[CDP] Found matching item:', txt || aria);
+
+        // Make sure element is visible
+        if (el.offsetParent === null) {
+          console.log('[CDP] Element is hidden, skipping');
+          continue;
+        }
+
+        el.scrollIntoView({ block: 'center', inline: 'center', behavior: 'instant' });
+
+        // Wait a moment for scroll to complete
+        return new Promise(resolve => {
+          setTimeout(() => {
+            const r = el.getBoundingClientRect();
+            if (!r || r.width === 0 || r.height === 0) {
+              console.log('[CDP] Element has no dimensions');
+              resolve(null);
+              return;
+            }
+
+            // Find the actual clickable area - check for text/svg elements inside
+            const textEl = el.querySelector('span, div, p') || el;
+            const textRect = textEl.getBoundingClientRect();
+
+            // Use text element position if available, otherwise use main element
+            const targetX = textRect.left + Math.min(30, textRect.width / 2);
+            const targetY = textRect.top + textRect.height / 2;
+
+            console.log('[CDP] Target coordinates:', targetX, targetY);
+
+            // Verify the click target
+            const elAt = document.elementFromPoint(targetX, targetY);
+            const isValid = elAt && (elAt === el || el.contains(elAt) || elAt.closest('[role="menuitemradio"], [role="menuitem"]') === el);
+
+            if (!isValid) {
+              console.log('[CDP] Click target verification failed, trying center');
+              // Fallback to center
+              resolve({
+                x: Math.round(r.left + r.width / 2),
+                y: Math.round(r.top + r.height / 2),
+                element: el.outerHTML.substring(0, 100)
+              });
+            } else {
+              resolve({
+                x: Math.round(targetX),
+                y: Math.round(targetY),
+                element: el.outerHTML.substring(0, 100)
+              });
+            }
+          }, 50);
+        });
+      }
+    }
+
+    console.log('[CDP] No matching menu item found');
+    return null;
+  })();`;
+  return dbgEval(tabId, expr);
+}
+
+async function dbgTrustedClickXY(tabId, x, y) {
+  await dbgSend(tabId, 'Input.dispatchMouseEvent', { type: 'mouseMoved', x, y, buttons: 1 });
+  await dbgSend(tabId, 'Input.dispatchMouseEvent', { type: 'mousePressed', x, y, button: 'left', buttons: 1, clickCount: 1 });
+  await dbgSend(tabId, 'Input.dispatchMouseEvent', { type: 'mouseReleased', x, y, button: 'left', buttons: 1, clickCount: 1 });
+}
+
+async function enableChatGPTResearchViaCDP(tabId, { timeoutMs = 6000 } = {}) {
+  console.log('[CDP] Starting ChatGPT Research mode activation via debugger...');
+  await dbgAttach(tabId);
+  try {
+    await dbgSend(tabId, 'Runtime.enable');
+    await dbgSend(tabId, 'DOM.enable');
+    await dbgSend(tabId, 'Console.enable');
+
+    // 1) Click the composer plus button
+    const plusXY = await dbgWaitFor(
+      tabId,
+      `(() => {
+        let el = document.querySelector('[data-testid="composer-plus-btn"]');
+        if (!el) {
+          const candidates = Array.from(document.querySelectorAll('button[aria-haspopup="menu"], button'));
+          for (const b of candidates) {
+            const r = b.getBoundingClientRect();
+            if (!r || !r.width || !r.height) continue;
+            const nearInput = document.querySelector('#prompt-textarea, .ProseMirror, [contenteditable="true"]');
+            if (nearInput) {
+              const ir = nearInput.getBoundingClientRect();
+              if (Math.abs(r.top - ir.top) < 140) { el = b; break; }
+            }
+          }
+        }
+        if (!el) return null;
+        el.scrollIntoView({ block: 'center', inline: 'center', behavior: 'instant' });
+        const rr = el.getBoundingClientRect();
+        return { x: Math.round(rr.left + rr.width/2), y: Math.round(rr.top + rr.height/2) };
+      })()`,
+      { timeout: timeoutMs }
+    );
+    if (!plusXY) return { ok: false, error: 'Plus button not found' };
+
+    // Move, then press after a short settle delay
+    await dbgSend(tabId, 'Input.dispatchMouseEvent', { type: 'mouseMoved', x: plusXY.x, y: plusXY.y });
+    await delay(100);
+    const plusXY2 = await dbgGetCenterXYBySelector(tabId, '[data-testid="composer-plus-btn"]');
+    const px = (plusXY2?.x ?? plusXY.x), py = (plusXY2?.y ?? plusXY.y);
+    await dbgSend(tabId, 'Input.dispatchMouseEvent', { type: 'mousePressed', x: px, y: py, button: 'left', buttons: 1, clickCount: 1 });
+    await dbgSend(tabId, 'Input.dispatchMouseEvent', { type: 'mouseReleased', x: px, y: py, button: 'left', buttons: 0, clickCount: 1 });
+    await delay(300);
+
+    // 2) Wait for menu to appear
+    const menuAppeared = await dbgWaitFor(tabId, `document.querySelector('[role="menu"], [data-radix-portal], [role="listbox"], [data-state="open"]') ? true : false`, { timeout: timeoutMs });
+    if (!menuAppeared) {
+      return { ok: false, error: 'Menu did not appear after clicking plus' };
+    }
+
+    console.log('[CDP] Menu appeared, trying keyboard navigation approach...');
+
+    // NEW APPROACH: Use keyboard navigation to select Deep Research
+    // First, try typing "d" to jump to Deep Research
+    console.log('[CDP] Trying to jump to Deep Research by typing "d"...');
+    await dbgSend(tabId, 'Input.dispatchKeyEvent', {
+      type: 'keyDown',
+      key: 'd',
+      code: 'KeyD',
+      windowsVirtualKeyCode: 68,
+      nativeVirtualKeyCode: 68
+    });
+    await dbgSend(tabId, 'Input.dispatchKeyEvent', {
+      type: 'keyUp',
+      key: 'd',
+      code: 'KeyD',
+      windowsVirtualKeyCode: 68,
+      nativeVirtualKeyCode: 68
+    });
+    await delay(200);
+
+    // Check if Deep Research is now focused
+    const deepResearchFocused = await dbgEval(tabId, `(() => {
+      const focused = document.activeElement;
+      if (focused) {
+        const text = (focused.textContent || '').toLowerCase();
+        return text.includes('deep research');
+      }
+      return false;
+    })()`);
+
+    if (!deepResearchFocused) {
+      console.log('[CDP] "d" key didn\'t focus Deep Research, trying arrow navigation...');
+
+      // Make sure the menu has focus
+      await dbgEval(tabId, `(() => {
+        const menu = document.querySelector('[role="menu"]');
+        if (menu) {
+          const firstItem = menu.querySelector('[role="menuitemradio"], [role="menuitem"]');
+          if (firstItem) firstItem.focus();
+        }
+      })()`);
+      await delay(100);
+
+      // Find Deep Research position in menu
+      const deepResearchIndex = await dbgEval(tabId, `(() => {
+        const items = Array.from(document.querySelectorAll('[role="menuitemradio"], [role="menuitem"]'));
+        const index = items.findIndex(item => {
+          const text = (item.textContent || '').toLowerCase();
+          return text.includes('deep research') || text === 'deep research';
+        });
+        console.log('[CDP] Deep Research found at index:', index, 'of', items.length, 'items');
+        return index;
+      })()`);
+
+      if (deepResearchIndex === -1) {
+        console.log('[CDP] Deep Research not found in menu items');
+        return { ok: false, error: 'Deep research option not found in menu' };
+      }
+
+      console.log('[CDP] Navigating to Deep Research item at index', deepResearchIndex);
+
+      // Navigate down to the Deep Research item using arrow keys
+      for (let i = 0; i < deepResearchIndex; i++) {
+        await dbgSend(tabId, 'Input.dispatchKeyEvent', {
+          type: 'keyDown',
+          key: 'ArrowDown',
+          code: 'ArrowDown',
+          windowsVirtualKeyCode: 40,
+          nativeVirtualKeyCode: 40
+        });
+        await dbgSend(tabId, 'Input.dispatchKeyEvent', {
+          type: 'keyUp',
+          key: 'ArrowDown',
+          code: 'ArrowDown',
+          windowsVirtualKeyCode: 40,
+          nativeVirtualKeyCode: 40
+        });
+        await delay(50);
+      }
+    } else {
+      console.log('[CDP] Deep Research appears to be focused after typing "d"');
+    }
+
+    // Press Enter to select (or Space for radio buttons)
+    console.log('[CDP] Pressing Enter to select Deep Research...');
+    await dbgSend(tabId, 'Input.dispatchKeyEvent', {
+      type: 'keyDown',
+      key: 'Enter',
+      code: 'Enter',
+      windowsVirtualKeyCode: 13,
+      nativeVirtualKeyCode: 13
+    });
+    await dbgSend(tabId, 'Input.dispatchKeyEvent', {
+      type: 'keyUp',
+      key: 'Enter',
+      code: 'Enter',
+      windowsVirtualKeyCode: 13,
+      nativeVirtualKeyCode: 13
+    });
+    await delay(300);
+
+    // Check if menu closed
+    const menuClosedAfterEnter = await dbgEval(tabId, `!document.querySelector('[role="menu"], [data-radix-portal]')`);
+
+    if (!menuClosedAfterEnter) {
+      console.log('[CDP] Menu still open after Enter, trying Space key...');
+      // Try Space key which often works for radio buttons
+      await dbgSend(tabId, 'Input.dispatchKeyEvent', {
+        type: 'keyDown',
+        key: ' ',
+        code: 'Space',
+        windowsVirtualKeyCode: 32,
+        nativeVirtualKeyCode: 32
+      });
+      await dbgSend(tabId, 'Input.dispatchKeyEvent', {
+        type: 'keyUp',
+        key: ' ',
+        code: 'Space',
+        windowsVirtualKeyCode: 32,
+        nativeVirtualKeyCode: 32
+      });
+      await delay(300);
+    }
+
+
+    // 4) Verify activation heuristically
+    console.log('[CDP] Verifying Research mode activation...');
+    const activated = await dbgWaitFor(
+      tabId,
+      `(() => {
+        // Check heading change
+        const h1 = document.querySelector('h1');
+        if (h1 && /what are you researching/i.test(h1.textContent || '')) {
+          console.log('[CDP] ✓ Heading changed to research mode');
+          return true;
+        }
+
+        // Check for Research pill/tag
+        const pills = document.querySelectorAll('button, [role="button"], .pill, .tag, .badge');
+        for (const pill of pills) {
+          const text = (pill.textContent || '').toLowerCase();
+          const aria = (pill.getAttribute('aria-label') || '').toLowerCase();
+          if (text.includes('research') || aria.includes('research')) {
+            console.log('[CDP] ✓ Research pill/tag found');
+            return true;
+          }
+        }
+
+        // Check for GitHub Sources button (appears in research mode)
+        const sources = Array.from(document.querySelectorAll('button')).find(b =>
+          b.textContent && b.textContent.includes('Sources')
+        );
+        if (sources) {
+          console.log('[CDP] ✓ Sources button found');
+          return true;
+        }
+
+        return false;
+      })()`,
+      { timeout: 2500 }
+    );
+
+    if (activated) {
+      console.log('[CDP] ✅ Research mode successfully activated!');
+    } else {
+      console.log('[CDP] ⚠️ Could not verify Research mode activation');
+    }
+
+    return { ok: true, activated: !!activated };
+  } finally {
+    try { await dbgDetach(tabId); } catch {}
+  }
+}
+
 function generateSessionId() {
   return `burst-${Date.now()}-${Math.random().toString(36).slice(2, 8)}`;
 }
@@ -664,6 +1061,24 @@ chrome.runtime.onMessage.addListener((message, sender, sendResponse) => {
         // -------------------------------------------------------------------
         case 'llmburst-ping': {
           sendResponse({ ok: true, version: EXTENSION_VERSION });
+          break;
+        }
+
+        // -------------------------------------------------------------------
+        // ChatGPT: Enable Research via CDP trusted clicks
+        // -------------------------------------------------------------------
+        case 'llmburst-chatgpt-enable-research': {
+          const tabId = sender?.tab?.id || params.tabId;
+          if (!tabId) {
+            sendResponse({ ok: false, error: 'No tabId available to debug' });
+            break;
+          }
+          try {
+            const result = await enableChatGPTResearchViaCDP(tabId, { timeoutMs: params.timeoutMs || 6000 });
+            sendResponse({ ok: result.ok, activated: !!result.activated, error: result.error || null });
+          } catch (e) {
+            sendResponse({ ok: false, error: e?.message || String(e) });
+          }
           break;
         }
 

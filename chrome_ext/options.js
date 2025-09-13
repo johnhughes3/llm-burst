@@ -54,6 +54,8 @@
     els.saveDefaultsBtn = $('saveDefaultsBtn');
 
     els.status = $('status');
+
+    els.debuggerStatus = $('debuggerStatus');
   }
 
   async function loadOptions() {
@@ -128,12 +130,22 @@
     els.resetBtn.addEventListener('click', () => {
       restoreDefaults();
     });
+
+    // No handlers required; permission is now required in manifest
+  }
+
+  async function refreshDebuggerUI() {
+    if (els.debuggerStatus) {
+      els.debuggerStatus.textContent = 'Trusted clicks are enabled by default.';
+      els.debuggerStatus.className = 'status success';
+    }
   }
 
   async function init() {
     captureElements();
     bindEvents();
     await loadOptions();
+    await refreshDebuggerUI();
   }
 
   document.addEventListener('DOMContentLoaded', init);

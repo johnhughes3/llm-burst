@@ -58,23 +58,16 @@
         console.log(`Starting ChatGPT automation. Research mode: ${useResearch}, Incognito mode: ${useIncognito}`);
 
         // Function to handle research mode and prompt input
-        function handleResearchAndPrompt() {
+        async function handleResearchAndPrompt() {
           if (useResearch === 'Yes') {
             console.log('Research mode requested. Enabling deep research mode...');
-            enableDeepResearchMode()
-              .then(success => {
-                if (success) {
-                  console.log('Deep research mode enabled successfully');
-                  setTimeout(submitPrompt, 1200);
-                } else {
-                  console.warn('Could not enable deep research mode. Continuing with standard mode...');
-                  submitPrompt();
-                }
-              })
-              .catch(error => {
-                console.warn('Error enabling deep research mode:', error);
-                submitPrompt();
-              });
+            const ok = await enableDeepResearchMode();
+            if (!ok) {
+              console.warn('Research mode not activated. Will NOT submit.');
+              throw new Error('Research mode was requested but not activated; submission aborted');
+            }
+            console.log('Deep research mode enabled successfully');
+            setTimeout(submitPrompt, 1200);
           } else {
             submitPrompt();
           }
@@ -102,10 +95,10 @@
           }
 
           setTimeout(() => {
-            handleResearchAndPrompt();
+            Promise.resolve(handleResearchAndPrompt()).catch(err => reject(err));
           }, 800);
         } else {
-          handleResearchAndPrompt();
+          Promise.resolve(handleResearchAndPrompt()).catch(err => reject(err));
         }
 
         // Enable research mode by selecting Pro Research model
@@ -129,7 +122,42 @@
           }
 
           try {
-            // First try: Select Pro Research model from model selector
+            // First try: CDP trusted-click path via background debugger API
+            try {
+              if (typeof chrome !== 'undefined' && chrome.runtime?.sendMessage) {
+                console.log('[CDP] Requesting background to enable Research via trusted clicks...');
+                const resp = await chrome.runtime.sendMessage({ type: 'llmburst-chatgpt-enable-research', timeoutMs: 7000 });
+                if (resp && resp.ok) {
+                  console.log('[CDP] Research click sequence completed', resp);
+                  const pill = await waitForElement('button.__composer-pill[aria-label*="Research" i], [aria-label*="Research" i].__composer-pill, .composer-mode-pill, [data-testid*="research"]', 4000);
+                  if (pill) return true;
+                  console.warn('CDP click completed, but Research pill not visible yet');
+                } else {
+                  console.warn('[CDP] Research click failed or unsupported:', resp?.error || 'unknown');
+                }
+              }
+            } catch (e) {
+              console.warn('[CDP] Exception calling background enable:', e);
+            }
+
+            // Try a direct Research toggle if present (role switch/button)
+            try {
+              const toggle = Array.from(document.querySelectorAll('[role="switch"],[aria-pressed]'))
+                .find((el) => {
+                  const label = (el.getAttribute('aria-label') || el.textContent || '').toLowerCase();
+                  return label.includes('research');
+                });
+              if (toggle) {
+                const state = (toggle.getAttribute('aria-checked') || toggle.getAttribute('aria-pressed') || 'false').toString();
+                if (state !== 'true') {
+                  console.log('Found research toggle, clicking...');
+                  toggle.click();
+                  const pill = await waitForElement('button.__composer-pill[aria-label*="Research" i], [aria-label*="Research" i].__composer-pill, .composer-mode-pill, [data-testid*="research"]', 3000);
+                  if (pill) return true;
+                }
+              }
+            } catch {}
+
             let modelButton = document.querySelector('button[aria-label*="Model selector"]') ||
                              document.querySelector('button[aria-haspopup="menu"]') ||
                              Array.from(document.querySelectorAll('button')).find(b => 
@@ -159,9 +187,12 @@
               if (proOption) {
                 console.log('Clicking Pro Research option...');
                 proOption.click();
-                await sleep(500);
-                console.log('Pro Research model selected successfully!');
-                return true;
+                const pill = await waitForElement('button.__composer-pill[aria-label*="Research" i], [aria-label*="Research" i].__composer-pill, .composer-mode-pill, [data-testid*="research"]', 3000);
+                if (pill) {
+                  console.log('Pro Research model selected successfully!');
+                  return true;
+                }
+                console.warn('Model changed but Research pill not found');
               } else {
                 console.log('Pro Research option not found in model menu');
                 // Close the menu if it's still open
@@ -248,31 +279,12 @@
               if (deepResearchOption) {
                 console.log('Clicking Deep research option...');
                 deepResearchOption.click();
-
-                await sleep(800);
-
-                const verifyActivation = () => {
-                  const isChecked =
-                    deepResearchOption.getAttribute('aria-checked') === 'true' ||
-                    deepResearchOption.getAttribute('data-state') === 'checked';
-
-                  const visualIndicators = document.querySelectorAll(
-                    '.composer-mode-pill, [data-testid*="research"], .mode-indicator'
-                  );
-
-                  const menuClosed = !document.querySelector('[role="menu"][data-state="open"]');
-
-                  return isChecked || visualIndicators.length > 0 || menuClosed;
-                };
-
-                if (verifyActivation()) {
-                  console.log('Deep research mode successfully activated!');
-                  return true;
-                } else {
-                  console.log('Deep research mode enabled (awaiting confirmation)');
-                  await sleep(500);
+                const pill = await waitForElement('button.__composer-pill[aria-label*="Research" i], [aria-label*="Research" i].__composer-pill, .composer-mode-pill, [data-testid*="research"]', 3000);
+                if (pill) {
+                  console.log('Deep research mode successfully activated (pill visible).');
                   return true;
                 }
+                console.warn('Deep research item clicked but pill not visible');
               } else {
                 console.log('Deep research option not found in menu');
               }
@@ -397,9 +409,13 @@
             if (deepResearchOption) {
               console.log('Clicking Deep research option...');
               deepResearchOption.click();
-              await sleep(1000);
-              console.log('Deep research enabled via slash command!');
-              return true;
+              const pill = await waitForElement('button.__composer-pill[aria-label*="Research" i], [aria-label*="Research" i].__composer-pill, .composer-mode-pill, [data-testid*="research"]', 3000);
+              if (pill) {
+                console.log('Deep research enabled via slash command!');
+                return true;
+              }
+              console.warn('Slash: clicked item but pill not visible');
+              return false;
             } else {
               console.log('Deep research option not found in command menu');
               try {

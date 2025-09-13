@@ -1,7 +1,7 @@
 {
   "manifest_version": 3,
   "name": "LLM Burst Helper",
-  "version": "1.0.0",
+  "version": "1.0.1",
   "description": "Manages tabs and windows for llm-burst, including tab grouping and window management.",
   "permissions": [
     "tabs",
@@ -9,7 +9,8 @@
     "windows",
     "storage",
     "activeTab",
-    "clipboardRead"
+    "clipboardRead",
+    "debugger"
   ],
   "host_permissions": [
     "https://gemini.google.com/*",
