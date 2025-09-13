@@ -308,6 +308,7 @@
 /* Force single-line layout when space allows */
 .providers--nowrap {
   flex-wrap: nowrap;
+  margin-top: calc(var(--spacing) * 0.5); /* pull closer to top of advanced box */
 }
 
 .provider-card {
@@ -438,15 +439,20 @@
 .section__label--inline {
   margin: 0;
   white-space: nowrap;
+  font-size: 13px; /* match inline UI scale */
 }
 
 .title-input--inline {
   flex: 1 1 auto;
   min-width: 0;
+  padding: calc(var(--spacing) * 1); /* reduce height */
+  font-size: 13px;
+  line-height: 1.3;
 }
 
 .title-inline__refresh {
   margin-left: auto;
+  padding: calc(var(--spacing) * 0.75); /* visually match input height */
 }
 
 .title-input:focus {

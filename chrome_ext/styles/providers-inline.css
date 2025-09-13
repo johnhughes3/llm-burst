@@ -95,7 +95,8 @@
 }
 
 .advanced-options__content {
-  padding: calc(var(--spacing) * 2);
+  /* Tighter top padding to pull providers up */
+  padding: calc(var(--spacing) * 1) calc(var(--spacing) * 1.25) calc(var(--spacing) * 1);
   border-top: 1px solid var(--border);
   background: rgba(0, 0, 0, 0.2);
 }
@@ -143,7 +144,7 @@
 
 /* Title row */
 .title-row {
-  margin-top: calc(var(--spacing) * 2);
+  margin-top: calc(var(--spacing) * 1);
 }
 
 .title-input-group {

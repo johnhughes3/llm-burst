@@ -552,8 +552,9 @@
             els.prompt.focus();
             showInlineNotice('Pasted from clipboard');
             
-            // Auto-generate title after paste if conditions are met
-            if (state.isNewSession && !state.titleDirty && text.trim().length > 20) {
+            // Auto-generate title after paste only if Advanced Options is open and title is blank
+            if (state.isNewSession && !state.titleDirty && text.trim().length > 20 && 
+                els.advancedOptions && els.advancedOptions.open && !els.groupTitle.value) {
               setTimeout(() => generateTitle(), 500);
             }
           } else {
