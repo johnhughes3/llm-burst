@@ -5,17 +5,21 @@
 
 /* Popup constraints */
 html, body {
-  width: 360px;
-  min-height: 650px;  /* Increased to ensure send button is visible */
-  max-height: min(800px, 90vh);  /* Prevent overly tall popup; responsive on large screens */
+  width: 420px; /* widen a bit; Chrome allows up to 800px */
+  /* Chrome caps extension popups at 600px tall. Fix the
+     outer viewport to that height so only the inner content
+     scrolls, keeping the Send button visible. */
+  height: 600px;
+  max-height: 600px;
   margin: 0;
   padding: 0;
-  overflow-x: hidden;
+  overflow: hidden; /* prevent body scrolling; .main handles scroll */
 }
 
 /* Adjust app container for popup */
 .app {
-  min-height: 650px;  /* Match body height */
+  height: 100%;
+  min-height: 0; /* allow flex children to size correctly */
   background: var(--bg-secondary);
   display: flex;
   flex-direction: column;
@@ -23,26 +27,22 @@ html, body {
 
 /* Compact spacing for popup */
 .main {
-  padding: calc(var(--spacing) * 2);
-  gap: calc(var(--spacing) * 2);
-  flex: 1;
-  overflow-y: auto;  /* Allow scrolling if content is too tall */
+  padding: calc(var(--spacing) * 1.25);
+  gap: calc(var(--spacing) * 0.5); /* tighter vertical rhythm */
+  flex: 1 1 auto;
+  min-height: 0;       /* critical for sticky footer + inner scroll */
+  overflow-y: auto;    /* Only this area scrolls */
   display: flex;
   flex-direction: column;
 }
 
-/* Ensure the last content section can push content above the send button */
-.section:last-child {
-  margin-top: auto;  /* Push to bottom */
+/* Footer send bar stays outside the scroll area */
+.send-bar {
+  padding: calc(var(--spacing) * 1.25);
+  border-top: 1px solid var(--border);
+  background: var(--bg-secondary);
 }
-
-/* Ensure the primary send button remains visible at the bottom */
-.send-button {
-  position: sticky;
-  bottom: 0;
-  z-index: 20; /* Above section backgrounds */
-  background: linear-gradient(135deg, var(--accent-primary) 0%, #6366f1 100%);
-}
+.send-button { background: linear-gradient(135deg, var(--accent-primary) 0%, #6366f1 100%); }
 
 .header {
   padding: calc(var(--spacing) * 1.5);
@@ -61,20 +61,50 @@ html, body {
 }
 
 /* Compact sections */
-.section {
-  margin-bottom: calc(var(--spacing) * 2);
-}
+.main > .section { margin-bottom: calc(var(--spacing) * 1); }
 
 /* Hide keyboard shortcut in popup */
-.send-button__shortcut {
-  display: none;
-}
+.send-button__shortcut { display: none; }
 
 /* Compact toggle options */
-.options {
+.options { gap: calc(var(--spacing) * 0.5); }
+
+.toggle { padding: calc(var(--spacing) * 1); }
+
+/* Session row on one line */
+#sessionSection {
+  display: flex;
+  align-items: center;
   gap: var(--spacing);
 }
-
-.toggle {
-  padding: calc(var(--spacing) * 1.5);
+#sessionSection > .section__label { 
+  margin: 0; 
+  white-space: nowrap;
 }
+#sessionSection .session-select { 
+  flex: 1 1 auto; 
+  min-width: 0;
+  padding: calc(var(--spacing) * 1.25);
+}
+
+/* Trim space after the prompt specifically in popup */
+#promptSection { margin-bottom: calc(var(--spacing) * 0.5) !important; }
+/* Pull options closer to prompt */
+#optionsSection { margin-top: 0 !important; }
+
+/* Compact prompt header and textarea */
+.prompt__header { margin-bottom: var(--spacing) !important; }
+.section__label { margin-bottom: var(--spacing) !important; font-size: 13px; }
+.prompt__textarea { min-height: 84px; max-height: 200px; }
+.prompt__footer { margin-top: calc(var(--spacing) * 0.25); overflow: visible; }
+.prompt__draft-status {
+  display: inline-block;
+  padding: 2px 6px;
+  border-radius: 6px;
+  background: rgba(79, 140, 255, 0.12);
+  line-height: 1.2;
+  white-space: nowrap;
+}
+
+/* Compact advanced summary row when closed */
+.advanced-options__toggle { padding: calc(var(--spacing) * 1) calc(var(--spacing) * 1.5); }

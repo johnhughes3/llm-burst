@@ -41,75 +41,111 @@
   // ---------------------------------------------------------------------------
   // Ported logic: automateGeminiChat + helpers (submit)
   // ---------------------------------------------------------------------------
-  function enableDeepResearch(onSuccess, onFailure) {
+  async function enableDeepResearch(onSuccess, onFailure) {
     try {
-      // First click the Tools button to open the tools panel
-      const toolsButton = document.querySelector('button[aria-label="Tools"]') ||
-                         Array.from(document.querySelectorAll('button')).find(b => {
-                           const text = b.textContent || '';
-                           return text.trim() === 'Tools' || text.includes('Tools');
-                         });
-      
-      if (toolsButton) {
-        console.log('Found Tools button, clicking to open tools panel');
-        toolsButton.click();
-        
-        // Set a timeout to prevent hanging if panel doesn't appear
-        const panelTimeout = setTimeout(() => {
-          console.log('Tools panel timeout - trying fallback methods');
-          onFailure();
-        }, 3000); // 3 second timeout for panel to appear
-        
-        // Wait for the tools panel to appear and find Deep Research
-        setTimeout(() => {
-          clearTimeout(panelTimeout); // Clear timeout if we reach this point
-          
-          // Look for Deep Research button in the panel
-          const deepResearchButton = Array.from(document.querySelectorAll('button')).find(button => {
-            const text = button.textContent || '';
-            // Look for button with "Deep Research" text or travel_explore icon
-            const hasText = text.includes('Deep Research');
-            const hasIcon = button.querySelector('img[src*="travel_explore"], svg[data-icon*="travel"], [aria-label*="Deep Research"]');
-            return hasText || hasIcon;
-          });
-          
-          if (deepResearchButton) {
-            console.log('Found Deep Research button in tools panel, clicking it');
-            deepResearchButton.click();
-            setTimeout(onSuccess, 500);
-          } else {
-            console.log('Deep Research button not found in tools panel');
-            // Try fallback methods
-            
-            // Method 2: Try button with the travel_explore icon directly
-            const iconButtons = Array.from(document.querySelectorAll('button')).filter(button => {
-              const icon = button.querySelector('mat-icon[data-mat-icon-name="travel_explore"]');
-              return icon !== null;
-            });
+      console.log('Attempting to enable Deep Research mode on Gemini...');
 
-            if (iconButtons.length > 0) {
-              console.log('Found Deep Research button by icon, clicking it');
-              iconButtons[0].click();
-              setTimeout(onSuccess, 500);
-              return;
-            }
-            
-            // Method 3: Any button containing Deep Research text
+      // Wait for the Tools button to appear (up to 10 seconds)
+      let firstButton = null;
+      const maxAttempts = 20;
+      for (let i = 0; i < maxAttempts; i++) {
+        firstButton = document.querySelector('button.toolbox-drawer-button') ||
+                     document.querySelector('[aria-label*="Tools"]') ||
+                     document.querySelector('[aria-label*="toolbox"]') ||
+                     document.querySelector('[aria-label*="Toolbox"]') ||
+                     document.querySelector('button[jsname*="tool"]') ||
+                     document.querySelector('button.mdc-button.mat-mdc-button-base.toolbox-drawer-button') ||
+                     Array.from(document.querySelectorAll('button')).find(b => {
+                       const ariaLabel = (b.getAttribute('aria-label') || '').toLowerCase();
+                       const text = (b.textContent || '').toLowerCase();
+                       return ariaLabel.includes('tool') || text.includes('tools');
+                     });
+
+        if (firstButton) {
+          console.log(`Found Tools button after ${i * 500}ms`);
+          break;
+        }
+
+        console.log(`Waiting for Tools button... attempt ${i + 1}/${maxAttempts}`);
+        await wait(500);
+      }
+
+      if (firstButton) {
+        console.log('Found toolbox/Tools button, clicking...', firstButton);
+        firstButton.click();
+
+        // Wait for drawer to open and find Deep Research button - increased delay
+        setTimeout(() => {
+          console.log('Looking for Deep Research button in drawer...');
+
+          // Debug: Log all buttons to help identify the right one
+          const allButtons = Array.from(document.querySelectorAll('button'));
+          console.log('All buttons in drawer:', allButtons.map(b => ({
+            text: b.textContent?.trim(),
+            ariaLabel: b.getAttribute('aria-label'),
+            classes: b.className
+          })));
+
+          // Look for Deep Research button with expanded selectors
+          const secondButton = document.querySelector('button[aria-label*="Deep research"]') ||
+                              document.querySelector('button[aria-label*="Deep Research"]') ||
+                              document.querySelector('button[aria-label*="deep research" i]') ||
+                              document.querySelector('[data-tool-name="deep_research"]') ||
+                              document.querySelector('button.toolbox-drawer-item-list-button') ||
+                              Array.from(document.querySelectorAll('button')).find(b => {
+                                const text = (b.textContent || '').toLowerCase();
+                                const ariaLabel = (b.getAttribute('aria-label') || '').toLowerCase();
+                                return text.includes('deep research') ||
+                                       text.includes('deep-research') ||
+                                       ariaLabel.includes('deep research') ||
+                                       ariaLabel.includes('deep-research');
+                              });
+
+          if (secondButton) {
+            console.log('Found Deep Research button, clicking...', secondButton);
+            secondButton.click();
+
+            // Verify activation by looking for the Deep Research pill/tag
+            setTimeout(() => {
+              const deepResearchPill = document.querySelector('button[aria-label*="Deselect Deep Research"]') ||
+                                      document.querySelector('[aria-label*="Deep Research"].selected') ||
+                                      document.querySelector('.toolbox-chip[aria-label*="Deep Research"]') ||
+                                      Array.from(document.querySelectorAll('button')).find(b => {
+                                        const text = b.textContent || '';
+                                        const ariaLabel = b.getAttribute('aria-label') || '';
+                                        return (text.includes('Deep Research') && b.querySelector('img[src*="close"]')) ||
+                                               ariaLabel.includes('Deselect Deep Research');
+                                      });
+
+              if (deepResearchPill) {
+                console.log('✅ Deep Research mode successfully activated on Gemini');
+                onSuccess();
+              } else {
+                console.log('⚠️ Deep Research clicked but activation not confirmed');
+                onSuccess(); // Still call success as the click happened
+              }
+            }, 700); // Increased delay for verification
+          } else {
+            console.log('Deep Research button not found in drawer');
+
+            // Fallback: Try any button with Deep Research text
             const anyButtons = Array.from(document.querySelectorAll('button')).filter(button => {
-              const text = button.textContent || '';
-              return text.includes('Deep Research');
+              const text = (button.textContent || '').toLowerCase();
+              const ariaLabel = (button.getAttribute('aria-label') || '').toLowerCase();
+              return text.includes('deep research') || ariaLabel.includes('deep research');
             });
 
             if (anyButtons.length > 0) {
-              console.log('Found Deep Research button by text content, clicking it');
+              console.log('Found Deep Research button by fallback search, clicking it', anyButtons[0]);
               anyButtons[0].click();
-              setTimeout(onSuccess, 500);
+              setTimeout(onSuccess, 700);
               return;
             }
-            
+
+            console.log('Could not find Deep Research button with any selector');
             onFailure();
           }
-        }, 500); // Wait for tools panel to appear
+        }, 800); // Increased delay for tools panel to fully appear
       } else {
         console.log('Could not find Tools button');
         onFailure();
@@ -258,21 +294,170 @@
     }
   }
 
-  function enableTemporaryChat(onSuccess, onFailure) {
+  function selectModelAndPasteOnly(messageText, resolve, reject) {
     try {
-      // Look for Temporary chat button in sidebar
-      const tempChatButton = document.querySelector('button[aria-label="Temporary chat"]') ||
-                            Array.from(document.querySelectorAll('button')).find(b => {
-                              const text = b.textContent || '';
-                              return text.includes('Temporary chat');
-                            });
-      
+      // Find and click the model selector button
+      console.log('Looking for model selector button (paste-only mode)');
+
+      // Find buttons that might be the model selector
+      const possibleModelButtons = Array.from(document.querySelectorAll('button'))
+        .filter(button => {
+          const text = button.textContent || '';
+          return (
+            text.includes('Gemini') ||
+            text.includes('2.5 Pro') ||
+            text.includes('Advanced')
+          );
+        });
+
+      const modelButton = possibleModelButtons[0];
+
+      if (!modelButton) {
+        console.log('Model selector button not found, proceeding with current model');
+        // Skip to pasting text only
+        addTextOnly(messageText, resolve, reject);
+        return;
+      }
+
+      console.log('Found model selector button, clicking it');
+      modelButton.click();
+
+      // Wait for dropdown to appear and click 2.5 Pro option
+      setTimeout(() => {
+        console.log('Looking for 2.5 Pro button in dropdown');
+
+        // Find 2.5 Pro button in the dropdown
+        const proButtons = Array.from(document.querySelectorAll('button'))
+          .filter(button => {
+            const text = button.textContent || '';
+            return text.includes('2.5 Pro');
+          });
+
+        const proButton = proButtons[0];
+
+        if (!proButton) {
+          console.log('2.5 Pro button not found, proceeding with current model');
+          // Click somewhere else to close the dropdown
+          try { document.body.click(); } catch {}
+          setTimeout(() => {
+            addTextOnly(messageText, resolve, reject);
+          }, 300);
+          return;
+        }
+
+        console.log('Found 2.5 Pro button, clicking it');
+        proButton.click();
+
+        // Wait for model selection to apply and dropdown to close
+        setTimeout(() => {
+          addTextOnly(messageText, resolve, reject);
+        }, 500);
+      }, 500);
+    } catch (error) {
+      reject(`Error selecting model: ${error}`);
+    }
+  }
+
+  function addTextOnly(messageText, resolve, reject) {
+    try {
+      // Find the editable text area
+      const editor = document.querySelector('.ql-editor');
+      if (!editor) {
+        reject('Editor element not found');
+        return;
+      }
+      console.log('Found editor element');
+
+      // Focus the editor
+      try { editor.focus(); } catch {}
+
+      // Clear existing content - use DOM methods instead of innerHTML
+      try {
+        while (editor.firstChild) {
+          editor.removeChild(editor.firstChild);
+        }
+      } catch {}
+
+      // Split text into paragraphs and add them properly
+      const lines = String(messageText || '').split('\n');
+      lines.forEach(line => {
+        const p = document.createElement('p');
+        // Use non-breaking space for empty lines to maintain structure
+        p.textContent = line || '\u00A0';
+        editor.appendChild(p);
+      });
+      console.log('Text added as individual paragraphs');
+
+      // Dispatch input event to ensure the UI updates
+      try { editor.dispatchEvent(new Event('input', { bubbles: true, cancelable: true })); } catch {}
+      console.log('Input event dispatched');
+
+      console.log('⚠️ Text pasted but NOT submitted - Deep Research activation failed');
+      console.log('Please manually enable Deep Research and click send.');
+
+      // Resolve successfully since we pasted the text
+      resolve({ pastedOnly: true, reason: 'Deep Research activation failed' });
+    } catch (error) {
+      reject(`Error adding text: ${error}`);
+    }
+  }
+
+  async function enableTemporaryChat(onSuccess, onFailure) {
+    try {
+      console.log('Attempting to enable Temporary/Incognito chat mode on Gemini...');
+
+      // Wait for the Temporary chat button to appear (up to 10 seconds)
+      let tempChatButton = null;
+      const maxAttempts = 20;
+
+      for (let i = 0; i < maxAttempts; i++) {
+        // Try multiple selectors including the one you provided
+        tempChatButton = document.querySelector('button.temp-chat-button') ||
+                        document.querySelector('button.mdc-icon-button.mat-mdc-icon-button.mat-mdc-button-base.mat-mdc-tooltip-trigger.temp-chat-button') ||
+                        document.querySelector('button[aria-label="Temporary chat"]') ||
+                        document.querySelector('button[aria-label*="Temporary"]') ||
+                        document.querySelector('[aria-label*="temporary" i]') ||
+                        Array.from(document.querySelectorAll('button')).find(b => {
+                          const text = (b.textContent || '').toLowerCase();
+                          const ariaLabel = (b.getAttribute('aria-label') || '').toLowerCase();
+                          const classList = b.className || '';
+                          return text.includes('temporary') ||
+                                 ariaLabel.includes('temporary') ||
+                                 classList.includes('temp-chat');
+                        });
+
+        if (tempChatButton) {
+          console.log(`Found Temporary chat button after ${i * 500}ms`);
+          break;
+        }
+
+        console.log(`Waiting for Temporary chat button... attempt ${i + 1}/${maxAttempts}`);
+        await wait(500);
+      }
+
       if (tempChatButton) {
-        console.log('Found Temporary chat button, clicking it');
+        console.log('Found Temporary chat button, clicking it', tempChatButton);
         tempChatButton.click();
-        setTimeout(onSuccess, 500);
+
+        // Wait a bit to verify it was activated
+        setTimeout(() => {
+          // Check if temporary chat is active (button might change appearance or a new indicator appears)
+          const isActive = document.querySelector('.temp-chat-active') ||
+                          document.querySelector('[aria-pressed="true"].temp-chat-button') ||
+                          Array.from(document.querySelectorAll('*')).find(el => {
+                            const text = (el.textContent || '').toLowerCase();
+                            return text.includes('temporary chat is on') || text.includes('incognito mode');
+                          });
+
+          if (isActive) {
+            console.log('✅ Temporary/Incognito chat successfully activated on Gemini');
+          } else {
+            console.log('⚠️ Temporary chat button clicked, activation status unclear');
+          }
+          onSuccess();
+        }, 500);
       } else {
-        console.log('Could not find Temporary chat button');
+        console.log('Could not find Temporary chat button after waiting');
         onFailure();
       }
     } catch (error) {
@@ -282,12 +467,12 @@
   }
 
   function automateGeminiChat(messageText, enableResearch, enableIncognito) {
-    return new Promise((resolve, reject) => {
+    return new Promise(async (resolve, reject) => {
       try {
         // Step 1: Check if we need to enable Temporary Chat (incognito) first
         if (enableIncognito === 'Yes') {
           console.log('Incognito mode requested, will enable Temporary chat first');
-          enableTemporaryChat(() => {
+          await enableTemporaryChat(() => {
             console.log('Temporary chat enabled successfully');
             // Continue with research check
             handleResearchAndProceed();
@@ -298,19 +483,19 @@
         } else {
           handleResearchAndProceed();
         }
-        
-        function handleResearchAndProceed() {
+
+        async function handleResearchAndProceed() {
           // Step 2: Check if we need to enable Deep Research
           if (enableResearch === 'Yes') {
             console.log('Research mode requested, will enable Deep Research');
             // Enable research before model selection to avoid dropdown conflicts
-            enableDeepResearch(() => {
-              // Continue with model selection after enabling research
+            await enableDeepResearch(() => {
+              // Successfully enabled Deep Research, continue with model selection and submission
               selectModelAndProceed(messageText, resolve, reject);
             }, () => {
-              // If research enabling fails, still try to continue with model selection
-              console.log('Could not enable Deep Research, continuing with model selection');
-              selectModelAndProceed(messageText, resolve, reject);
+              // Failed to enable Deep Research - paste text but DON'T submit
+              console.log('⚠️ Could not enable Deep Research mode. Pasting prompt without submitting.');
+              selectModelAndPasteOnly(messageText, resolve, reject);
             });
           } else {
             // Skip research step, go directly to model selection

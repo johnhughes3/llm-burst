@@ -120,22 +120,10 @@ function createPromptSection() {
       className: 'prompt__textarea',
       id: 'prompt',
       placeholder: 'Paste or type your prompt...',
-      rows: '8',
+      rows: '6',
       'aria-label': 'Enter your prompt',
       'aria-describedby': 'promptHint'
-    }),
-    createElement('div', { className: 'prompt__footer' }, [
-      createElement('span', { 
-        className: 'prompt__char-count',
-        id: 'charCount',
-        style: 'display: none;'
-      }),
-      createElement('span', {
-        className: 'prompt__draft-status',
-        id: 'draftStatus',
-        style: 'display: none;'
-      }, ['Draft saved'])
-    ])
+    })
   ]);
   
   return section;
@@ -307,8 +295,26 @@ export function renderApp({ mode = 'popup' } = {}) {
       createSessionSection(),
       createPromptSection(),
       createOptionsSection(),  // Research & Incognito back in main view
+      // Inline footer directly under options so notices appear beneath toggles
+      createElement('div', { className: 'prompt__footer', id: 'inlinePromptFooter' }, [
+        createElement('span', { 
+          className: 'prompt__char-count',
+          id: 'charCount',
+          style: 'display: none;'
+        }),
+        createElement('span', {
+          className: 'prompt__draft-status',
+          id: 'draftStatus',
+          style: 'display: none;',
+          'aria-live': 'polite'
+        }, ['Draft saved'])
+      ]),
       createAdvancedSection(), // Providers and Title in advanced
-      createStatusSection(),
+      createStatusSection()
+    ]),
+    // Keep the send button outside the scroll area so content never
+    // flows under it when Advanced Options is opened.
+    createElement('footer', { className: 'send-bar' }, [
       createSendButton(mode)
     ])
   ]);

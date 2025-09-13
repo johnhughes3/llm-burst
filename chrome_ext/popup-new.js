@@ -43,6 +43,19 @@
     setStatus('', 'info'); 
   }
 
+  // Inline notice in the prompt footer (same area as Draft saved)
+  function showInlineNotice(text) {
+    if (!els.draftStatus) return;
+    els.draftStatus.textContent = text;
+    els.draftStatus.style.display = 'inline-block';
+    els.draftStatus.classList.add('animate-fade');
+    setTimeout(() => {
+      if (!els?.draftStatus) return;
+      els.draftStatus.style.display = 'none';
+      els.draftStatus.classList.remove('animate-fade');
+    }, 2000);
+  }
+
   function setLoading(isLoading) {
     state.sending = isLoading;
     if (els.sendButton) {
@@ -79,17 +92,8 @@
         }
       });
       
-      // Show draft saved indicator
-      if (els.draftStatus) {
-        els.draftStatus.style.display = 'block';
-        els.draftStatus.classList.add('animate-fade');
-        setTimeout(() => {
-          if (els.draftStatus) {
-            els.draftStatus.style.display = 'none';
-            els.draftStatus.classList.remove('animate-fade');
-          }
-        }, 2000);
-      }
+      // Show inline indicator
+      showInlineNotice('Draft saved');
     } catch (e) {
       console.error('[llm-burst] Failed to save draft:', e);
     }
@@ -168,12 +172,6 @@
   })();
 
   async function handleClear() {
-    const text = els.prompt.value;
-    if (text.length > 100) {
-      if (!confirm('Clear draft? This cannot be undone.')) {
-        return;
-      }
-    }
     els.prompt.value = '';
     els.prompt.dispatchEvent(new Event('input', { bubbles: true }));
     await clearDraft();
@@ -181,8 +179,7 @@
     updateCharCount();
     autoExpandTextarea();
     els.prompt.focus();
-    setStatus('Draft cleared', 'info');
-    setTimeout(clearStatus, 2000);
+    showInlineNotice('Draft cleared');
   }
 
   // Clipboard prefill (best-effort)
@@ -196,8 +193,7 @@
       if (draft) {
         els.prompt.value = draft;
         els.prompt.dispatchEvent(new Event('input', { bubbles: true }));
-        setStatus('Draft restored', 'info');
-        setTimeout(clearStatus, 2000);
+        showInlineNotice('Draft restored');
         return;
       }
       
@@ -206,6 +202,7 @@
       if (text && text.trim().length > 0) {
         els.prompt.value = text.trim();
         els.prompt.dispatchEvent(new Event('input', { bubbles: true }));
+        showInlineNotice('Pasted from clipboard');
       }
     } catch (e) {
       // Expected when popup opens without user gesture
@@ -361,7 +358,8 @@
     
     // Adjust textarea
     if (els.prompt) {
-      els.prompt.rows = isNew ? 8 : 12;
+      // Reduce default rows in popup to avoid vertical overflow
+      els.prompt.rows = isNew ? 6 : 10;
       autoExpandTextarea();
     }
   }
@@ -549,25 +547,17 @@
         try {
           const text = await navigator.clipboard.readText();
           if (text && text.trim().length > 0) {
-            const currentText = els.prompt.value.trim();
-            if (currentText && currentText !== text.trim()) {
-              if (!confirm('Replace current text with clipboard content?')) {
-                return;
-              }
-            }
             els.prompt.value = text.trim();
             els.prompt.dispatchEvent(new Event('input', { bubbles: true }));
             els.prompt.focus();
-            setStatus('Pasted from clipboard', 'success');
-            setTimeout(clearStatus, 2000);
+            showInlineNotice('Pasted from clipboard');
             
             // Auto-generate title after paste if conditions are met
             if (state.isNewSession && !state.titleDirty && text.trim().length > 20) {
               setTimeout(() => generateTitle(), 500);
             }
           } else {
-            setStatus('Clipboard is empty', 'error');
-            setTimeout(clearStatus, 2000);
+            showInlineNotice('Clipboard is empty');
           }
         } catch (e) {
           setStatus('Failed to read clipboard', 'error');

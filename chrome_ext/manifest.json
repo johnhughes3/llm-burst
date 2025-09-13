@@ -8,7 +8,6 @@
     "tabGroups",
     "windows",
     "storage",
-    "activeTab",
     "clipboardRead",
     "debugger"
   ],
@@ -20,13 +19,7 @@
     "https://grok.com/*",
     "https://*.x.ai/*",
     "https://*.x.com/*",
-    "https://generativelanguage.googleapis.com/*",
-    "https://www.nytimes.com/*",
-    "https://nytimes.com/*",
-    "https://www.cnn.com/*",
-    "https://cnn.com/*",
-    "http://localhost/*",
-    "http://127.0.0.1/*"
+    "https://generativelanguage.googleapis.com/*"
   ],
   "background": {
     "service_worker": "background.js",
@@ -41,13 +34,7 @@
         "https://chatgpt.com/*",
         "https://grok.com/*",
         "https://*.x.ai/*",
-        "https://*.x.com/*",
-        "https://www.nytimes.com/*",
-        "https://nytimes.com/*",
-        "https://www.cnn.com/*",
-        "https://cnn.com/*",
-        "http://localhost/*",
-        "http://127.0.0.1/*"
+        "https://*.x.com/*"
       ],
       "js": [
         "content/injectors/utils.js",

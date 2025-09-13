@@ -977,7 +977,7 @@ async function autoNamePrompt(text, { timeoutMs = 15000, modelOverride } = {}) {
     return { ok: false, error: 'No Gemini API key configured in Options' };
   }
   // Normalize model name - ensure it has "models/" prefix
-  let model = (modelOverride || geminiModel || 'gemini-2.0-flash').trim();
+  let model = (modelOverride || geminiModel || 'models/gemini-2.5-flash-lite').trim();
   if (!model.startsWith('models/')) {
     model = 'models/' + model;
   }

@@ -111,12 +111,6 @@
   }
 
   async function handleClear() {
-    const text = els.prompt.value;
-    if (text.length > 100) {
-      if (!confirm('Clear draft? This cannot be undone.')) {
-        return;
-      }
-    }
     els.prompt.value = '';
     els.prompt.dispatchEvent(new Event('input', { bubbles: true }));
     await clearDraft();
@@ -440,13 +434,6 @@
       try {
         const text = await navigator.clipboard.readText();
         if (text && text.trim().length > 0) {
-          // Only paste if prompt is empty or user confirms
-          const currentText = els.prompt.value.trim();
-          if (currentText && currentText !== text.trim()) {
-            if (!confirm('Replace current text with clipboard content?')) {
-              return;
-            }
-          }
           els.prompt.value = text.trim();
           els.prompt.dispatchEvent(new Event('input', { bubbles: true }));
           els.prompt.focus();
