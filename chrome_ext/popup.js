@@ -9,7 +9,12 @@
     draftTimer: null,
     lastDraftText: '',
     isComposing: false,
+    charCount: 0,
+    isNewSession: true
   };
+  
+  // Store cleanup functions for event listeners
+  const cleanupFunctions = [];
 
   // Utility: wait
   function sleep(ms) { return new Promise(r => setTimeout(r, ms)); }
@@ -26,25 +31,49 @@
 
   // Status helpers
   function setStatus(text, kind = 'info') {
+    if (!els.status) return;
     els.status.textContent = text || '';
-    els.status.classList.remove('error', 'success', 'info');
-    els.status.classList.add(kind);
+    els.status.style.display = text ? 'block' : 'none';
+    els.status.classList.remove('status-message--error', 'status-message--success');
+    if (kind === 'error') els.status.classList.add('status-message--error');
+    if (kind === 'success') els.status.classList.add('status-message--success');
   }
 
-  function clearStatus() { setStatus('', 'info'); }
+  function clearStatus() { 
+    setStatus('', 'info'); 
+  }
+
+  // Inline notice in the prompt footer (same area as Draft saved)
+  function showInlineNotice(text) {
+    if (!els.draftStatus) return;
+    els.draftStatus.textContent = text;
+    els.draftStatus.style.display = 'inline-block';
+    els.draftStatus.classList.add('animate-fade');
+    setTimeout(() => {
+      if (!els?.draftStatus) return;
+      els.draftStatus.style.display = 'none';
+      els.draftStatus.classList.remove('animate-fade');
+    }, 2000);
+  }
 
   function setLoading(isLoading) {
     state.sending = isLoading;
-    els.sendButton.disabled = isLoading;
+    if (els.sendButton) {
+      els.sendButton.disabled = isLoading;
+    }
   }
 
   function setSpinnerVisible(visible) {
-    els.autonameSpinner.hidden = !visible;
+    if (els.autonameSpinner) {
+      els.autonameSpinner.hidden = !visible;
+    }
+    if (els.autonameIcon) {
+      els.autonameIcon.style.display = visible ? 'none' : '';
+    }
   }
 
   // Draft management functions
   async function saveDraft(text) {
-    // Don't save empty drafts
     if (!text || !text.trim()) {
       await clearDraft();
       return;
@@ -62,6 +91,9 @@
           timestamp: Date.now(),
         }
       });
+      
+      // Show inline indicator
+      showInlineNotice('Draft saved');
     } catch (e) {
       console.error('[llm-burst] Failed to save draft:', e);
     }
@@ -71,7 +103,6 @@
     try {
       const data = await chrome.storage.session.get(['draft']);
       if (data.draft && data.draft.text) {
-        // Check if draft is recent (within 24 hours)
         const age = Date.now() - (data.draft.timestamp || 0);
         if (age < 24 * 60 * 60 * 1000) {
           return data.draft.text;
@@ -101,7 +132,7 @@
         state.lastDraftText = text;
         saveDraft(text);
       }
-    }, 750); // 750ms debounce
+    }, 750);
   }
 
   function updateClearButton() {
@@ -110,412 +141,567 @@
     }
   }
 
+  function updateCharCount() {
+    const count = els.prompt.value.length;
+    state.charCount = count;
+    
+    if (els.charCount) {
+      if (count > 1000) {
+        els.charCount.textContent = `${count.toLocaleString()} / 10,000`;
+        els.charCount.style.display = 'block';
+      } else {
+        els.charCount.style.display = 'none';
+      }
+    }
+  }
+
+  // Auto-expand textarea with performance optimization
+  const autoExpandTextarea = (() => {
+    let rafId = null;
+    return function() {
+      if (!els.prompt) return;
+      if (rafId) cancelAnimationFrame(rafId);
+      
+      rafId = requestAnimationFrame(() => {
+        els.prompt.style.height = 'auto';
+        const newHeight = Math.min(els.prompt.scrollHeight, state.isNewSession ? 200 : 400);
+        els.prompt.style.height = newHeight + 'px';
+        rafId = null;
+      });
+    };
+  })();
+
   async function handleClear() {
     els.prompt.value = '';
     els.prompt.dispatchEvent(new Event('input', { bubbles: true }));
     await clearDraft();
     updateClearButton();
+    updateCharCount();
+    autoExpandTextarea();
     els.prompt.focus();
-    setStatus('Draft cleared', 'info');
-    setTimeout(clearStatus, 2000);
+    showInlineNotice('Draft cleared');
   }
 
   // Clipboard prefill (best-effort)
   async function prefillFromClipboard() {
     try {
       const current = els.prompt.value.trim();
-      if (current.length > 0) return; // Don't override user input
+      if (current.length > 0) return;
       
-      // Try to read clipboard - this often fails due to permission requirements
-      // Chrome requires user gesture for clipboard access in extensions
       // First check for saved draft
       const draft = await loadDraft();
       if (draft) {
         els.prompt.value = draft;
         els.prompt.dispatchEvent(new Event('input', { bubbles: true }));
-        setStatus('Draft restored', 'info');
-        setTimeout(clearStatus, 2000);
+        showInlineNotice('Draft restored');
         return;
       }
       
-      // Otherwise try clipboard
+      // Try clipboard (often fails without user gesture)
       const text = await navigator.clipboard.readText();
       if (text && text.trim().length > 0) {
         els.prompt.value = text.trim();
-        // Trigger input handlers
         els.prompt.dispatchEvent(new Event('input', { bubbles: true }));
+        showInlineNotice('Pasted from clipboard');
       }
     } catch (e) {
-      // Clipboard read failed - this is expected when popup opens without user gesture
-      // Users can still paste manually with Cmd+V
-      console.debug('[llm-burst] Clipboard prefill not available (requires user gesture)');
+      // Expected when popup opens without user gesture
+      console.debug('[llm-burst] Clipboard prefill not available');
     }
   }
-
-  // Load defaults (if any) from storage.sync
+  
+  // Load defaults from storage
   async function loadDefaults() {
     try {
       const data = await chrome.storage?.sync?.get?.(['settings']) || {};
       const settings = data.settings || {};
-      if (typeof settings.defaultResearch === 'boolean') {
+      
+      // Wait for DOM elements to be ready
+      await waitForProviderElements();
+      
+      if (typeof settings.defaultResearch === 'boolean' && els.research) {
         els.research.checked = settings.defaultResearch;
       }
-      if (typeof settings.defaultIncognito === 'boolean') {
+      if (typeof settings.defaultIncognito === 'boolean' && els.incognito) {
         els.incognito.checked = settings.defaultIncognito;
       }
       if (Array.isArray(settings.defaultProviders)) {
+        console.log('[llm-burst] Loading default providers:', settings.defaultProviders);
         setProviders(settings.defaultProviders);
       }
-    } catch {
-      // ignore missing storage or errors
+    } catch (e) {
+      console.error('[llm-burst] Failed to load defaults:', e);
     }
+  }
+  
+  // Wait for provider elements to exist in DOM
+  async function waitForProviderElements() {
+    return new Promise(resolve => {
+      // Check if elements already exist - try both old and new class names
+      const selector = '.provider-card__checkbox, .provider-pill__checkbox';
+      if (document.querySelector(selector)) {
+        resolve();
+        return;
+      }
+      
+      // Otherwise wait for them to be created
+      const observer = new MutationObserver(() => {
+        if (document.querySelector(selector)) {
+          observer.disconnect();
+          resolve();
+        }
+      });
+      observer.observe(document.body, { childList: true, subtree: true });
+      
+      // Timeout after 5 seconds
+      setTimeout(() => {
+        observer.disconnect();
+        resolve();
+      }, 5000);
+    });
   }
 
   function getSelectedProviders() {
     const keys = [];
-    const checkboxes = [
-      els.provChatGPT,
-      els.provClaude,
-      els.provGemini,
-      els.provGrok
-    ];
-    for (const cb of checkboxes) {
-      if (cb.checked) {
-        const key = cb.getAttribute('data-provider');
-        if (key) keys.push(key);
-      }
-    }
+    // Check both old and new class names
+    document.querySelectorAll('.provider-card__checkbox:checked, .provider-pill__checkbox:checked').forEach(cb => {
+      const provider = cb.getAttribute('data-provider');
+      if (provider) keys.push(provider);
+    });
     return keys;
   }
 
   function setProviders(providerKeys) {
     const set = new Set(providerKeys || []);
-    els.provChatGPT.checked = set.has('CHATGPT');
-    els.provClaude.checked = set.has('CLAUDE');
-    els.provGemini.checked = set.has('GEMINI');
-    els.provGrok.checked = set.has('GROK');
+    // Check both old and new class names
+    document.querySelectorAll('.provider-card__checkbox, .provider-pill__checkbox').forEach(cb => {
+      const provider = cb.getAttribute('data-provider');
+      cb.checked = set.has(provider);
+      
+      // Handle both card and pill styles
+      const card = cb.closest('.provider-card');
+      if (card) {
+        card.classList.toggle('provider-card--selected', cb.checked);
+      }
+      
+      const pill = cb.closest('.provider-pill');
+      if (pill) {
+        pill.classList.toggle('provider-pill--selected', cb.checked);
+      }
+    });
   }
 
-  function updateNewSessionVisibility() {
-    const isNew = els.sessionSelect.value === '__new__';
-    els.newSessionFields.style.display = isNew ? '' : 'none';
-  }
-
+  // Load sessions from storage
   async function loadSessions() {
     try {
-      const resp = await sendMessage('llmburst-get-sessions');
-      if (!resp || !resp.ok) {
-        // Background not yet updated; keep only "New conversation"
-        return;
+      const result = await chrome.storage.local.get(['sessions', 'sessionOrder']);
+      const sessions = result.sessions || {};
+      const order = result.sessionOrder || Object.keys(sessions);
+      
+      if (els.sessionSelect) {
+        // Clear ALL options except "New conversation"
+        while (els.sessionSelect.options.length > 1) {
+          els.sessionSelect.remove(1);
+        }
+        
+        // Add sessions in order
+        order.forEach(sessionId => {
+          const session = sessions[sessionId];
+          if (session) {
+            const option = document.createElement('option');
+            option.value = sessionId;
+            option.textContent = session.title || `Session ${sessionId}`;
+            els.sessionSelect.appendChild(option);
+          }
+        });
       }
-      const { sessions = {}, order = [] } = resp;
-      // Clear existing options (keep first)
-      els.sessionSelect.innerHTML = '';
-      const optNew = document.createElement('option');
-      optNew.value = '__new__';
-      optNew.textContent = 'New conversation';
-      els.sessionSelect.appendChild(optNew);
-
-      // Fill ordered sessions
-      for (const id of order) {
-        const sess = sessions[id];
-        if (!sess) continue;
-        const label = sess.title || `Session ${id}`;
-        const opt = document.createElement('option');
-        opt.value = id;
-        opt.textContent = label;
-        els.sessionSelect.appendChild(opt);
-      }
-
-      updateNewSessionVisibility();
+      
+      clearStatus();
     } catch (e) {
-      // ignore errors; UI remains usable for new session
+      console.error('[llm-burst] Failed to load sessions:', e);
+      setStatus('Failed to load sessions', 'error');
     }
   }
 
-  // Auto-naming: debounce calls; only apply when new session and title not edited
-  let autoNameTimer = null;
-  function scheduleAutoName() {
-    if (els.sessionSelect.value !== '__new__') return;
-    const text = els.prompt.value.trim();
-    if (text.length < 4) return; // too short to name
-    if (state.titleDirty) return;
-
-    if (autoNameTimer) clearTimeout(autoNameTimer);
-    autoNameTimer = setTimeout(() => requestAutoName(text), 450);
-  }
-
-  function sanitizeTitle(title) {
-    if (!title) return '';
-    // Remove quotes/newlines and trim length
-    let t = String(title).replace(/[\r\n]+/g, ' ').replace(/^["'\s]+|["'\s]+$/g, '');
-    if (t.length > 80) t = t.slice(0, 80).trim();
-    return t;
-  }
-
-  async function requestAutoName(text) {
-    const requestId = ++state.currentAutonameRequestId;
-    setSpinnerVisible(true);
-    try {
-      const resp = await sendMessage('llmburst-autoname', { text, timeoutMs: 15000 });
-      // Ignore out-of-date responses
-      if (requestId !== state.currentAutonameRequestId) return;
-
-      if (!state.titleDirty && els.sessionSelect.value === '__new__') {
-        if (resp && resp.ok) {
-          const title = sanitizeTitle(resp.title);
-          if (title && !els.groupTitle.value) {
-            els.groupTitle.value = title;
-          }
+  // Update UI state based on session selection
+  function updateUIState() {
+    const isNew = !els.sessionSelect || els.sessionSelect.value === '__new__';
+    state.isNewSession = isNew;
+    
+    // Add/remove class on app container for layout adjustment
+    const app = document.querySelector('.app');
+    if (app) {
+      app.classList.toggle('app--existing-conversation', !isNew);
+    }
+    
+    // Update conditional sections
+    const conditionalSections = ['providerSection', 'optionsSection', 'titleSection'];
+    
+    conditionalSections.forEach(id => {
+      const element = document.getElementById(id);
+      if (element) {
+        if (isNew) {
+          element.classList.remove('section--hidden');
+          element.setAttribute('aria-hidden', 'false');
         } else {
-          // Fallback to timestamp format MMM-DD HH:MM when auto-naming fails
-          if (!els.groupTitle.value) {
-            const now = new Date();
-            const months = ['Jan', 'Feb', 'Mar', 'Apr', 'May', 'Jun', 'Jul', 'Aug', 'Sep', 'Oct', 'Nov', 'Dec'];
-            const month = months[now.getMonth()];
-            const day = String(now.getDate()).padStart(2, '0');
-            const hours = String(now.getHours()).padStart(2, '0');
-            const minutes = String(now.getMinutes()).padStart(2, '0');
-            els.groupTitle.value = `${month}-${day} ${hours}:${minutes}`;
-          }
+          element.classList.add('section--hidden');
+          element.setAttribute('aria-hidden', 'true');
         }
       }
+    });
+    
+    // Update send button text
+    const sendButtonText = document.getElementById('sendButtonText');
+    if (sendButtonText) {
+      sendButtonText.textContent = isNew ? 'Send' : 'Continue Thread';
+    }
+    
+    // Adjust textarea
+    if (els.prompt) {
+      // Reduce default rows in popup to avoid vertical overflow
+      els.prompt.rows = isNew ? 6 : 10;
+      autoExpandTextarea();
+    }
+  }
+
+  // Auto-generate title
+  async function generateTitle() {
+    const prompt = els.prompt.value.trim();
+    if (!prompt || state.titleDirty) return;
+    
+    const requestId = ++state.currentAutonameRequestId;
+    setSpinnerVisible(true);
+    
+    try {
+      const result = await sendMessage('llmburst-autoname', { text: prompt });
+      
+      if (requestId !== state.currentAutonameRequestId) {
+        setSpinnerVisible(false);
+        return;
+      }
+      
+      if (result.ok && result.title && !state.titleDirty) {
+        els.groupTitle.value = result.title;
+        els.groupTitle.classList.add('animate-slide-in');
+      } else if (!result.ok) {
+        console.error('[llm-burst] Title generation failed:', result.error);
+      }
+    } catch (e) {
+      console.error('[llm-burst] Title generation error:', e);
     } finally {
-      // Only hide spinner if this is the most recent request
       if (requestId === state.currentAutonameRequestId) {
         setSpinnerVisible(false);
       }
     }
   }
 
-  function validate() {
-    const prompt = els.prompt.value.trim();
-    if (!prompt) {
-      setStatus('Please enter a prompt.', 'error');
-      return false;
-    }
-    const providers = getSelectedProviders();
-    if (providers.length === 0) {
-      setStatus('Select at least one provider.', 'error');
-      return false;
-    }
-    return true;
-  }
-
+  // Send handler
   async function handleSend() {
     if (state.sending) return;
-    clearStatus();
-    if (!validate()) return;
-
+    
     const prompt = els.prompt.value.trim();
+    if (!prompt) {
+      setStatus('Please enter a prompt', 'error');
+      els.prompt.focus();
+      return;
+    }
+    
     const providers = getSelectedProviders();
-    const options = {
-      research: !!els.research.checked,
-      incognito: !!els.incognito.checked
-    };
-
-    const isNew = els.sessionSelect.value === '__new__';
+    if (providers.length === 0) {
+      setStatus('Please select at least one provider', 'error');
+      return;
+    }
+    
     setLoading(true);
-
-    try {
-      if (isNew) {
-        const title = els.groupTitle.value.trim() || 'llm-burst';
-        const resp = await sendMessage('llmburst-start-new-session', {
-          title, providers, prompt, options
-        });
-        if (!resp || !resp.ok) {
-          setStatus(resp?.error || 'Failed to start session (background not yet updated)', 'error');
-          return;
+    
+    const sessionId = els.sessionSelect?.value;
+    const isNew = !sessionId || sessionId === '__new__';
+    
+    let result;
+    if (isNew) {
+      const title = els.groupTitle?.value.trim() || 
+                   `Session ${new Date().toLocaleTimeString()}`;
+      
+      result = await sendMessage('llmburst-start-new-session', {
+        prompt,
+        providers,
+        title,
+        options: {
+          research: els.research?.checked || false,
+          incognito: els.incognito?.checked || false
         }
-        setStatus('Session started.', 'success');
-        // Clear draft after successful send
-        await clearDraft();
-        // Close popup to get out of the way
-        await sleep(300);
-        window.close();
-      } else {
-        const sessionId = els.sessionSelect.value;
-        const resp = await sendMessage('llmburst-follow-up', {
-          sessionId, prompt
-        });
-        if (!resp || !resp.ok) {
-          setStatus(resp?.error || 'Failed to send follow-up (background not yet updated)', 'error');
-          return;
+      });
+    } else {
+      result = await sendMessage('llmburst-follow-up', {
+        sessionId,
+        prompt
+      });
+    }
+    
+    setLoading(false);
+    
+    if (result.ok) {
+      setStatus('Sent successfully!', 'success');
+      els.prompt.value = '';
+      await clearDraft();
+      updateClearButton();
+      updateCharCount();
+      autoExpandTextarea();
+      
+      // Reload sessions if new one was created
+      if (isNew && result.sessionId) {
+        await loadSessions();
+        if (els.sessionSelect) {
+          els.sessionSelect.value = result.sessionId;
+          updateUIState();
         }
-        setStatus('Follow-up sent.', 'success');
-        // Clear draft after successful send
-        await clearDraft();
-        await sleep(300);
-        window.close();
       }
-    } finally {
-      setLoading(false);
+      
+      setTimeout(() => window.close(), 1500);
+    } else {
+      setStatus(result.error || 'Failed to send', 'error');
     }
   }
 
+  // Bind events
   function bindEvents() {
-    els.openOptions.addEventListener('click', async () => {
-      try {
-        await chrome.runtime.openOptionsPage();
-      } catch (e) {
-        setStatus('Options page not available yet. It will be added in a later phase.', 'info');
-      }
-    });
-
-    els.sessionSelect.addEventListener('change', () => {
-      updateNewSessionVisibility();
-      // If switching back to new session, consider auto-naming again
-      if (els.sessionSelect.value === '__new__') {
-        scheduleAutoName();
-      }
-    });
-
-    els.groupTitle.addEventListener('input', () => {
-      // Mark user-edited; stop auto-overwriting
-      state.titleDirty = !!els.groupTitle.value.trim();
-    });
-
-    els.prompt.addEventListener('input', () => {
-      // Reset auto-name state if title not edited by user
-      if (!state.titleDirty) scheduleAutoName();
-      clearStatus();
-      updateClearButton();
-      scheduleDraftSave();
-    });
-
-    // Keyboard shortcuts
-    els.prompt.addEventListener('keydown', (e) => {
-      // Ignore during IME composition
-      if (state.isComposing) return;
+    // Session selector
+    if (els.sessionSelect) {
+      els.sessionSelect.addEventListener('change', updateUIState);
+    }
+    
+    // Prompt textarea
+    if (els.prompt) {
+      els.prompt.addEventListener('input', () => {
+        updateClearButton();
+        updateCharCount();
+        autoExpandTextarea();
+        scheduleDraftSave();
+        
+        // Removed auto-naming on every keystroke - now only triggered by explicit actions
+      });
       
-      // Check for Cmd/Ctrl+Enter
-      if (e.key === 'Enter' && (e.metaKey || e.ctrlKey)) {
-        e.preventDefault();
-        handleSend();
-      }
-    });
-
-    // IME composition handling
-    els.prompt.addEventListener('compositionstart', () => {
-      state.isComposing = true;
-    });
-
-    els.prompt.addEventListener('compositionend', () => {
-      state.isComposing = false;
-    });
-
-    // Save draft immediately on blur
-    els.prompt.addEventListener('blur', () => {
-      if (state.draftTimer) {
-        clearTimeout(state.draftTimer);
-      }
-      const text = els.prompt.value;
-      if (text !== state.lastDraftText) {
-        state.lastDraftText = text;
-        saveDraft(text);
-      }
-    });
-
-    // Save draft when page visibility changes
+      // Keyboard shortcut
+      els.prompt.addEventListener('keydown', (e) => {
+        if (state.isComposing) return;
+        if (e.key === 'Enter' && (e.metaKey || e.ctrlKey)) {
+          e.preventDefault();
+          handleSend();
+        }
+      });
+      
+      // IME composition
+      els.prompt.addEventListener('compositionstart', () => {
+        state.isComposing = true;
+      });
+      
+      els.prompt.addEventListener('compositionend', () => {
+        state.isComposing = false;
+      });
+      
+      // Save draft on blur
+      els.prompt.addEventListener('blur', () => {
+        // Save draft
+        if (state.draftTimer) {
+          clearTimeout(state.draftTimer);
+        }
+        const text = els.prompt.value;
+        if (text !== state.lastDraftText) {
+          state.lastDraftText = text;
+          saveDraft(text);
+        }
+        
+        // Removed auto-generate title on blur - now only triggered by explicit actions
+      });
+    }
+    
+    // Title input
+    if (els.groupTitle) {
+      els.groupTitle.addEventListener('input', () => {
+        state.titleDirty = els.groupTitle.value.length > 0;
+      });
+    }
+    
+    // Auto-name button
+    if (els.autonameBtn) {
+      els.autonameBtn.addEventListener('click', () => {
+        state.titleDirty = false;
+        generateTitle();
+      });
+    }
+    
+    // Send button - with title generation on send
+    if (els.sendButton) {
+      els.sendButton.addEventListener('click', async () => {
+        // Generate title before sending if needed
+        if (state.isNewSession && !state.titleDirty && !els.groupTitle.value && els.prompt.value.trim().length > 20) {
+          await generateTitle();  // Properly await title generation
+        }
+        handleSend();  // Always call handleSend after title generation (if needed)
+      });
+    }
+    
+    // Paste button
+    if (els.pasteBtn) {
+      els.pasteBtn.addEventListener('click', async () => {
+        try {
+          const text = await navigator.clipboard.readText();
+          if (text && text.trim().length > 0) {
+            els.prompt.value = text.trim();
+            els.prompt.dispatchEvent(new Event('input', { bubbles: true }));
+            els.prompt.focus();
+            showInlineNotice('Pasted from clipboard');
+            
+            // Auto-generate title after paste if conditions are met
+            if (state.isNewSession && !state.titleDirty && text.trim().length > 20) {
+              setTimeout(() => generateTitle(), 500);
+            }
+          } else {
+            showInlineNotice('Clipboard is empty');
+          }
+        } catch (e) {
+          setStatus('Failed to read clipboard', 'error');
+          setTimeout(clearStatus, 2000);
+        }
+      });
+    }
+    
+    // Clear button
+    if (els.clearBtn) {
+      els.clearBtn.addEventListener('click', handleClear);
+    }
+    
+    // Settings button
+    const settingsBtn = document.getElementById('settingsBtn');
+    if (settingsBtn) {
+      settingsBtn.addEventListener('click', () => {
+        chrome.runtime.openOptionsPage();
+      });
+    }
+    
+    // Advanced options toggle - trigger title generation when opened
+    if (els.advancedOptions) {
+      els.advancedOptions.addEventListener('toggle', () => {
+        if (els.advancedOptions.open && state.isNewSession && !state.titleDirty && 
+            !els.groupTitle.value && els.prompt.value.trim().length > 20) {
+          generateTitle();
+        }
+      });
+    }
+    
+    // Save draft on visibility change
     document.addEventListener('visibilitychange', () => {
       if (document.hidden) {
-        const text = els.prompt.value;
+        const text = els.prompt?.value;
         if (text && text !== state.lastDraftText) {
           state.lastDraftText = text;
           saveDraft(text);
         }
       }
     });
-
-    els.sendButton.addEventListener('click', handleSend);
     
-    // Paste button handler - with user gesture, clipboard should work
-    els.pasteBtn.addEventListener('click', async () => {
-      try {
-        const text = await navigator.clipboard.readText();
-        if (text && text.trim().length > 0) {
-          els.prompt.value = text.trim();
-          els.prompt.dispatchEvent(new Event('input', { bubbles: true }));
-          els.prompt.focus();
-          setStatus('Pasted from clipboard', 'success');
-          setTimeout(clearStatus, 2000);
-        } else {
-          setStatus('Clipboard is empty', 'error');
-          setTimeout(clearStatus, 2000);
+    // Keyboard shortcuts for research and incognito
+    document.addEventListener('keydown', (e) => {
+      // Don't trigger if typing in input/textarea
+      const activeElement = document.activeElement;
+      const isTyping = activeElement && 
+        (activeElement.tagName === 'INPUT' || 
+         activeElement.tagName === 'TEXTAREA');
+      
+      // Use Alt key to avoid conflicts (Alt+R for research, Alt+I for incognito)
+      if (!isTyping && e.altKey && !e.ctrlKey && !e.metaKey) {
+        if (e.key === 'r' || e.key === 'R') {
+          e.preventDefault();
+          if (els.research) {
+            els.research.checked = !els.research.checked;
+            els.research.dispatchEvent(new Event('change', { bubbles: true }));
+            // Visual feedback
+            flashElement(els.research.closest('.toggle'));
+          }
+        } else if (e.key === 'i' || e.key === 'I') {
+          e.preventDefault();
+          if (els.incognito) {
+            els.incognito.checked = !els.incognito.checked;
+            els.incognito.dispatchEvent(new Event('change', { bubbles: true }));
+            // Visual feedback
+            flashElement(els.incognito.closest('.toggle'));
+          }
         }
-      } catch (e) {
-        setStatus('Failed to read clipboard', 'error');
-        console.error('[llm-burst] Paste button failed:', e);
-        setTimeout(clearStatus, 2000);
       }
     });
-
-    // Clear button handler
-    if (els.clearBtn) {
-      els.clearBtn.addEventListener('click', handleClear);
-    }
+  }
+  
+  // Flash element for visual feedback
+  function flashElement(element) {
+    if (!element) return;
+    element.style.transition = 'background-color 200ms';
+    const originalBg = element.style.backgroundColor;
+    element.style.backgroundColor = 'rgba(79, 140, 255, 0.3)';
+    setTimeout(() => {
+      element.style.backgroundColor = originalBg;
+    }, 200);
   }
 
+  // Capture element references
   function captureElements() {
-    els.openOptions = document.getElementById('openOptions');
     els.prompt = document.getElementById('prompt');
     els.pasteBtn = document.getElementById('pasteBtn');
     els.clearBtn = document.getElementById('clearBtn');
     els.research = document.getElementById('research');
     els.incognito = document.getElementById('incognito');
-
-    els.provChatGPT = document.getElementById('prov-chatgpt');
-    els.provClaude = document.getElementById('prov-claude');
-    els.provGemini = document.getElementById('prov-gemini');
-    els.provGrok = document.getElementById('prov-grok');
-
     els.sessionSelect = document.getElementById('sessionSelect');
-    els.newSessionFields = document.getElementById('newSessionFields');
     els.groupTitle = document.getElementById('groupTitle');
+    els.autonameBtn = document.getElementById('autonameBtn');
     els.autonameSpinner = document.getElementById('autonameSpinner');
-
+    els.autonameIcon = document.getElementById('autonameIcon');
     els.status = document.getElementById('status');
     els.sendButton = document.getElementById('sendButton');
+    els.charCount = document.getElementById('charCount');
+    els.draftStatus = document.getElementById('draftStatus');
+    els.advancedOptions = document.getElementById('advancedOptions');
   }
 
+  // Cleanup function to remove all event listeners
+  function cleanup() {
+    cleanupFunctions.forEach(fn => fn());
+    cleanupFunctions.length = 0;
+    
+    if (state.draftTimer) {
+      clearTimeout(state.draftTimer);
+      state.draftTimer = null;
+    }
+  }
+  
+  // Initialize
   async function init() {
+    // Wait for DOM to be ready
+    await sleep(100);
+    
     captureElements();
     bindEvents();
-    updateNewSessionVisibility();
-    setStatus('Loading sessions...', 'info');
+    updateUIState();
     
-    // Update keyboard shortcut hint based on platform
-    const shortcutKey = document.getElementById('shortcutKey');
-    if (shortcutKey) {
-      const isMac = navigator.platform.toUpperCase().indexOf('MAC') >= 0;
-      shortcutKey.textContent = isMac ? 'Cmd+Enter' : 'Ctrl+Enter';
+    // Load data
+    await loadDefaults();
+    await loadSessions();
+    
+    // Try prefill from clipboard or draft
+    await prefillFromClipboard();
+    
+    // Focus prompt
+    if (els.prompt) {
+      els.prompt.focus();
     }
-
-    await Promise.all([
-      loadDefaults(),
-      loadSessions(),
-      prefillFromClipboard().catch(() => {})
-    ]);
-
-    // Focus prompt for quick paste
-    els.prompt.focus();
-    clearStatus();
-
-    // Update clear button visibility
-    updateClearButton();
-
-    // Attempt auto-naming if prompt has content and user hasn't edited title
-    scheduleAutoName();
   }
+  
+  // Cleanup on unload
+  window.addEventListener('unload', cleanup);
+  cleanupFunctions.push(() => window.removeEventListener('unload', cleanup));
 
-  // Wait for both DOM and dynamic content to be ready
+  // Start when DOM is ready
   if (document.readyState === 'loading') {
-    document.addEventListener('DOMContentLoaded', () => {
-      // Give ui.js time to render
-      setTimeout(init, 50);
-    });
+    document.addEventListener('DOMContentLoaded', init);
   } else {
-    // DOM already loaded, but still wait for ui.js
     setTimeout(init, 50);
   }
 })();
