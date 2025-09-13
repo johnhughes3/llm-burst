@@ -28,6 +28,7 @@ html, body {
 /* Compact spacing for popup */
 .main {
   padding: calc(var(--spacing) * 1.25);
+  padding-bottom: 0; /* eliminate trailing blank space causing scroll */
   gap: calc(var(--spacing) * 0.5); /* tighter vertical rhythm */
   flex: 1 1 auto;
   min-height: 0;       /* critical for sticky footer + inner scroll */
@@ -67,6 +68,7 @@ html, body {
 
 /* Compact sections */
 .main > .section { margin-bottom: calc(var(--spacing) * 1); }
+.main > .section:last-child { margin-bottom: 0; }
 
 /* Hide keyboard shortcut in popup */
 .send-button__shortcut { display: none; }
@@ -105,6 +107,7 @@ html, body {
 .section__label { margin-bottom: var(--spacing) !important; font-size: 13px; }
 .prompt__textarea { min-height: 84px; max-height: 200px; }
 .prompt__footer { margin-top: calc(var(--spacing) * 0.25); overflow: visible; }
+.prompt__footer#inlinePromptFooter { margin-bottom: 0; }
 .prompt__draft-status {
   display: inline-block;
   padding: 2px 6px;
@@ -116,3 +119,8 @@ html, body {
 
 /* Compact advanced summary row when closed */
 .advanced-options__toggle { padding: calc(var(--spacing) * 1) calc(var(--spacing) * 1.5); }
+
+/* Hide the empty status container to avoid extra bottom space */
+#statusSection:has(.status-message[style*="display: none"]) {
+  display: none !important;
+}
