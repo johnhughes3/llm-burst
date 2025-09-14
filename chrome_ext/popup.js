@@ -489,10 +489,15 @@
       return;
     }
     
-    setLoading(true);
-    
     const sessionId = els.sessionSelect?.value;
     const isNew = !sessionId || sessionId === '__new__';
+    
+    // Auto-generate title if needed (for new sessions with no manual title)
+    if (isNew && !state.titleDirty && !els.groupTitle?.value && prompt) {
+      await generateTitle();
+    }
+    
+    setLoading(true);
     
     let result;
     if (isNew) {
@@ -616,14 +621,10 @@
       });
     }
     
-    // Send button - with title generation on send
+    // Send button
     if (els.sendButton) {
-      els.sendButton.addEventListener('click', async () => {
-        // Generate title before sending if needed
-        if (state.isNewSession && !state.titleDirty && !els.groupTitle.value && els.prompt.value.trim().length > 20) {
-          await generateTitle();  // Properly await title generation
-        }
-        handleSend();  // Always call handleSend after title generation (if needed)
+      els.sendButton.addEventListener('click', () => {
+        handleSend();
       });
     }
     
@@ -639,7 +640,7 @@
             showInlineNotice('Pasted from clipboard');
             
             // Auto-generate title after paste only if Advanced Options is open and title is blank
-            if (state.isNewSession && !state.titleDirty && text.trim().length > 20 && 
+            if (state.isNewSession && !state.titleDirty && text.trim() && 
                 els.advancedOptions && els.advancedOptions.open && !els.groupTitle.value) {
               setTimeout(() => generateTitle(), 500);
             }
@@ -679,7 +680,7 @@
     if (els.advancedOptions) {
       els.advancedOptions.addEventListener('toggle', () => {
         if (els.advancedOptions.open && state.isNewSession && !state.titleDirty && 
-            !els.groupTitle.value && els.prompt.value.trim().length > 20) {
+            !els.groupTitle.value && els.prompt.value.trim()) {
           generateTitle();
         }
       });

@@ -1,0 +1,28 @@
+<svg xmlns="http://www.w3.org/2000/svg" width="256" height="256" viewBox="0 0 256 256" role="img" aria-label="LLM Burst" focusable="false" shape-rendering="geometricPrecision">
+  <!-- Background removed; transparent canvas -->
+  <!-- Full-bleed chat bubble with outline for legibility on light themes -->
+  <path fill="#FFFFFF" stroke="#0F172A" stroke-width="14" stroke-linecap="round" stroke-linejoin="round" d="
+    M28 40
+    H212
+    a24 24 0 0 1 24 24
+    V152
+    a24 24 0 0 1 -24 24
+    H108
+    l-28 28
+    V176
+    H28
+    a24 24 0 0 1 -24 -24
+    V64
+    a24 24 0 0 1 24 -24
+    Z"/>
+  <!-- Prominent lightning bolt, centered within the bubble -->
+  <path fill="#3B82F6" d="
+    M172 64
+    L124 156
+    H170
+    l-30 52
+    L230 108
+    H184
+    L204 64
+    Z"/>
+</svg>

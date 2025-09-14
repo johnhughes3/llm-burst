@@ -59,7 +59,7 @@ function createElement(tag, attrs = {}, children = []) {
 function createHeader() {
   const header = createElement('header', { className: 'header' }, [
     createElement('div', { className: 'header__logo' }, [
-      createElement('div', { className: 'header__logo-icon' }, ['⚡']),
+      createElement('img', { className: 'header__logo-icon', src: 'icon.svg', alt: '' }),
       createElement('span', { className: 'header__brand' }, ['LLM Burst'])
     ]),
     createElement('button', { 

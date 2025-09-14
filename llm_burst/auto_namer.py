@@ -281,17 +281,15 @@ async def generate_task_name(
     Returns the generated name or None if generation fails.
     """
     prompt = textwrap.dedent("""
-        You are a task naming assistant. Based on the conversation below,
-        generate a concise, descriptive task name (3-6 words) that captures
-        the main topic or purpose of the discussion.
+        Name this conversation for a browser tab group.
         
-        Requirements:
-        - Use title case (e.g., "Quantum Computing Research")
-        - Be specific but concise
-        - Focus on the main topic or goal
-        - Avoid generic names like "Chat" or "Conversation"
+        Guidelines:
+        - Aim for 1–3 words (ideally two); go longer only if needed to clearly disambiguate from similar topics.
+        - Use Title Case. No emojis, brackets, quotes, code fences, or trailing punctuation.
+        - Include a concrete qualifier when helpful (e.g., product, jurisdiction, framework, year).
+        - Avoid generic labels (Chat, Notes, Draft, Brainstorm). Prefer something memorable yet compact (≈ ≤ 24 chars when reasonable).
         
-        Return a JSON object with exactly one field: task_name
+        Return a JSON object with exactly one field: task_name, whose value is the title string only.
         
         Conversation:
         {conversation}

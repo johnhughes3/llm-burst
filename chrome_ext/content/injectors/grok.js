@@ -403,6 +403,16 @@
         // First clear any existing content
         try { inputElement.textContent = ''; } catch {}
 
+        // Hint React/ProseMirror/Slate with a beforeinput for full text
+        try {
+          inputElement.dispatchEvent(new InputEvent('beforeinput', {
+            bubbles: true,
+            cancelable: true,
+            inputType: 'insertFromPaste',
+            data: String(text || '')
+          }));
+        } catch {}
+
         // Use keyboard API to type the text
         for (const char of String(text || '')) {
           try {
@@ -495,13 +505,21 @@
     return new Promise(async (resolve) => {
       let attempts = 0;
       const maxAttempts = 5;
+      const normalize = (s) => String(s || '')
+        .replace(/\u00A0/g, ' ')
+        .replace(/\s+/g, ' ')
+        .trim();
 
       const checkStatus = async () => {
         // Check if the element has the expected text
-        const actualText = isContentEditable ?
-          (inputElement.textContent || '').trim() :
+        const actualTextRaw = isContentEditable ?
+          (inputElement.innerText || inputElement.textContent || '') :
           (inputElement.value || '');
-        const valueCorrect = actualText === String(expectedText || '');
+        const actualText = normalize(actualTextRaw);
+        const expected = normalize(expectedText);
+        const valueCorrect = (actualText === expected) ||
+                             (actualText.startsWith(expected)) ||
+                             (actualText.includes(expected));
 
         // For contenteditable, just check if text is present
         if (isContentEditable) {
@@ -569,8 +587,26 @@
               resolve(false);
             }
           } else {
-            console.error("Text input verification failed for contenteditable");
-            resolve(false);
+            console.warn("Contenteditable verification failing; trying execCommand fallback...");
+            try {
+              inputElement.focus();
+              // Select all and replace via execCommand to trigger editor plumbing
+              try { document.execCommand('selectAll', false, null); } catch {}
+              document.execCommand('insertText', false, String(expectedText || ''));
+
+              await wait(120);
+              const post = normalize(inputElement.innerText || inputElement.textContent || '');
+              if (post === expected || post.includes(expected)) {
+                console.log("✓ execCommand fallback successful for contenteditable");
+                resolve(true);
+              } else {
+                console.error("Text input verification failed for contenteditable");
+                resolve(false);
+              }
+            } catch (e) {
+              console.error(`Contenteditable execCommand fallback failed: ${e.message}`);
+              resolve(false);
+            }
           }
           return;
         }

@@ -22,17 +22,9 @@
   gap: calc(var(--spacing) * 1.5);
 }
 
-.header__logo-icon {
-  width: 32px;
-  height: 32px;
-  background: linear-gradient(135deg, var(--accent-primary) 0%, #6366f1 100%);
-  border-radius: var(--radius);
-  display: flex;
-  align-items: center;
-  justify-content: center;
-  color: white;
-  font-size: 18px;
-}
+.header__logo-icon { width: 32px; height: 32px; display: block; }
+/* When used as an <img> inside .header__logo, ensure no background tile from previous style */
+.header__logo img.header__logo-icon { background: none; border-radius: 0; }
 
 .header__brand {
   font-size: 18px;
