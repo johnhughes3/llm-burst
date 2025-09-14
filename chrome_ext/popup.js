@@ -10,7 +10,8 @@
     lastDraftText: '',
     isComposing: false,
     charCount: 0,
-    isNewSession: true
+    isNewSession: true,
+    sendOnEnter: false
   };
   
   // Store cleanup functions for event listeners
@@ -225,6 +226,11 @@
       if (typeof settings.defaultIncognito === 'boolean' && els.incognito) {
         els.incognito.checked = settings.defaultIncognito;
       }
+      // Enter-to-send preference (default false)
+      state.sendOnEnter = !!settings.sendOnEnter;
+
+      // Update visible hints based on preference
+      updateSendShortcutHint();
       if (Array.isArray(settings.defaultProviders) && settings.defaultProviders.length > 0) {
         console.log('[llm-burst] Loading default providers:', settings.defaultProviders);
         setProviders(settings.defaultProviders);
@@ -237,6 +243,39 @@
       }
     } catch (e) {
       console.error('[llm-burst] Failed to load defaults:', e);
+    }
+  }
+
+  // Apply any pending options set by a keyboard command, then clear them.
+  async function applyPendingPopupOptions() {
+    try {
+      const { pendingPopupOptions } = await chrome.storage.session.get(['pendingPopupOptions']);
+      if (pendingPopupOptions && typeof pendingPopupOptions === 'object') {
+        const { research, incognito } = pendingPopupOptions;
+        if (typeof research === 'boolean' && els.research) {
+          els.research.checked = research;
+          els.research.dispatchEvent(new Event('change', { bubbles: true }));
+        }
+        if (typeof incognito === 'boolean' && els.incognito) {
+          els.incognito.checked = incognito;
+          els.incognito.dispatchEvent(new Event('change', { bubbles: true }));
+        }
+      }
+      await chrome.storage.session.remove(['pendingPopupOptions']);
+    } catch (e) {
+      // Non-fatal
+      console.warn('[llm-burst] Could not apply pending popup options:', e);
+    }
+  }
+
+  function updateSendShortcutHint() {
+    const hint = document.getElementById('promptHint');
+    if (hint) {
+      hint.textContent = state.sendOnEnter ? 'Enter to send (Shift+Enter for newline)' : '⌘/Ctrl+Enter to send';
+    }
+    const btnShortcut = document.querySelector('.send-button__shortcut');
+    if (btnShortcut) {
+      btnShortcut.textContent = state.sendOnEnter ? 'Enter' : '⌘+Enter';
     }
   }
   
@@ -522,7 +561,16 @@
       // Keyboard shortcut
       els.prompt.addEventListener('keydown', (e) => {
         if (state.isComposing) return;
+        // Cmd/Ctrl+Enter always sends
         if (e.key === 'Enter' && (e.metaKey || e.ctrlKey)) {
+          e.preventDefault();
+          handleSend();
+        } else if (
+          // Plain Enter sends when enabled; Shift+Enter always newline
+          e.key === 'Enter' &&
+          state.sendOnEnter &&
+          !e.shiftKey && !e.altKey && !e.metaKey && !e.ctrlKey
+        ) {
           e.preventDefault();
           handleSend();
         }
@@ -650,31 +698,33 @@
     
     // Keyboard shortcuts for research and incognito
     document.addEventListener('keydown', (e) => {
-      // Don't trigger if typing in input/textarea
-      const activeElement = document.activeElement;
-      const isTyping = activeElement && 
-        (activeElement.tagName === 'INPUT' || 
-         activeElement.tagName === 'TEXTAREA');
-      
-      // Use Alt key to avoid conflicts (Alt+R for research, Alt+I for incognito)
-      if (!isTyping && e.altKey && !e.ctrlKey && !e.metaKey) {
-        if (e.key === 'r' || e.key === 'R') {
+      // In‑popup shortcuts only: Cmd/Ctrl+Shift+E (Research), Cmd/Ctrl+Shift+I (Incognito)
+      // These work even while typing; we prevent default to avoid unintended effects.
+      if ((e.metaKey || e.ctrlKey) && e.shiftKey && !e.altKey) {
+        const k = e.key;
+        if (k === 'e' || k === 'E') {
           e.preventDefault();
+          e.stopPropagation();
           if (els.research) {
             els.research.checked = !els.research.checked;
             els.research.dispatchEvent(new Event('change', { bubbles: true }));
-            // Visual feedback
             flashElement(els.research.closest('.toggle'));
           }
-        } else if (e.key === 'i' || e.key === 'I') {
+        } else if (k === 'i' || k === 'I') {
           e.preventDefault();
+          e.stopPropagation();
           if (els.incognito) {
             els.incognito.checked = !els.incognito.checked;
             els.incognito.dispatchEvent(new Event('change', { bubbles: true }));
-            // Visual feedback
             flashElement(els.incognito.closest('.toggle'));
           }
         }
+      }
+
+      // Esc closes the popup/launcher
+      if (e.key === 'Escape' && !e.altKey && !e.ctrlKey && !e.metaKey) {
+        e.preventDefault();
+        window.close();
       }
     });
   }
@@ -731,6 +781,7 @@
     
     // Load data
     await loadDefaults();
+    await applyPendingPopupOptions();
     await loadSessions();
     
     // Try prefill from clipboard or draft

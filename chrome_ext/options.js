@@ -43,6 +43,7 @@
 
     els.defaultResearch = $('defaultResearch');
     els.defaultIncognito = $('defaultIncognito');
+    els.sendOnEnter = $('sendOnEnter');
 
     els.defProvChatGPT = $('def-prov-chatgpt');
     els.defProvClaude = $('def-prov-claude');
@@ -70,6 +71,7 @@
 
       els.defaultResearch.checked = !!settings.defaultResearch;
       els.defaultIncognito.checked = !!settings.defaultIncognito;
+      els.sendOnEnter.checked = !!settings.sendOnEnter;
       setSelectedProviders(settings.defaultProviders || ['CHATGPT', 'CLAUDE', 'GEMINI', 'GROK']);
 
       setStatus('Loaded.', 'info');
@@ -94,6 +96,7 @@
       const settings = {
         defaultResearch: !!els.defaultResearch.checked,
         defaultIncognito: !!els.defaultIncognito.checked,
+        sendOnEnter: !!els.sendOnEnter.checked,
         defaultProviders: getSelectedProviders()
       };
       await chrome.storage.sync.set({ settings });
@@ -107,6 +110,7 @@
     // Recommended defaults
     els.defaultResearch.checked = false;
     els.defaultIncognito.checked = false;
+    els.sendOnEnter.checked = false;
     setSelectedProviders(['CHATGPT', 'CLAUDE', 'GEMINI', 'GROK']);
     els.geminiModel.value = '';
     setStatus('Defaults restored (not yet saved).', 'info');

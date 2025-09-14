@@ -482,7 +482,12 @@ function generateSessionId() {
 
 function sanitizeTitle(title) {
   if (!title) return '';
-  let t = String(title).replace(/[\r\n]+/g, ' ').replace(/^["'\s]+|["'\s]+$/g, '');
+  let t = String(title)
+    .replace(/[\r\n]+/g, ' ')
+    .replace(/\s+/g, ' ')
+    .replace(/^["'\s]+|["'\s]+$/g, '');
+  // Remove trailing separators/punctuation commonly produced by models
+  t = t.replace(/[\s]*[\-–—:;,]+$/g, '');
   if (t.length > 80) t = t.slice(0, 80).trim();
   return t;
 }
@@ -984,8 +989,13 @@ async function autoNamePrompt(text, { timeoutMs = 15000, modelOverride } = {}) {
   console.log('[llm-burst] Auto-naming with model:', model);
 
   const prompt = [
-    'Create a short, concise conversation title (ideally 4–8 words) for the following prompt.',
-    'Avoid quotes or trailing punctuation. Return only the title text.',
+    'Propose a short, distinctive tab‑group title for this conversation.',
+    'Aim for 1–3 words (ideally two); go longer only if needed to clearly disambiguate from similar topics.',
+    'Use Title Case. No emojis, brackets, quotes, code fences, or trailing punctuation.',
+    'Include a concrete qualifier when helpful (e.g., product, jurisdiction, framework, year).',
+    'Avoid generic labels (Chat, Notes, Draft, Brainstorm). Prefer a title that reads well in a browser tab; ≤ 24 characters when reasonable.',
+    '',
+    'Return only the title text.',
     '',
     String(text).slice(0, 10000) // cap input size
   ].join('\n');
@@ -1432,3 +1442,26 @@ chrome.tabs.onUpdated.addListener(async (tabId, changeInfo, tab) => {
 });
 
 console.log('LLM Burst Helper background service worker loaded');
+
+// =============================================================================
+// Commands (keyboard shortcuts)
+// =============================================================================
+
+chrome.commands.onCommand.addListener(async (command) => {
+  try {
+    switch (command) {
+      case 'open_launcher': {
+        await chrome.windows.create({
+          url: chrome.runtime.getURL('launcher.html'),
+          type: 'popup', width: 420, height: 640
+        });
+        break;
+      }
+      default:
+        // _execute_action is handled by Chrome automatically
+        break;
+    }
+  } catch (e) {
+    console.error('Command handling failed:', command, e);
+  }
+});

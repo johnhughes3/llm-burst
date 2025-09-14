@@ -69,3 +69,22 @@ Use this checklist to verify end-to-end behavior.
   - Confirm the Research button becomes active before submission.
 
 If any steps fail, capture a screenshot and open an issue with the page URL and visible UI state.
+
+## Keyboard Shortcuts
+
+- Open popup (default): Command/Ctrl+Shift+U
+- Open popup with Research enabled: no global default (open popup, then use in‑popup shortcut)
+- Open popup with Incognito enabled: no global default (open popup, then use in‑popup shortcut)
+- Open Launcher window: not set by default (configure if you want)
+
+Configure or change shortcuts at: `chrome://extensions/shortcuts`.
+
+### In‑popup keyboard
+
+- Focus starts in the prompt when the popup opens
+- Research toggle: Cmd/Ctrl+Shift+E
+- Incognito toggle: Cmd/Ctrl+Shift+I
+- Esc closes the popup
+- Enter to send (optional): enable in Options → Defaults
+  - When enabled: Enter sends, Shift+Enter inserts a newline
+  - Cmd/Ctrl+Enter always sends
