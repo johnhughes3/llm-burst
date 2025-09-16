@@ -1,0 +1,22 @@
+{
+  "name": "llm-burst",
+  "version": "0.1.0",
+  "private": true,
+  "type": "module",
+  "scripts": {
+    "format": "prettier --check \"chrome_ext/content/injectors/claude.js\"",
+    "format:fix": "prettier --write \"chrome_ext/content/injectors/claude.js\"",
+    "lint": "eslint chrome_ext/content/injectors/claude.js",
+    "lint:fix": "eslint chrome_ext/content/injectors/claude.js --fix",
+    "typecheck": "tsc --noEmit"
+  },
+  "devDependencies": {
+    "@eslint/js": "9.35.0",
+    "@types/chrome": "0.1.11",
+    "eslint": "9.35.0",
+    "globals": "16.4.0",
+    "prettier": "3.6.2",
+    "typescript": "5.9.2"
+  },
+  "packageManager": "pnpm@10.15.1+sha512.34e538c329b5553014ca8e8f4535997f96180a1d0f614339357449935350d924e22f8614682191264ec33d1462ac21561aff97f6bb18065351c162c7e8f6de67"
+}
