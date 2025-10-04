@@ -260,6 +260,26 @@ async function enableChatGPTResearchViaCDP(tabId, { timeoutMs = 6000 } = {}) {
     await dbgSend(tabId, 'DOM.enable');
     await dbgSend(tabId, 'Console.enable');
 
+    // 0) Wait for page to be ready - check for key ChatGPT UI elements
+    console.log('[CDP] Waiting for ChatGPT UI to be ready...');
+    const pageReady = await dbgWaitFor(
+      tabId,
+      `(() => {
+        // Check for editor and model selector as signs page is loaded
+        const editor = document.querySelector('#prompt-textarea, .ProseMirror, [contenteditable="true"]');
+        const modelBtn = document.querySelector('button[aria-label*="Model" i], button[aria-haspopup="menu"]');
+        return (editor && modelBtn) ? true : false;
+      })()`,
+      { timeout: Math.min(timeoutMs, 5000) }
+    );
+
+    if (!pageReady) {
+      console.warn('[CDP] Page not fully loaded yet, but continuing anyway...');
+    } else {
+      console.log('[CDP] Page ready, proceeding with activation...');
+      await delay(300); // Small extra delay for hydration
+    }
+
     // 1) Click the composer plus button
     const plusXY = await dbgWaitFor(
       tabId,

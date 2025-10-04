@@ -232,23 +232,41 @@
           console.log('🚀 Enabling Research: starting');
           const deadlineMs = 14000;
 
-          // 0) CDP trusted click (keep if background supports it)
+          // 0) CDP trusted click with 3x retries (most reliable on fresh pages)
           try {
             if (typeof chrome !== 'undefined' && chrome.runtime?.sendMessage) {
-              console.log('[CDP] Requesting background Research activation…');
-              // Safer promise wrapper for MV3 compatibility
-              const resp = await new Promise((resolve) => {
-                try {
-                  chrome.runtime.sendMessage({ type: 'llmburst-chatgpt-enable-research', timeoutMs: 7000 }, resolve);
-                } catch (e) {
-                  resolve(null);
+              // Try CDP up to 3 times with increasing delays for page load
+              for (let cdpAttempt = 1; cdpAttempt <= 3; cdpAttempt++) {
+                console.log(`[CDP] Attempt ${cdpAttempt}/3: Requesting background Research activation…`);
+
+                // Wait longer on each retry for page to fully load
+                if (cdpAttempt > 1) {
+                  const delayMs = cdpAttempt * 800; // 800ms, 1600ms
+                  console.log(`[CDP] Waiting ${delayMs}ms for page to stabilize...`);
+                  await sleep(delayMs);
                 }
-              });
-              if (resp?.ok) {
-                const verified = await verifyResearchActive({ deadlineMs: 3000 });
-                if (verified) return true;
-                console.warn('[CDP] Click sequence ok but verification failed; continuing.');
+
+                // Safer promise wrapper for MV3 compatibility
+                const resp = await new Promise((resolve) => {
+                  try {
+                    chrome.runtime.sendMessage({ type: 'llmburst-chatgpt-enable-research', timeoutMs: 8000 }, resolve);
+                  } catch (e) {
+                    resolve(null);
+                  }
+                });
+
+                if (resp?.ok) {
+                  const verified = await verifyResearchActive({ deadlineMs: 4000 });
+                  if (verified) {
+                    console.log(`✅ [CDP] Research activated successfully on attempt ${cdpAttempt}`);
+                    return true;
+                  }
+                  console.warn(`[CDP] Attempt ${cdpAttempt}: Click sequence ok but verification failed`);
+                } else {
+                  console.warn(`[CDP] Attempt ${cdpAttempt}: Background returned error:`, resp?.error || 'unknown');
+                }
               }
+              console.log('[CDP] All 3 attempts failed, falling back to other methods...');
             }
           } catch (e) {
             console.warn('[CDP] Exception:', e);
