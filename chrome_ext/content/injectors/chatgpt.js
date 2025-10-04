@@ -256,6 +256,11 @@
                 });
 
                 if (resp?.ok) {
+                  // If background CDP already positively verified activation, trust it
+                  if (resp.activated === true) {
+                    console.log(`✅ [CDP] Background reports Research activated on attempt ${cdpAttempt}`);
+                    return true;
+                  }
                   const verified = await verifyResearchActive({ deadlineMs: 4000 });
                   if (verified) {
                     console.log(`✅ [CDP] Research activated successfully on attempt ${cdpAttempt}`);
@@ -391,22 +396,42 @@
 
           async function verifyResearchActive({ deadlineMs = 5000 } = {}) {
             const start = now();
-            // 1) Quick check: model button label
-            for (let i = 0; i < 15; i++) {
-              if (now() - start > deadlineMs) break;
+
+            // Strong signal 0: Composer pill indicating Research mode
+            const hasResearchPill = () => {
+              // Look for an explicit composer mode pill or tag labelled "Research"
+              const nodes = document.querySelectorAll(
+                'button.__composer-pill[aria-label*="research" i], [aria-label*="research" i].__composer-pill, .composer-mode-pill, [data-testid*="research" i]'
+              );
+              for (const n of nodes) {
+                if (!isVisible(n)) continue;
+                const t = normalizeText((n.textContent || '') + ' ' + (n.getAttribute('aria-label') || ''));
+                if (/\bresearch\b/i.test(t)) return true;
+              }
+              return false;
+            };
+
+            // 1) Poll for the composer Research pill first (label updates can lag)
+            while (now() - start < deadlineMs) {
+              if (hasResearchPill()) {
+                console.log('✅ Research verified via composer pill');
+                return true;
+              }
+              // Also check model selector label in the same loop
               const btn = getModelTrigger();
               if (btn && modelLabelIndicatesResearch(btn)) {
                 console.log('✅ Research verified via model button label');
                 return true;
               }
-              await sleep(200);
+              await sleep(180);
             }
-            // 2) Re-open menu and check aria-checked
+
+            // 2) As a fallback, re-open the model menu and check aria-checked
             try {
               const trigger = getModelTrigger();
               if (trigger) {
                 await clickInteractable(trigger);
-                const menu = await waitForMenuOpenStable({ timeoutMs: Math.max(500, deadlineMs - (now() - start)) });
+                const menu = await waitForMenuOpenStable({ timeoutMs: 1200 });
                 if (menu) {
                   const checkedItem = menu.querySelector('[role="menuitemradio"][aria-checked="true"], [role="menuitem"][aria-selected="true"]');
                   if (checkedItem && researchRegex().test(normalizeText(checkedItem.textContent))) {
