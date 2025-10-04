@@ -52,62 +52,115 @@
     try {
       console.log('Attempting to enable Research mode on Claude...');
 
-      // Wait for the Research button to appear (up to 15 seconds - longer for multi-tab scenarios)
+      // Step 1: Find and click the "Open tools menu" button
       /** @type {HTMLButtonElement | null} */
-      let researchButton = null;
+      let toolsMenuButton = null;
       const maxAttempts = 30;
 
       for (let i = 0; i < maxAttempts; i++) {
-        // Try multiple selectors for the Research button
+        // Look for the tools menu button with various selectors
+        toolsMenuButton =
+          /** @type {HTMLButtonElement | null} */ (
+            document.querySelector('button[aria-label="Open tools menu"]')
+          ) ||
+          /** @type {HTMLButtonElement | null} */ (
+            Array.from(document.querySelectorAll('button[haspopup="listbox"]')).find((b) => {
+              const label = (b.getAttribute('aria-label') || '').toLowerCase();
+              return label.includes('tools');
+            }) || null
+          );
+
+        if (toolsMenuButton) {
+          console.log(`Found tools menu button after ${i * 500}ms`);
+          break;
+        }
+
+        console.log(`Waiting for tools menu button... attempt ${i + 1}/${maxAttempts}`);
+        await wait(500);
+      }
+
+      if (!toolsMenuButton) {
+        console.log('Could not find tools menu button after waiting 15 seconds');
+        return false;
+      }
+
+      // Check if menu is already open
+      const isExpanded = toolsMenuButton.getAttribute('aria-expanded') === 'true';
+
+      if (!isExpanded) {
+        console.log('Opening tools menu...');
+        toolsMenuButton.click();
+        await wait(500);
+      } else {
+        console.log('Tools menu already open');
+      }
+
+      // Step 2: Find the Research button within the menu
+      /** @type {HTMLButtonElement | null} */
+      let researchButton = null;
+
+      for (let i = 0; i < 10; i++) {
+        // Look for Research button or toggle within the menu
         researchButton =
-          /** @type {HTMLButtonElement | null} */ (
-            document.querySelector('button[aria-label="Research"]')
-          ) ||
-          /** @type {HTMLButtonElement | null} */ (
-            document.querySelector('.flex.shrink.min-w-8.\\!shrink-0 button')
-          ) ||
           /** @type {HTMLButtonElement | null} */ (
             Array.from(document.querySelectorAll('button')).find((b) => {
               const text = (b.textContent || '').trim();
-              const hasResearchText = text === 'Research' || text.includes('Research');
-              const hasResearchIcon = b.querySelector('p')?.textContent === 'Research';
-              return hasResearchText || hasResearchIcon;
+              return text === 'Research' || text.startsWith('Research');
             }) || null
           );
 
         if (researchButton) {
-          console.log(`Found Research button after ${i * 500}ms`);
+          console.log(`Found Research button after ${i * 100}ms`);
           break;
         }
 
-        console.log(`Waiting for Research button... attempt ${i + 1}/${maxAttempts}`);
-        await wait(500);
+        console.log(`Waiting for Research button in menu... attempt ${i + 1}/10`);
+        await wait(100);
       }
 
-      if (researchButton) {
-        console.log('Found Research button, clicking...', researchButton);
-        researchButton.click();
-
-        // Wait to verify activation
-        await wait(700);
-
-        // Check if research mode is active (button might change state)
-        const isActive =
-          researchButton.getAttribute('aria-pressed') === 'true' ||
-          researchButton.classList.contains('active') ||
-          document.querySelector('[data-state="active"][aria-label="Research"]');
-
-        if (isActive) {
-          console.log('✅ Research mode successfully activated on Claude');
-          return true;
-        } else {
-          console.log('⚠️ Research button clicked, activation status unclear');
-          return true; // Still return true since we clicked it
-        }
-      } else {
-        console.log('Could not find Research button after waiting 15 seconds');
+      if (!researchButton) {
+        console.log('Could not find Research button in tools menu');
         return false;
       }
+
+      // Check if Research is already enabled by looking for the switch state
+      // The switch is an input[type="checkbox"][role="switch"] element
+      /** @type {HTMLInputElement | null} */
+      const switchElement = /** @type {HTMLInputElement | null} */ (
+        researchButton.querySelector('input[role="switch"]')
+      );
+
+      if (!switchElement) {
+        console.log('Could not find switch element within Research button');
+        return false;
+      }
+
+      const isAlreadyEnabled = switchElement.checked === true;
+
+      if (isAlreadyEnabled) {
+        console.log('✅ Research mode already enabled');
+        // Close the menu by clicking outside
+        document.body.click();
+        return true;
+      }
+
+      // Click the Research button to enable it
+      console.log('Clicking Research button to enable...');
+      researchButton.click();
+
+      // Wait to verify activation
+      await wait(500);
+
+      // Verify it was enabled
+      const nowEnabled = switchElement.checked === true;
+
+      console.log('✅ Research mode toggle clicked, enabled:', nowEnabled);
+
+      // Close the menu
+      document.body.click();
+      await wait(300);
+
+      return true;
     } catch (error) {
       console.error(`Error enabling Research mode: ${error}`);
       return false;
