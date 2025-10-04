@@ -50,6 +50,132 @@
   }
 
   // ---------------------------------------------------------------------------
+  // DOM Helper Functions for robust UI interaction
+  // ---------------------------------------------------------------------------
+  function now() { return performance ? performance.now() : Date.now(); }
+
+  function sleep(ms) { return new Promise(r => setTimeout(r, ms)); }
+
+  function jitter(ms) {
+    // decorrelated jitter: random between 50%–150% of ms
+    const f = 0.5 + Math.random();
+    return Math.max(25, Math.floor(ms * f));
+  }
+
+  function normalizeText(s) {
+    return (s || '').replace(/\s+/g, ' ').trim().toLowerCase();
+  }
+
+  function isVisible(el) {
+    if (!el || !el.isConnected) return false;
+    const rect = el.getBoundingClientRect();
+    if (rect.width <= 0 || rect.height <= 0) return false;
+    const cs = window.getComputedStyle(el);
+    if (cs.visibility === 'hidden' || cs.display === 'none' || Number(cs.opacity) === 0) return false;
+    // inert containers are non-interactive
+    let n = el;
+    while (n) {
+      if (n.hasAttribute && (n.hasAttribute('inert') || n.getAttribute('aria-hidden') === 'true')) return false;
+      n = n.parentNode;
+    }
+    return true;
+  }
+
+  async function waitForVisible(selector, { timeoutMs = 6000, signal } = {}) {
+    const start = now();
+    while (now() - start < timeoutMs) {
+      if (signal?.aborted) throw new Error('aborted');
+      const el = document.querySelector(selector);
+      if (el && isVisible(el)) return el;
+      await sleep(50);
+    }
+    return null;
+  }
+
+  // Wait until no subtree mutations for stableForMs (e.g., Radix menu finishing layout)
+  async function waitForStableSubtree(root, { stableForMs = 180, timeoutMs = 4000, signal } = {}) {
+    if (!root) return false;
+    let lastTs = now();
+    let resolved = false;
+
+    return new Promise((resolve) => {
+      const done = (ok) => { if (!resolved) { resolved = true; obs.disconnect(); resolve(!!ok); } };
+      const obs = new MutationObserver(() => { lastTs = now(); });
+      try { obs.observe(root, { childList: true, subtree: true, attributes: true }); } catch { done(false); return; }
+
+      const tick = async () => {
+        if (signal?.aborted) return done(false);
+        const elapsed = now() - lastTs;
+        if (elapsed >= stableForMs) return done(true);
+        requestAnimationFrame(tick);
+      };
+      requestAnimationFrame(tick);
+
+      setTimeout(() => done(false), timeoutMs);
+    });
+  }
+
+  async function clickInteractable(el) {
+    if (!el) throw new Error('no element to click');
+    try { el.scrollIntoView({ block: 'center', inline: 'center' }); } catch {}
+    await sleep(16); // 1 frame for scroll
+    const rect = el.getBoundingClientRect();
+    if (!isVisible(el)) throw new Error('element not visible');
+    // Dispatch pointer + mouse sequence to match browser semantics
+    const opts = { bubbles: true, cancelable: true, clientX: rect.left + rect.width / 2, clientY: rect.top + rect.height / 2 };
+    try { el.dispatchEvent(new PointerEvent('pointerdown', opts)); } catch {}
+    try { el.dispatchEvent(new MouseEvent('mousedown', opts)); } catch {}
+    try { el.dispatchEvent(new PointerEvent('pointerup', opts)); } catch {}
+    try { el.dispatchEvent(new MouseEvent('mouseup', opts)); } catch {}
+    try { el.click(); } catch {}
+  }
+
+  async function withRetries(fn, { tries = 3, baseMs = 120, deadlineMs = 12000 } = {}) {
+    const start = now();
+    let lastErr = null;
+    for (let i = 0; i < tries; i++) {
+      if (now() - start > deadlineMs) break;
+      try { return await fn(i + 1); } catch (e) { lastErr = e; }
+      await sleep(jitter(baseMs * Math.pow(2, i))); // 120ms, 240ms, 480ms (+jitter)
+    }
+    if (lastErr) throw lastErr;
+    return null;
+  }
+
+  // Model/menu utilities
+  function getModelTrigger() {
+    // Prefers explicit label; falls back to haspopup=menu
+    return document.querySelector('button[aria-label*="Model selector" i]') ||
+           document.querySelector('button[aria-haspopup="menu"]');
+  }
+
+  function getOpenMenuRoot() {
+    // Radix portals typically mark data-state="open". Prefer last visible portal to avoid selecting wrong menu.
+    const portals = [...document.querySelectorAll('[data-radix-portal] [role="menu"], [data-radix-portal] [data-state="open"]')].filter(isVisible);
+    return portals.at(-1) || document.querySelector('[role="menu"][data-orientation="vertical"][data-state="open"]') || null;
+  }
+
+  function findMenuItemByText(root, regex) {
+    if (!root) return null;
+    const items = root.querySelectorAll('[role="menuitem"], [role="menuitemradio"], [role="option"], button');
+    for (const it of items) {
+      const t = normalizeText(it.textContent);
+      if (regex.test(t)) return it;
+    }
+    return null;
+  }
+
+  function researchRegex() {
+    // covers "Pro Research", "Deep Research", "Research-grade intelligence"
+    return /(?:\b(?:pro\s*)?(?:deep\s*)?research(?:-grade)?\b)/i;
+  }
+
+  function modelLabelIndicatesResearch(btn) {
+    const txt = normalizeText(btn?.getAttribute('aria-label') || btn?.textContent || '');
+    return /(?:\b(?:current model is\s*)?(?:pro\s*)?(?:deep\s*)?research(?:-grade)?\b)/i.test(txt);
+  }
+
+  // ---------------------------------------------------------------------------
   // Ported logic: automateOpenAIChat (submit)
   // ---------------------------------------------------------------------------
   function automateOpenAIChat(messageText, useResearch, useIncognito) {
@@ -103,122 +229,191 @@
 
         // Enable research mode by selecting Pro Research model
         async function enableDeepResearchMode() {
-          console.log('🚀 Attempting to enable research mode by selecting Pro model...');
+          console.log('🚀 Enabling Research: starting');
+          const deadlineMs = 14000;
 
-          function sleep(ms) { return new Promise(resolve => setTimeout(resolve, ms)); }
-          async function waitForElement(selector, timeout = 5000, maxRetries = 50) {
-            const start = Date.now();
-            let retries = 0;
-            while (Date.now() - start < timeout && retries < maxRetries) {
-              const el = document.querySelector(selector);
-              if (el) return el;
-              await sleep(100);
-              retries++;
+          // 0) CDP trusted click (keep if background supports it)
+          try {
+            if (typeof chrome !== 'undefined' && chrome.runtime?.sendMessage) {
+              console.log('[CDP] Requesting background Research activation…');
+              // Safer promise wrapper for MV3 compatibility
+              const resp = await new Promise((resolve) => {
+                try {
+                  chrome.runtime.sendMessage({ type: 'llmburst-chatgpt-enable-research', timeoutMs: 7000 }, resolve);
+                } catch (e) {
+                  resolve(null);
+                }
+              });
+              if (resp?.ok) {
+                const verified = await verifyResearchActive({ deadlineMs: 3000 });
+                if (verified) return true;
+                console.warn('[CDP] Click sequence ok but verification failed; continuing.');
+              }
             }
-            if (retries >= maxRetries) {
-              console.log(`Max retries (${maxRetries}) reached while waiting for element: ${selector}`);
+          } catch (e) {
+            console.warn('[CDP] Exception:', e);
+          }
+
+          // 1) Primary: Model selector menu
+          try {
+            const ok = await withRetries(async (attempt) => {
+              console.log(`[ModelMenu] Attempt ${attempt}`);
+              let trigger = await waitForVisible('button[aria-label*="Model selector" i], button[aria-haspopup="menu"]', { timeoutMs: 5000 });
+              if (!trigger) throw Object.assign(new Error('E_MODEL_TRIGGER_NOT_FOUND'), { code: 'E_MODEL_TRIGGER_NOT_FOUND' });
+
+              await clickInteractable(trigger);
+
+              // Wait for Radix menu to be open and stable
+              const menuOpen = await waitForMenuOpenStable({ timeoutMs: 4000 });
+              if (!menuOpen) throw Object.assign(new Error('E_MENU_NOT_OPEN'), { code: 'E_MENU_NOT_OPEN' });
+
+              // Require at least a few items and stability
+              const item = findMenuItemByText(menuOpen, researchRegex());
+              if (!item) {
+                // If not found, let it stabilize a bit more and retry once per attempt
+                await waitForStableSubtree(menuOpen, { stableForMs: 220, timeoutMs: 1200 });
+              }
+              const researchItem = findMenuItemByText(menuOpen, researchRegex());
+              if (!researchItem) throw Object.assign(new Error('E_OPTION_NOT_FOUND'), { code: 'E_OPTION_NOT_FOUND' });
+
+              await clickInteractable(researchItem);
+
+              // Menu likely closes; Verify by label or re-open to check aria-checked
+              const verified = await verifyResearchActive({ deadlineMs: 5000 });
+              if (!verified) throw Object.assign(new Error('E_VERIFY_FAILED'), { code: 'E_VERIFY_FAILED' });
+
+              return true;
+            }, { tries: 3, baseMs: 140, deadlineMs });
+            if (ok) return true;
+          } catch (e) {
+            console.warn('[ModelMenu] Failed:', e?.code || e);
+          }
+
+          // 2) Secondary: Model selector with keyboard navigation
+          try {
+            const ok = await withRetries(async (attempt) => {
+              console.log(`[ModelKB] Attempt ${attempt}`);
+              const trigger = await waitForVisible('button[aria-label*="Model selector" i], button[aria-haspopup="menu"]', { timeoutMs: 4000 });
+              if (!trigger) throw new Error('E_MODEL_TRIGGER_NOT_FOUND');
+
+              await clickInteractable(trigger);
+              const menu = await waitForMenuOpenStable({ timeoutMs: 3000 });
+              if (!menu) throw new Error('E_MENU_NOT_OPEN');
+
+              // Ensure first item is focused
+              const target = menu.contains(document.activeElement) ? document.activeElement : menu.querySelector('[role="menuitem"],[role="menuitemradio"],[role="option"]');
+              target?.focus();
+
+              // Try typeahead "r" or "p" first
+              const keys = ['r','p'];
+              for (const k of keys) {
+                const keyTarget = document.activeElement || target;
+                keyTarget?.dispatchEvent(new KeyboardEvent('keydown', { key: k, bubbles: true }));
+                await sleep(100);
+                const active = document.activeElement;
+                if (active && researchRegex().test(normalizeText(active.textContent))) {
+                  active.dispatchEvent(new KeyboardEvent('keydown', { key: 'Enter', bubbles: true }));
+                  const okv = await verifyResearchActive({ deadlineMs: 4000 });
+                  if (okv) return true;
+                }
+              }
+
+              // Fallback: iterate a few ArrowDowns
+              for (let i = 0; i < 15; i++) {
+                const keyTarget = document.activeElement || target;
+                keyTarget?.dispatchEvent(new KeyboardEvent('keydown', { key: 'ArrowDown', bubbles: true }));
+                await sleep(60);
+                const active = document.activeElement;
+                if (active && researchRegex().test(normalizeText(active.textContent))) {
+                  active.dispatchEvent(new KeyboardEvent('keydown', { key: 'Enter', bubbles: true }));
+                  const okv = await verifyResearchActive({ deadlineMs: 4000 });
+                  if (okv) return true;
+                }
+              }
+
+              throw new Error('E_OPTION_NOT_FOUND');
+            }, { tries: 2, baseMs: 180, deadlineMs: 8000 });
+            if (ok) return true;
+          } catch (e) {
+            console.warn('[ModelKB] Failed:', e?.code || e);
+          }
+
+          // 3) Composer "+" → Deep research menu
+          try {
+            const ok = await selectViaComposerPlus();
+            if (ok) return true;
+          } catch (e) {
+            console.warn('[PlusMenu] Failed:', e);
+          }
+
+          // 4) Slash command fallback
+          try {
+            const ok = await slashCommandFallback();
+            if (ok) return true;
+          } catch (e) {
+            console.warn('[Slash] Failed:', e);
+          }
+
+          console.warn('Research activation failed after all strategies.');
+          return false;
+
+          // ---- local helpers ----
+          async function waitForMenuOpenStable({ timeoutMs = 4000 } = {}) {
+            const start = now();
+            while (now() - start < timeoutMs) {
+              const menu = getOpenMenuRoot();
+              if (menu && isVisible(menu)) {
+                const ok = await waitForStableSubtree(menu, { stableForMs: 180, timeoutMs: Math.max(250, timeoutMs - (now() - start)) });
+                if (ok) return menu;
+              }
+              await sleep(50);
             }
             return null;
           }
 
-          try {
-            // First try: CDP trusted-click path via background debugger API
-            try {
-              if (typeof chrome !== 'undefined' && chrome.runtime?.sendMessage) {
-                console.log('[CDP] Requesting background to enable Research via trusted clicks...');
-                const resp = await chrome.runtime.sendMessage({ type: 'llmburst-chatgpt-enable-research', timeoutMs: 7000 });
-                if (resp && resp.ok) {
-                  console.log('[CDP] Research click sequence completed', resp);
-                  const pill = await waitForElement('button.__composer-pill[aria-label*="Research" i], [aria-label*="Research" i].__composer-pill, .composer-mode-pill, [data-testid*="research"]', 4000);
-                  if (pill) return true;
-                  console.warn('CDP click completed, but Research pill not visible yet');
-                } else {
-                  console.warn('[CDP] Research click failed or unsupported:', resp?.error || 'unknown');
-                }
+          async function verifyResearchActive({ deadlineMs = 5000 } = {}) {
+            const start = now();
+            // 1) Quick check: model button label
+            for (let i = 0; i < 15; i++) {
+              if (now() - start > deadlineMs) break;
+              const btn = getModelTrigger();
+              if (btn && modelLabelIndicatesResearch(btn)) {
+                console.log('✅ Research verified via model button label');
+                return true;
               }
-            } catch (e) {
-              console.warn('[CDP] Exception calling background enable:', e);
+              await sleep(200);
             }
-
-            // Try a direct Research toggle if present (role switch/button)
+            // 2) Re-open menu and check aria-checked
             try {
-              const toggle = Array.from(document.querySelectorAll('[role="switch"],[aria-pressed]'))
-                .find((el) => {
-                  const label = (el.getAttribute('aria-label') || el.textContent || '').toLowerCase();
-                  return label.includes('research');
-                });
-              if (toggle) {
-                const state = (toggle.getAttribute('aria-checked') || toggle.getAttribute('aria-pressed') || 'false').toString();
-                if (state !== 'true') {
-                  console.log('Found research toggle, clicking...');
-                  toggle.click();
-                  const pill = await waitForElement('button.__composer-pill[aria-label*="Research" i], [aria-label*="Research" i].__composer-pill, .composer-mode-pill, [data-testid*="research"]', 3000);
-                  if (pill) return true;
+              const trigger = getModelTrigger();
+              if (trigger) {
+                await clickInteractable(trigger);
+                const menu = await waitForMenuOpenStable({ timeoutMs: Math.max(500, deadlineMs - (now() - start)) });
+                if (menu) {
+                  const checkedItem = menu.querySelector('[role="menuitemradio"][aria-checked="true"], [role="menuitem"][aria-selected="true"]');
+                  if (checkedItem && researchRegex().test(normalizeText(checkedItem.textContent))) {
+                    console.log('✅ Research verified via menu aria-checked');
+                    // Close menu - try multiple approaches
+                    try { menu.dispatchEvent(new KeyboardEvent('keydown', { key: 'Escape', bubbles: true })); } catch {}
+                    try { trigger.dispatchEvent(new KeyboardEvent('keydown', { key: 'Escape', bubbles: true })); } catch {}
+                    try { document.body.click(); } catch {}
+                    return true;
+                  }
                 }
               }
             } catch {}
+            return false;
+          }
 
-            let modelButton = document.querySelector('button[aria-label*="Model selector"]') ||
-                             document.querySelector('button[aria-haspopup="menu"]') ||
-                             Array.from(document.querySelectorAll('button')).find(b => 
-                               b.textContent && (b.textContent.includes('ChatGPT') || b.textContent.includes('GPT'))
-                             );
-            
-            if (modelButton) {
-              console.log('Found model selector button, clicking...');
-              modelButton.click();
-              await sleep(500);
-              
-              // Look for Pro Research option in the menu
-              const menuItems = document.querySelectorAll('[role="menuitem"]');
-              let proOption = null;
-              
-              for (const item of menuItems) {
-                const text = (item.textContent || '').trim();
-                // Look for "Pro Research-grade intelligence" or similar
-                if ((text.includes('Pro') && text.toLowerCase().includes('research')) ||
-                    text.toLowerCase().includes('research-grade')) {
-                  proOption = item;
-                  console.log(`Found Pro Research option: "${text}"`);
-                  break;
-                }
-              }
-              
-              if (proOption) {
-                console.log('Clicking Pro Research option...');
-                proOption.click();
-                const pill = await waitForElement('button.__composer-pill[aria-label*="Research" i], [aria-label*="Research" i].__composer-pill, .composer-mode-pill, [data-testid*="research"]', 3000);
-                if (pill) {
-                  console.log('Pro Research model selected successfully!');
-                  return true;
-                }
-                console.warn('Model changed but Research pill not found');
-              } else {
-                console.log('Pro Research option not found in model menu');
-                // Close the menu if it's still open
-                const escapeEvent = new KeyboardEvent('keydown', { key: 'Escape', keyCode: 27 });
-                document.dispatchEvent(escapeEvent);
-                await sleep(300);
-              }
-            }
-            
-            // Fallback: Try to find the plus button (old approach)
+          async function selectViaComposerPlus() {
             let plusButton = document.querySelector('[data-testid="composer-plus-btn"]');
-
             if (!plusButton) {
               const buttons = document.querySelectorAll('button');
               for (const button of buttons) {
                 const ariaLabel = (button.getAttribute('aria-label') || '').toLowerCase();
-                const hasIcon =
-                  button.querySelector('svg path[d*="M12 5v14M5 12h14"]') ||
-                  button.querySelector('svg path[d*="M19 12h-14M12 19v-14"]');
-
-                if (
-                  ariaLabel.includes('attach') ||
-                  ariaLabel.includes('plus') ||
-                  ariaLabel.includes('more') ||
-                  hasIcon
-                ) {
+                const hasIcon = button.querySelector('svg path[d*="M12 5v14M5 12h14"]') ||
+                               button.querySelector('svg path[d*="M19 12h-14M12 19v-14"]');
+                if (ariaLabel.includes('attach') || ariaLabel.includes('plus') || ariaLabel.includes('more') || hasIcon) {
                   const inputArea = document.querySelector('#prompt-textarea, .ProseMirror');
                   if (inputArea) {
                     const inputRect = inputArea.getBoundingClientRect();
@@ -231,77 +426,22 @@
                 }
               }
             }
+            if (!plusButton) return false;
 
-            if (plusButton) {
-              console.log('Found plus button, clicking...');
-              plusButton.click();
+            console.log('[PlusMenu] Found plus button, clicking...');
+            await clickInteractable(plusButton);
 
-              // Wait for menu
-              await sleep(300);
-              const menu = await waitForElement(
-                '[role="menu"], [data-radix-portal], [role="listbox"], .popover-content, [data-state="open"]',
-                3000
-              );
+            const menu = await waitForVisible('[role="menu"], [data-radix-portal], [role="listbox"], .popover-content, [data-state="open"]', { timeoutMs: 3000 });
+            if (!menu) return false;
 
-              if (!menu) {
-                console.log('Menu did not appear after clicking plus button');
-                return await slashCommandFallback();
-              }
+            await waitForStableSubtree(menu, { stableForMs: 150, timeoutMs: 1000 });
 
-              console.log('Menu appeared, looking for Deep research option...');
+            const deepResearchItem = findMenuItemByText(menu, /\b(deep\s*)?research\b/i);
+            if (!deepResearchItem) return false;
 
-              let menuItems = menu.querySelectorAll(
-                '[role="menuitemradio"], [role="menuitem"], [role="option"], button'
-              );
-
-              if (menuItems.length === 0) {
-                menuItems = document.querySelectorAll(
-                  '[role="menuitemradio"], [role="menuitem"], [role="option"]'
-                );
-              }
-
-              console.log(`Found ${menuItems.length} menu items`);
-
-              let deepResearchOption = null;
-              for (const item of menuItems) {
-                const text = (item.textContent || '').trim();
-                if (
-                  text === 'Deep research' ||
-                  text.toLowerCase() === 'deep research' ||
-                  (text.toLowerCase().includes('deep') && text.toLowerCase().includes('research'))
-                ) {
-                  deepResearchOption = item;
-                  console.log(`Found Deep research option: "${text}"`);
-                  break;
-                }
-              }
-
-              if (deepResearchOption) {
-                console.log('Clicking Deep research option...');
-                deepResearchOption.click();
-                const pill = await waitForElement('button.__composer-pill[aria-label*="Research" i], [aria-label*="Research" i].__composer-pill, .composer-mode-pill, [data-testid*="research"]', 3000);
-                if (pill) {
-                  console.log('Deep research mode successfully activated (pill visible).');
-                  return true;
-                }
-                console.warn('Deep research item clicked but pill not visible');
-              } else {
-                console.log('Deep research option not found in menu');
-              }
-            } else {
-              console.log('Plus button not found after exhaustive search');
-            }
-
-            console.log('Falling back to slash command approach...');
-            return await slashCommandFallback();
-          } catch (error) {
-            console.log('Error enabling deep research mode:', error);
-            try {
-              return await slashCommandFallback();
-            } catch (fallbackError) {
-              console.log('Fallback also failed:', fallbackError);
-              return false;
-            }
+            console.log('[PlusMenu] Clicking Deep research option...');
+            await clickInteractable(deepResearchItem);
+            return await verifyResearchActive({ deadlineMs: 4000 });
           }
         }
 
