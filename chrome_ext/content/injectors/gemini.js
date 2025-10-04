@@ -41,6 +41,89 @@
   // ---------------------------------------------------------------------------
   // Ported logic: automateGeminiChat + helpers (submit)
   // ---------------------------------------------------------------------------
+  async function enableCanvas() {
+    try {
+      console.log('Attempting to enable Canvas mode on Gemini...');
+
+      // Wait for the Tools button to appear (up to 10 seconds)
+      let toolsButton = null;
+      const maxAttempts = 20;
+      for (let i = 0; i < maxAttempts; i++) {
+        toolsButton = document.querySelector('button.toolbox-drawer-button') ||
+                     document.querySelector('[aria-label*="Tools"]') ||
+                     document.querySelector('[aria-label*="toolbox"]') ||
+                     document.querySelector('[aria-label*="Toolbox"]') ||
+                     document.querySelector('button[jsname*="tool"]') ||
+                     document.querySelector('button.mdc-button.mat-mdc-button-base.toolbox-drawer-button') ||
+                     Array.from(document.querySelectorAll('button')).find(b => {
+                       const ariaLabel = (b.getAttribute('aria-label') || '').toLowerCase();
+                       const text = (b.textContent || '').toLowerCase();
+                       return ariaLabel.includes('tool') || text.includes('tools');
+                     });
+
+        if (toolsButton) {
+          console.log(`Found Tools button after ${i * 500}ms`);
+          break;
+        }
+
+        console.log(`Waiting for Tools button... attempt ${i + 1}/${maxAttempts}`);
+        await wait(500);
+      }
+
+      if (!toolsButton) {
+        console.log('Could not find Tools button');
+        return false;
+      }
+
+      console.log('Found toolbox/Tools button, clicking...', toolsButton);
+      toolsButton.click();
+
+      // Wait for drawer to open
+      await wait(800);
+      console.log('Looking for Canvas button in drawer...');
+
+      // Look for Canvas button
+      const canvasButton = document.querySelector('button[aria-label*="Canvas"]') ||
+                          Array.from(document.querySelectorAll('button')).find(b => {
+                            const text = (b.textContent || '').trim();
+                            const ariaLabel = (b.getAttribute('aria-label') || '').toLowerCase();
+                            return text === 'Canvas' || ariaLabel.includes('canvas');
+                          });
+
+      if (!canvasButton) {
+        console.log('Canvas button not found in drawer');
+        return false;
+      }
+
+      console.log('Found Canvas button, clicking...', canvasButton);
+      canvasButton.click();
+
+      // Wait and verify activation
+      await wait(700);
+
+      const canvasPill = document.querySelector('button[aria-label*="Deselect Canvas"]') ||
+                        document.querySelector('[aria-label*="Canvas"].selected') ||
+                        document.querySelector('.toolbox-chip[aria-label*="Canvas"]') ||
+                        Array.from(document.querySelectorAll('button')).find(b => {
+                          const text = b.textContent || '';
+                          const ariaLabel = b.getAttribute('aria-label') || '';
+                          return (text.includes('Canvas') && b.querySelector('img[src*="close"]')) ||
+                                 ariaLabel.includes('Deselect Canvas');
+                        });
+
+      if (canvasPill) {
+        console.log('✅ Canvas mode successfully activated on Gemini');
+        return true;
+      } else {
+        console.log('⚠️ Canvas clicked but activation not confirmed');
+        return true; // Still return true as the click happened
+      }
+    } catch (error) {
+      console.error(`Error enabling Canvas: ${error}`);
+      return false;
+    }
+  }
+
   async function enableDeepResearch() {
     try {
       console.log('Attempting to enable Deep Research mode on Gemini...');
@@ -578,13 +661,13 @@
         }
       }
 
-      // Step 2: Check if we need to enable Deep Research
+      // Step 2: Check if we need to enable Deep Research or Canvas
       if (enableResearch === 'Yes') {
         console.log('Research mode requested, will enable Deep Research');
         isResearchMode = true;
         // Enable research before model selection to avoid dropdown conflicts
         const researchSuccess = await enableDeepResearch();
-        
+
         if (researchSuccess) {
           // Successfully enabled Deep Research, continue with model selection and submission
           return new Promise((resolve, reject) => {
@@ -604,8 +687,17 @@
           });
         }
       } else {
-        // Skip research step, go directly to model selection
-        console.log('Regular mode requested, proceeding to model selection');
+        // Deep Research not selected - enable Canvas instead
+        // Canvas and Deep Research are mutually exclusive, but Canvas is compatible with incognito
+        console.log('Regular mode requested, will enable Canvas');
+        const canvasSuccess = await enableCanvas();
+        if (canvasSuccess) {
+          console.log('Canvas enabled successfully');
+        } else {
+          console.log('Could not enable Canvas, continuing anyway');
+        }
+
+        // Proceed to model selection and submission
         return new Promise((resolve, reject) => {
           selectModelAndProceed(messageText, resolve, reject);
         });
