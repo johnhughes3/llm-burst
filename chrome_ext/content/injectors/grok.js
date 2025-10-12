@@ -36,6 +36,160 @@
   const waitUntil = (...args) => window.llmBurstWaitUntil(...args);
   // =============================================================================
 
+  const GROK_COMPOSER_SELECTORS = [
+    'textarea[aria-label="Ask Grok anything"]',
+    '[role="textbox"][aria-label="Ask Grok anything"]',
+    '[contenteditable="true"][aria-label="Ask Grok anything"]',
+    '.ProseMirror[contenteditable="true"]',
+    'main textarea'
+  ];
+
+  const CLOUDFLARE_SELECTORS = [
+    '[data-cf-challenge]',
+    '[data-cf-challenge-type]',
+    'iframe[src*="challenges.cloudflare.com"]',
+    'iframe[src*="challenge-platform.com"]'
+  ];
+
+  const SIGN_IN_REGEX = /\b(sign[\s-]*in|log[\s-]*in)\b/i;
+
+  function isElementVisible(el) {
+    if (!el || !el.isConnected) return false;
+    const rect = el.getBoundingClientRect();
+    if (rect.width <= 0 || rect.height <= 0) return false;
+    const style = window.getComputedStyle(el);
+    if (style.visibility === 'hidden' || style.display === 'none') return false;
+    if (Number(style.opacity) === 0) return false;
+    return true;
+  }
+
+  function findGrokComposer() {
+    for (const selector of GROK_COMPOSER_SELECTORS) {
+      const el = document.querySelector(selector);
+      if (el && isElementVisible(el)) {
+        return { selector };
+      }
+    }
+    return null;
+  }
+
+  function detectCloudflareChallenge() {
+    for (const selector of CLOUDFLARE_SELECTORS) {
+      const el = document.querySelector(selector);
+      if (el) {
+        return { selector, mode: 'element' };
+      }
+    }
+
+    const warning = Array.from(document.querySelectorAll('h1, h2, h3, p, span'))
+      .find((node) => /just a moment|verify you are human|checking your browser/i.test(node.textContent || ''));
+    if (warning) {
+      return { selector: null, mode: 'text', text: (warning.textContent || '').trim().slice(0, 140) };
+    }
+
+    return null;
+  }
+
+  function detectSignInCta() {
+    const nodes = Array.from(document.querySelectorAll('a, button, [role="button"]'));
+    for (const node of nodes) {
+      const text = (node.textContent || '').trim();
+      if (!text) continue;
+      if (SIGN_IN_REGEX.test(text)) {
+        return { text, selector: node.tagName };
+      }
+    }
+    return null;
+  }
+
+  class GrokStateError extends Error {
+    constructor(snapshot, message, code) {
+      const msg = message || snapshot?.message || 'Grok is not ready';
+      super(msg);
+      this.name = 'GrokStateError';
+      this.code = code || (snapshot?.state === 'login-required' ? 'GROK_LOGIN_REQUIRED' : 'GROK_NOT_READY');
+      this.state = snapshot?.state || 'unknown';
+      this.details = snapshot || null;
+    }
+  }
+
+  function inspectGrokState() {
+    const timestamp = Date.now();
+    const snapshot = {
+      state: 'unknown',
+      timestamp,
+      documentReadyState: document.readyState
+    };
+
+    const cloudflare = detectCloudflareChallenge();
+    if (cloudflare) {
+      snapshot.state = 'cloudflare-block';
+      snapshot.message = 'Cloudflare Turnstile challenge detected';
+      snapshot.details = { cloudflare };
+      return snapshot;
+    }
+
+    const composer = findGrokComposer();
+    if (composer) {
+      snapshot.state = 'ready';
+      snapshot.message = 'Composer is available';
+      snapshot.details = { composerSelector: composer.selector };
+      return snapshot;
+    }
+
+    const signIn = detectSignInCta();
+    if (signIn) {
+      snapshot.state = 'login-required';
+      snapshot.message = 'Sign-in prompt detected';
+      snapshot.details = { signInText: signIn.text };
+      return snapshot;
+    }
+
+    if (document.readyState !== 'complete') {
+      snapshot.state = 'hydration-pending';
+      snapshot.message = 'Document is still loading';
+      return snapshot;
+    }
+
+    snapshot.message = 'Grok UI not detected';
+    return snapshot;
+  }
+
+  async function ensureGrokReady({ timeoutMs = 8000, pollMs = 300 } = {}) {
+    let snapshot = inspectGrokState();
+    if (snapshot.state === 'ready') {
+      return snapshot;
+    }
+    if (snapshot.state === 'login-required') {
+      throw new GrokStateError(snapshot, snapshot.message, 'GROK_LOGIN_REQUIRED');
+    }
+    if (snapshot.state === 'cloudflare-block') {
+      throw new GrokStateError(snapshot, snapshot.message, 'GROK_NOT_READY');
+    }
+
+    const start = Date.now();
+    while (Date.now() - start < timeoutMs) {
+      await wait(pollMs);
+      snapshot = inspectGrokState();
+      if (snapshot.state === 'ready') {
+        return snapshot;
+      }
+      if (snapshot.state === 'login-required') {
+        throw new GrokStateError(snapshot, snapshot.message, 'GROK_LOGIN_REQUIRED');
+      }
+      if (snapshot.state === 'cloudflare-block') {
+        throw new GrokStateError(snapshot, snapshot.message, 'GROK_NOT_READY');
+      }
+    }
+
+    throw new GrokStateError(snapshot, `Grok UI not ready after ${timeoutMs}ms`, 'GROK_NOT_READY');
+  }
+
+  ns.inspectGrokState = inspectGrokState;
+  ns.ensureGrokReady = ensureGrokReady;
+  ns.errors = ns.errors || {};
+  ns.errors.GrokStateError = GrokStateError;
+
   /**
    * Main Grok automation function
    * @param {string} promptText - The text to send to Grok
@@ -872,13 +1026,21 @@
    */
   window.executeWithTimeout = function(promise, timeoutMs, timeoutMessage) {
     const timeout = new Promise((_, reject) => {
-      setTimeout(() => reject(new Error(timeoutMessage)), Number(timeoutMs) || 0);
+      setTimeout(() => {
+        const timeoutError = new Error(timeoutMessage);
+        timeoutError.code = 'GROK_TIMEOUT';
+        timeoutError.state = 'timeout';
+        reject(timeoutError);
+      }, Number(timeoutMs) || 0);
     });
 
     return Promise.race([promise, timeout])
       .catch(error => ({
         ok: false,
-        error: error.message || "Unknown error",
+        code: error?.code || 'GROK_FOLLOWUP_FAILED',
+        state: error?.state || 'unknown',
+        message: error?.message || "Unknown error",
+        error: error?.message || "Unknown error",
         stepDurations: {}
       }));
   }
@@ -889,9 +1051,12 @@
   async function performFollowUp(messageText, debug) {
     const timing = {};
     const log = debug ? (...args) => console.log(...args) : () => {};
+    let readinessSnapshot = null;
 
     try {
       log("Starting Grok follow-up submission...");
+      readinessSnapshot = await ensureGrokReady({ timeoutMs: 8000 });
+      log(`Readiness state before follow-up: ${readinessSnapshot.state}`);
 
       // Step 1: Find the textarea using MutationObserver + polling fallback
       log("Finding textarea...");
@@ -951,14 +1116,32 @@
       return {
         ok: true,
         message: "Follow-up message submitted successfully",
-        stepDurations: timing
+        state: readinessSnapshot?.state || 'ready',
+        stepDurations: timing,
+        details: { readiness: readinessSnapshot }
       };
     } catch (error) {
       log(`❌ Error: ${error.message}`);
+      if (error instanceof GrokStateError) {
+        return {
+          ok: false,
+          code: error.code,
+          state: error.state,
+          message: error.message,
+          error: error.message,
+          stepDurations: timing,
+          details: error.details
+        };
+      }
+      const fallbackMessage = error?.message || "Unknown error";
       return {
         ok: false,
-        error: error.message,
-        stepDurations: timing
+        code: 'GROK_FOLLOWUP_FAILED',
+        state: error?.state || readinessSnapshot?.state || 'unknown',
+        message: fallbackMessage,
+        error: fallbackMessage,
+        stepDurations: timing,
+        details: readinessSnapshot ? { readiness: readinessSnapshot } : undefined
       };
     }
   }
@@ -1421,11 +1604,53 @@
     submit: async ({ prompt, options }) => {
       const research = options && options.research ? "Yes" : "No";
       const incognito = options && options.incognito ? "Yes" : "No";
-      // Let Grok script handle its own waits/selectors
-      return window.automateGrokChat(String(prompt || ''), research, incognito);
+      const messageText = String(prompt || '');
+
+      try {
+        const readiness = await ensureGrokReady({ timeoutMs: 8000 });
+        const automationResult = await window.automateGrokChat(messageText, research, incognito);
+
+        if (typeof automationResult === 'string' && automationResult.toUpperCase().startsWith('ERROR')) {
+          const errorMessage = automationResult.replace(/^ERROR:\s*/i, '').trim() || automationResult;
+          return {
+            ok: false,
+            code: 'GROK_AUTOMATION_FAILED',
+            state: readiness.state || 'ready',
+            message: errorMessage,
+            error: errorMessage,
+            details: { automationResult }
+          };
+        }
+
+        return {
+          ok: true,
+          state: readiness.state || 'ready',
+          message: 'Prompt submitted to Grok',
+          details: { automationResult }
+        };
+      } catch (error) {
+        if (error instanceof GrokStateError) {
+          return {
+            ok: false,
+            code: error.code,
+            state: error.state,
+            message: error.message,
+            error: error.message,
+            details: error.details
+          };
+        }
+
+        const fallbackMessage = error?.message || String(error);
+        return {
+          ok: false,
+          code: 'GROK_AUTOMATION_FAILED',
+          state: 'unknown',
+          message: fallbackMessage,
+          error: fallbackMessage
+        };
+      }
     },
     followup: async ({ prompt }) => {
-      // Returns a structured object { ok: boolean, ... }
       return window.grokFollowUpMessage(String(prompt || ''));
     }
   };

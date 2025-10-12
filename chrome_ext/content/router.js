@@ -67,7 +67,12 @@
           }
 
           const result = await fn({ prompt, options });
-          sendResponse({ ok: true, result: result ?? null });
+
+          if (result && typeof result === 'object' && Object.prototype.hasOwnProperty.call(result, 'ok')) {
+            sendResponse(result);
+          } else {
+            sendResponse({ ok: true, result: result ?? null });
+          }
           return;
         }
 
@@ -76,7 +81,18 @@
           return;
         }
       } catch (error) {
-        sendResponse({ ok: false, error: error?.message || String(error) });
+        const payload = {
+          ok: false,
+          error: error?.message || String(error)
+        };
+
+        if (error && typeof error === 'object') {
+          if (typeof error.code === 'string') payload.code = error.code;
+          if (typeof error.state === 'string') payload.state = error.state;
+          if (Object.prototype.hasOwnProperty.call(error, 'details')) payload.details = error.details;
+        }
+
+        sendResponse(payload);
       }
     })();
 

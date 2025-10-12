@@ -759,15 +759,235 @@ async function ensureProviderTab(sessionId, providerKey, options, title, activat
   return { tab, created: true, groupId };
 }
 
+function isStructuredResponse(res) {
+  return res && typeof res === 'object' && Object.prototype.hasOwnProperty.call(res, 'ok');
+}
+
+function normalizeGrokError({ code, state, message, error, details }, fallbackMessage) {
+  return {
+    ok: false,
+    code: code || 'GROK_NOT_READY',
+    state: state || 'unknown',
+    message: message || error || fallbackMessage || 'Grok automation reported an unknown error',
+    details: details ?? null
+  };
+}
+
+async function waitForTabStatusComplete(tabId, timeoutMs = 15000) {
+  const start = Date.now();
+  while (Date.now() - start < timeoutMs) {
+    try {
+      const tab = await chrome.tabs.get(tabId);
+      if (!tab) return false;
+      if (tab.status === 'complete') return true;
+    } catch (error) {
+      return false;
+    }
+    await delay(200);
+  }
+  return false;
+}
+
+async function waitForContentRouter(tabId, timeoutMs = 8000) {
+  const start = Date.now();
+  while (Date.now() - start < timeoutMs) {
+    try {
+      const response = await chrome.tabs.sendMessage(tabId, { type: 'llmburst-router-ping' });
+      if (response && response.ok) return true;
+    } catch (error) {
+      const msg = String(error?.message || error);
+      if (msg.includes('Receiving end does not exist') || msg.includes('No window with id')) {
+        // content script not yet injected or tab closed; keep waiting
+      } else {
+        await delay(200);
+      }
+    }
+    await delay(250);
+  }
+  return false;
+}
+
+async function probeGrokState(tabId) {
+  try {
+    const [result] = await chrome.scripting.executeScript({
+      target: { tabId },
+      world: 'MAIN',
+      func: () => {
+        try {
+          const inspector = window.llmBurst?.inspectGrokState;
+          if (typeof inspector === 'function') {
+            return inspector();
+          }
+        } catch (error) {
+          return { state: 'error', message: error?.message || String(error) };
+        }
+        return null;
+      }
+    });
+    return result?.result ?? null;
+  } catch (error) {
+    return { state: 'error', message: error?.message || String(error) };
+  }
+}
+
+async function reloadAndProbeGrok(tabId, { reason = 'unknown', timeoutMs = 12000 } = {}) {
+  try {
+    await chrome.tabs.reload(tabId, { bypassCache: true });
+  } catch (error) {
+    console.warn('[grok] reload failed:', error);
+  }
+
+  const loaded = await waitForTabStatusComplete(tabId, timeoutMs);
+  if (!loaded) {
+    return { state: 'hydration-timeout', message: 'Tab did not finish loading', reason };
+  }
+
+  const routerReady = await waitForContentRouter(tabId, timeoutMs);
+  if (!routerReady) {
+    return { state: 'hydration-timeout', message: 'Content router did not respond', reason };
+  }
+
+  const snapshot = await probeGrokState(tabId);
+  if (!snapshot) {
+    return { state: 'unknown', message: 'inspectGrokState unavailable', reason };
+  }
+
+  return {
+    state: snapshot.state || 'unknown',
+    message: snapshot.message || null,
+    details: snapshot,
+    reason
+  };
+}
+
+async function recoverGrokViaCDP(tabId, { timeoutMs = 12000 } = {}) {
+  let attached = false;
+  try {
+    try {
+      await dbgAttach(tabId);
+      attached = true;
+    } catch (error) {
+      if (error && /already attached/i.test(error.message || '')) {
+        attached = true;
+      } else {
+        return { state: 'cdp-attach-failed', message: error?.message || String(error) };
+      }
+    }
+
+    try { await dbgSend(tabId, 'Page.enable'); } catch {}
+    try { await dbgSend(tabId, 'Runtime.enable'); } catch {}
+    try { await dbgSend(tabId, 'Page.reload', { ignoreCache: true }); } catch {}
+
+    const start = Date.now();
+    let lastSnapshot = null;
+
+    while (Date.now() - start < timeoutMs) {
+      try {
+        const snapshot = await dbgEval(tabId, `(() => {
+          const inspector = window.llmBurst?.inspectGrokState;
+          if (typeof inspector === 'function') {
+            try { return inspector(); } catch (err) { return { state: 'error', message: err?.message || String(err) }; }
+          }
+
+          const composer = document.querySelector('textarea[aria-label="Ask Grok anything"], [contenteditable="true"][aria-label="Ask Grok anything"]');
+          if (composer) return { state: 'ready' };
+
+          if (document.querySelector('[data-cf-challenge], iframe[src*="challenges.cloudflare.com"]')) {
+            return { state: 'cloudflare-block' };
+          }
+
+          const hasSignIn = Array.from(document.querySelectorAll('a, button, [role="button"]'))
+            .some(el => /sign in/i.test((el.textContent || '').trim()));
+          if (hasSignIn) return { state: 'login-required' };
+
+          return { state: document.readyState === 'complete' ? 'unknown' : 'hydration-pending' };
+        })();`);
+
+        if (snapshot) {
+          lastSnapshot = snapshot;
+          if (snapshot.state === 'ready') {
+            return { ok: true, state: 'ready', details: snapshot };
+          }
+          if (snapshot.state === 'login-required') {
+            return { ok: false, state: 'login-required', details: snapshot };
+          }
+          if (snapshot.state === 'cloudflare-block') {
+            await delay(600);
+            continue;
+          }
+        }
+      } catch (error) {
+        lastSnapshot = { state: 'error', message: error?.message || String(error) };
+      }
+
+      await delay(400);
+    }
+
+    return { ok: false, state: 'timeout', details: lastSnapshot };
+  } catch (error) {
+    return { ok: false, state: 'error', message: error?.message || String(error) };
+  } finally {
+    if (attached) {
+      try { await dbgDetach(tabId); } catch {}
+    }
+  }
+}
+
+async function handleGrokInjectionFailure(tabId, response, { attempt, maxAttempts }) {
+  const state = response.state || 'unknown';
+  const code = response.code || 'GROK_NOT_READY';
+
+  if (code === 'GROK_LOGIN_REQUIRED' || state === 'login-required') {
+    return normalizeGrokError(response, 'Grok requires an authenticated session.');
+  }
+
+  if (code !== 'GROK_NOT_READY' && state !== 'cloudflare-block' && state !== 'hydration-pending' && state !== 'unknown') {
+    return normalizeGrokError(response);
+  }
+
+  const reloadProbe = await reloadAndProbeGrok(tabId, { reason: state });
+
+  if (reloadProbe?.state === 'ready') {
+    return 'retry';
+  }
+
+  if (reloadProbe?.state === 'login-required') {
+    return normalizeGrokError(
+      { code: 'GROK_LOGIN_REQUIRED', state: 'login-required', message: 'Sign-in required before using Grok.', details: reloadProbe },
+      'Sign-in required before using Grok.'
+    );
+  }
+
+  if (reloadProbe?.state === 'cloudflare-block') {
+    const cdpProbe = await recoverGrokViaCDP(tabId, { timeoutMs: 15000 });
+    if (cdpProbe?.state === 'ready' || cdpProbe?.ok) {
+      return 'retry';
+    }
+
+    return normalizeGrokError(
+      { code: 'GROK_CLOUDFLARE_BLOCK', state: 'cloudflare-block', message: 'Grok is blocked by Cloudflare Turnstile; manual verification likely required.', details: cdpProbe || reloadProbe },
+      'Grok is blocked by Cloudflare Turnstile; manual verification likely required.'
+    );
+  }
+
+  if (attempt < maxAttempts) {
+    return 'retry';
+  }
+
+  return normalizeGrokError(
+    { code: 'GROK_NOT_READY', state: reloadProbe?.state || state, message: reloadProbe?.message || response.message, details: reloadProbe },
+    'Grok UI was not ready after recovery attempts.'
+  );
+}
+
 /**
  * Send an injection request to a content script in a specific tab.
  * Payload: { mode: 'submit'|'followup', prompt: string, options?: { research?: boolean, incognito?: boolean } }
  */
 async function injectIntoTab(tabId, providerKey, payload, timeoutMs = 15000) {
-  let attempts = 0;
-  const maxAttempts = 2;
+  const maxAttempts = providerKey === 'GROK' ? 3 : 2;
 
-  while (attempts <= maxAttempts) {
+  for (let attempt = 1; attempt <= maxAttempts; attempt++) {
     try {
       const res = await withTimeout(
         chrome.tabs.sendMessage(tabId, {
@@ -778,21 +998,52 @@ async function injectIntoTab(tabId, providerKey, payload, timeoutMs = 15000) {
         timeoutMs,
         'Injection timed out'
       );
-      if (res && res.ok) {
-        return { ok: true, result: res.result || null };
+
+      const normalized = isStructuredResponse(res)
+        ? res
+        : { ok: true, result: res ?? null };
+
+      if (normalized.ok) {
+        return normalized;
       }
-      const errMsg = res?.error || 'Unknown content response error';
+
+      if (providerKey === 'GROK') {
+        const outcome = await handleGrokInjectionFailure(tabId, normalized, { attempt, maxAttempts });
+        if (outcome === 'retry') {
+          continue;
+        }
+        if (outcome && typeof outcome === 'object') {
+          return outcome;
+        }
+      }
+
+      const errMsg = normalized.error || normalized.message || 'Unknown content response error';
       return { ok: false, error: errMsg };
     } catch (error) {
       const msg = String(error?.message || error);
-      // Retry if content script is not ready yet
-      if (msg.includes('Could not establish connection') && attempts < maxAttempts) {
-        attempts += 1;
+      if (msg.includes('Could not establish connection') && attempt < maxAttempts) {
         await delay(500);
         continue;
       }
+      if (providerKey === 'GROK') {
+        return {
+          ok: false,
+          code: 'GROK_INJECT_ERROR',
+          state: 'unknown',
+          message: msg
+        };
+      }
       return { ok: false, error: msg };
     }
+  }
+
+  if (providerKey === 'GROK') {
+    return {
+      ok: false,
+      code: 'GROK_INJECT_TIMEOUT',
+      state: 'unknown',
+      message: 'Injection failed after retries'
+    };
   }
 
   return { ok: false, error: 'Injection failed after retries' };
