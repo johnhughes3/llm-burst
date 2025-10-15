@@ -146,104 +146,141 @@ async function dbgGetCenterXYBySelector(tabId, selector) {
   return dbgEval(tabId, expr);
 }
 
-async function dbgGetCenterXYForMenuItem(tabId, labels = ['deep research', 'research']) {
-  const expr = `(() => {
-    const labs = ${JSON.stringify(labels.map((s) => s.toLowerCase()))};
-    const norm = (s) => (s || '').toLowerCase().replace(/\s+/g, ' ').trim();
+const RESEARCH_PATTERN_SOURCE = '(?:\\b(?:pro\\s*)?(?:deep\\s*)?research(?:-grade)?\\b)';
 
-    // First check in portal/overlay containers
-    const portals = document.querySelectorAll('[data-radix-portal], [data-radix-popper-content-wrapper], [role="dialog"]');
-    let root = document;
-    if (portals.length > 0) {
-      root = portals[portals.length - 1]; // Use the most recent portal
+function buildEvalWithResearchHelpers(body) {
+  return `(() => {
+    const normalizeText = (s) => (s || '').replace(/\\s+/g, ' ').trim().toLowerCase();
+    const researchPattern = new RegExp('${RESEARCH_PATTERN_SOURCE}', 'i');
+    const modelLabelIndicatesResearch = (el) => {
+      if (!el) return false;
+      const text = normalizeText((el.getAttribute && el.getAttribute('aria-label')) || el.textContent || '');
+      return text ? researchPattern.test(text) : false;
+    };
+    const isVisible = (el) => {
+      if (!el || !el.isConnected) return false;
+      const rect = el.getBoundingClientRect();
+      if (rect.width <= 0 || rect.height <= 0) return false;
+      const cs = window.getComputedStyle(el);
+      if (cs.visibility === 'hidden' || cs.display === 'none' || Number(cs.opacity) === 0) return false;
+      let node = el;
+      while (node) {
+        if (node.hasAttribute && (node.hasAttribute('inert') || node.getAttribute('aria-hidden') === 'true')) return false;
+        node = node.parentNode;
+      }
+      return true;
+    };
+    const getOpenMenuRoot = () => {
+      const portals = Array.from(document.querySelectorAll('[data-radix-portal] [role=\"menu\"], [data-radix-portal] [data-state=\"open\"]')).filter(isVisible);
+      if (portals.length > 0) return portals.at(-1);
+      const menu = document.querySelector('[role=\"menu\"][data-orientation=\"vertical\"][data-state=\"open\"]');
+      return menu && isVisible(menu) ? menu : null;
+    };
+    ${body}
+  })()`;
+}
+
+async function dbgFindModelSelectorButton(tabId, { timeout = 2800 } = {}) {
+  const expr = buildEvalWithResearchHelpers(`
+    const candidates = Array.from(document.querySelectorAll('button[aria-label], button[aria-haspopup=\"menu\"]')).filter(isVisible);
+    candidates.sort((a, b) => a.getBoundingClientRect().top - b.getBoundingClientRect().top);
+    for (const btn of candidates) {
+      const label = normalizeText((btn.getAttribute('aria-label') || '') + ' ' + (btn.textContent || ''));
+      if (!label.includes('model')) continue;
+      const rect = btn.getBoundingClientRect();
+      if (rect.width <= 0 || rect.height <= 0) continue;
+      btn.scrollIntoView({ block: 'center', inline: 'center', behavior: 'instant' });
+      const updated = btn.getBoundingClientRect();
+      return { x: Math.round(updated.left + updated.width / 2), y: Math.round(updated.top + updated.height / 2), label };
     }
+    return null;
+  `);
+  return dbgWaitFor(tabId, expr, { timeout, interval: 120 });
+}
 
-    // Expanded selector to catch all possible menu items
-    const selectors = [
-      '[role="menuitemradio"]',
-      '[role="menuitem"]',
-      '[role="option"]',
-      '[data-radix-collection-item]',
-      'button[role="menuitemradio"]',
-      'button[role="menuitem"]',
-      'div[role="menuitemradio"]',
-      'div[role="menuitem"]'
-    ];
-
-    const items = Array.from(root.querySelectorAll(selectors.join(', ')));
-
-    // Also check in the main document if we didn't find in portal
-    if (items.length === 0 && root !== document) {
-      items.push(...Array.from(document.querySelectorAll(selectors.join(', '))));
-    }
-
-    console.log('[CDP] Found', items.length, 'menu items');
-
-    for (const el of items) {
-      const txt = norm(el.innerText || el.textContent || '');
-      const aria = norm(el.getAttribute('aria-label') || '');
-
-      console.log('[CDP] Checking item:', txt || aria);
-
-      if (labs.some((l) => txt.includes(l) || aria.includes(l))) {
-        console.log('[CDP] Found matching item:', txt || aria);
-
-        // Make sure element is visible
-        if (el.offsetParent === null) {
-          console.log('[CDP] Element is hidden, skipping');
-          continue;
+async function dbgFindComposerPlusButton(tabId, { timeout = 3000 } = {}) {
+  const expr = buildEvalWithResearchHelpers(`
+    const input = document.querySelector('#prompt-textarea, .ProseMirror, [contenteditable=\"true\"]');
+    let plusButton = document.querySelector('[data-testid=\"composer-plus-btn\"]');
+    const isCandidate = (btn) => {
+      const label = normalizeText((btn.getAttribute('aria-label') || '') + ' ' + (btn.textContent || ''));
+      if (label.includes('temporary')) return false;
+      if (label.includes('plus') || label.includes('attach') || label.includes('more')) return true;
+      const hasPlusIcon = btn.querySelector('svg path[d*=\"M12 5v14\"], svg path[d*=\"M19 12h-14\"], svg path[d*=\"M12 19v-14\"]');
+      return !!hasPlusIcon;
+    };
+    if (!plusButton) {
+      const buttons = Array.from(document.querySelectorAll('button')).filter(isVisible);
+      for (const button of buttons) {
+        if (!isCandidate(button)) continue;
+        const rect = button.getBoundingClientRect();
+        if (rect.width <= 0 || rect.height <= 0) continue;
+        if (input) {
+          const ir = input.getBoundingClientRect();
+          if (Math.abs(rect.top - ir.top) > 220 || rect.top < ir.top - 40) continue;
         }
-
-        el.scrollIntoView({ block: 'center', inline: 'center', behavior: 'instant' });
-
-        // Wait a moment for scroll to complete
-        return new Promise(resolve => {
-          setTimeout(() => {
-            const r = el.getBoundingClientRect();
-            if (!r || r.width === 0 || r.height === 0) {
-              console.log('[CDP] Element has no dimensions');
-              resolve(null);
-              return;
-            }
-
-            // Find the actual clickable area - check for text/svg elements inside
-            const textEl = el.querySelector('span, div, p') || el;
-            const textRect = textEl.getBoundingClientRect();
-
-            // Use text element position if available, otherwise use main element
-            const targetX = textRect.left + Math.min(30, textRect.width / 2);
-            const targetY = textRect.top + textRect.height / 2;
-
-            console.log('[CDP] Target coordinates:', targetX, targetY);
-
-            // Verify the click target
-            const elAt = document.elementFromPoint(targetX, targetY);
-            const isValid = elAt && (elAt === el || el.contains(elAt) || elAt.closest('[role="menuitemradio"], [role="menuitem"]') === el);
-
-            if (!isValid) {
-              console.log('[CDP] Click target verification failed, trying center');
-              // Fallback to center
-              resolve({
-                x: Math.round(r.left + r.width / 2),
-                y: Math.round(r.top + r.height / 2),
-                element: el.outerHTML.substring(0, 100)
-              });
-            } else {
-              resolve({
-                x: Math.round(targetX),
-                y: Math.round(targetY),
-                element: el.outerHTML.substring(0, 100)
-              });
-            }
-          }, 50);
-        });
+        plusButton = button;
+        break;
       }
     }
+    if (!plusButton) return null;
+    plusButton.scrollIntoView({ block: 'center', inline: 'center', behavior: 'instant' });
+    const rect = plusButton.getBoundingClientRect();
+    if (rect.width <= 0 || rect.height <= 0) return null;
+    return { x: Math.round(rect.left + rect.width / 2), y: Math.round(rect.top + rect.height / 2) };
+  `);
+  return dbgWaitFor(tabId, expr, { timeout, interval: 120 });
+}
 
-    console.log('[CDP] No matching menu item found');
+async function dbgWaitForOpenMenu(tabId, { timeout = 2000 } = {}) {
+  const expr = buildEvalWithResearchHelpers(`return !!getOpenMenuRoot();`);
+  return dbgWaitFor(tabId, expr, { timeout, interval: 120 });
+}
+
+async function dbgFindResearchMenuItem(tabId, { timeout = 2400 } = {}) {
+  const expr = buildEvalWithResearchHelpers(`
+    const selectors = [
+      '[role=\"menuitemradio\"]',
+      '[role=\"menuitem\"]',
+      '[role=\"option\"]',
+      '[data-radix-collection-item]'
+    ];
+    const roots = [];
+    const menuRoot = getOpenMenuRoot();
+    if (menuRoot) roots.push(menuRoot);
+    roots.push(document);
+    for (const root of roots) {
+      const items = Array.from(root.querySelectorAll(selectors.join(', '))).filter(isVisible);
+      for (const item of items) {
+        const label = normalizeText(item.textContent || item.getAttribute('aria-label') || '');
+        if (!label) continue;
+        if (!researchPattern.test(label)) continue;
+        item.scrollIntoView({ block: 'center', inline: 'center', behavior: 'instant' });
+        const rect = item.getBoundingClientRect();
+        if (rect.width <= 0 || rect.height <= 0) continue;
+        return { x: Math.round(rect.left + rect.width / 2), y: Math.round(rect.top + rect.height / 2) };
+      }
+    }
     return null;
-  })();`;
-  return dbgEval(tabId, expr);
+  `);
+  return dbgWaitFor(tabId, expr, { timeout, interval: 120 });
+}
+
+async function dbgSendEscape(tabId) {
+  await dbgSend(tabId, 'Input.dispatchKeyEvent', {
+    type: 'keyDown',
+    key: 'Escape',
+    code: 'Escape',
+    windowsVirtualKeyCode: 27,
+    nativeVirtualKeyCode: 27
+  });
+  await dbgSend(tabId, 'Input.dispatchKeyEvent', {
+    type: 'keyUp',
+    key: 'Escape',
+    code: 'Escape',
+    windowsVirtualKeyCode: 27,
+    nativeVirtualKeyCode: 27
+  });
 }
 
 async function dbgTrustedClickXY(tabId, x, y) {
@@ -260,16 +297,18 @@ async function enableChatGPTResearchViaCDP(tabId, { timeoutMs = 6000 } = {}) {
     await dbgSend(tabId, 'DOM.enable');
     await dbgSend(tabId, 'Console.enable');
 
-    // 0) Wait for page to be ready - check for key ChatGPT UI elements
     console.log('[CDP] Waiting for ChatGPT UI to be ready...');
     const pageReady = await dbgWaitFor(
       tabId,
-      `(() => {
-        // Check for editor and model selector as signs page is loaded
+      buildEvalWithResearchHelpers(`
         const editor = document.querySelector('#prompt-textarea, .ProseMirror, [contenteditable="true"]');
-        const modelBtn = document.querySelector('button[aria-label*="Model" i], button[aria-haspopup="menu"]');
-        return (editor && modelBtn) ? true : false;
-      })()`,
+        if (!editor) return false;
+        const candidates = Array.from(document.querySelectorAll('button[aria-label], button[aria-haspopup="menu"]')).filter(isVisible);
+        return candidates.some((btn) => {
+          const label = normalizeText((btn.getAttribute('aria-label') || '') + ' ' + (btn.textContent || ''));
+          return label.includes('model');
+        });
+      `),
       { timeout: Math.min(timeoutMs, 5000) }
     );
 
@@ -277,211 +316,118 @@ async function enableChatGPTResearchViaCDP(tabId, { timeoutMs = 6000 } = {}) {
       console.warn('[CDP] Page not fully loaded yet, but continuing anyway...');
     } else {
       console.log('[CDP] Page ready, proceeding with activation...');
-      await delay(300); // Small extra delay for hydration
-    }
-
-    // 1) Click the composer plus button
-    const plusXY = await dbgWaitFor(
-      tabId,
-      `(() => {
-        let el = document.querySelector('[data-testid="composer-plus-btn"]');
-        if (!el) {
-          const candidates = Array.from(document.querySelectorAll('button[aria-haspopup="menu"], button'));
-          for (const b of candidates) {
-            const r = b.getBoundingClientRect();
-            if (!r || !r.width || !r.height) continue;
-            const nearInput = document.querySelector('#prompt-textarea, .ProseMirror, [contenteditable="true"]');
-            if (nearInput) {
-              const ir = nearInput.getBoundingClientRect();
-              if (Math.abs(r.top - ir.top) < 140) { el = b; break; }
-            }
-          }
-        }
-        if (!el) return null;
-        el.scrollIntoView({ block: 'center', inline: 'center', behavior: 'instant' });
-        const rr = el.getBoundingClientRect();
-        return { x: Math.round(rr.left + rr.width/2), y: Math.round(rr.top + rr.height/2) };
-      })()`,
-      { timeout: timeoutMs }
-    );
-    if (!plusXY) return { ok: false, error: 'Plus button not found' };
-
-    // Move, then press after a short settle delay
-    await dbgSend(tabId, 'Input.dispatchMouseEvent', { type: 'mouseMoved', x: plusXY.x, y: plusXY.y });
-    await delay(100);
-    const plusXY2 = await dbgGetCenterXYBySelector(tabId, '[data-testid="composer-plus-btn"]');
-    const px = (plusXY2?.x ?? plusXY.x), py = (plusXY2?.y ?? plusXY.y);
-    await dbgSend(tabId, 'Input.dispatchMouseEvent', { type: 'mousePressed', x: px, y: py, button: 'left', buttons: 1, clickCount: 1 });
-    await dbgSend(tabId, 'Input.dispatchMouseEvent', { type: 'mouseReleased', x: px, y: py, button: 'left', buttons: 0, clickCount: 1 });
-    await delay(300);
-
-    // 2) Wait for menu to appear
-    const menuAppeared = await dbgWaitFor(tabId, `document.querySelector('[role="menu"], [data-radix-portal], [role="listbox"], [data-state="open"]') ? true : false`, { timeout: timeoutMs });
-    if (!menuAppeared) {
-      return { ok: false, error: 'Menu did not appear after clicking plus' };
-    }
-
-    console.log('[CDP] Menu appeared, trying keyboard navigation approach...');
-
-    // NEW APPROACH: Use keyboard navigation to select Deep Research
-    // First, try typing "d" to jump to Deep Research
-    console.log('[CDP] Trying to jump to Deep Research by typing "d"...');
-    await dbgSend(tabId, 'Input.dispatchKeyEvent', {
-      type: 'keyDown',
-      key: 'd',
-      code: 'KeyD',
-      windowsVirtualKeyCode: 68,
-      nativeVirtualKeyCode: 68
-    });
-    await dbgSend(tabId, 'Input.dispatchKeyEvent', {
-      type: 'keyUp',
-      key: 'd',
-      code: 'KeyD',
-      windowsVirtualKeyCode: 68,
-      nativeVirtualKeyCode: 68
-    });
-    await delay(200);
-
-    // Check if Deep Research is now focused
-    const deepResearchFocused = await dbgEval(tabId, `(() => {
-      const focused = document.activeElement;
-      if (focused) {
-        const text = (focused.textContent || '').toLowerCase();
-        return text.includes('deep research');
-      }
-      return false;
-    })()`);
-
-    if (!deepResearchFocused) {
-      console.log('[CDP] "d" key didn\'t focus Deep Research, trying arrow navigation...');
-
-      // Make sure the menu has focus
-      await dbgEval(tabId, `(() => {
-        const menu = document.querySelector('[role="menu"]');
-        if (menu) {
-          const firstItem = menu.querySelector('[role="menuitemradio"], [role="menuitem"]');
-          if (firstItem) firstItem.focus();
-        }
-      })()`);
-      await delay(100);
-
-      // Find Deep Research position in menu
-      const deepResearchIndex = await dbgEval(tabId, `(() => {
-        const items = Array.from(document.querySelectorAll('[role="menuitemradio"], [role="menuitem"]'));
-        const index = items.findIndex(item => {
-          const text = (item.textContent || '').toLowerCase();
-          return text.includes('deep research') || text === 'deep research';
-        });
-        console.log('[CDP] Deep Research found at index:', index, 'of', items.length, 'items');
-        return index;
-      })()`);
-
-      if (deepResearchIndex === -1) {
-        console.log('[CDP] Deep Research not found in menu items');
-        return { ok: false, error: 'Deep research option not found in menu' };
-      }
-
-      console.log('[CDP] Navigating to Deep Research item at index', deepResearchIndex);
-
-      // Navigate down to the Deep Research item using arrow keys
-      for (let i = 0; i < deepResearchIndex; i++) {
-        await dbgSend(tabId, 'Input.dispatchKeyEvent', {
-          type: 'keyDown',
-          key: 'ArrowDown',
-          code: 'ArrowDown',
-          windowsVirtualKeyCode: 40,
-          nativeVirtualKeyCode: 40
-        });
-        await dbgSend(tabId, 'Input.dispatchKeyEvent', {
-          type: 'keyUp',
-          key: 'ArrowDown',
-          code: 'ArrowDown',
-          windowsVirtualKeyCode: 40,
-          nativeVirtualKeyCode: 40
-        });
-        await delay(50);
-      }
-    } else {
-      console.log('[CDP] Deep Research appears to be focused after typing "d"');
-    }
-
-    // Press Enter to select (or Space for radio buttons)
-    console.log('[CDP] Pressing Enter to select Deep Research...');
-    await dbgSend(tabId, 'Input.dispatchKeyEvent', {
-      type: 'keyDown',
-      key: 'Enter',
-      code: 'Enter',
-      windowsVirtualKeyCode: 13,
-      nativeVirtualKeyCode: 13
-    });
-    await dbgSend(tabId, 'Input.dispatchKeyEvent', {
-      type: 'keyUp',
-      key: 'Enter',
-      code: 'Enter',
-      windowsVirtualKeyCode: 13,
-      nativeVirtualKeyCode: 13
-    });
-    await delay(300);
-
-    // Check if menu closed
-    const menuClosedAfterEnter = await dbgEval(tabId, `!document.querySelector('[role="menu"], [data-radix-portal]')`);
-
-    if (!menuClosedAfterEnter) {
-      console.log('[CDP] Menu still open after Enter, trying Space key...');
-      // Try Space key which often works for radio buttons
-      await dbgSend(tabId, 'Input.dispatchKeyEvent', {
-        type: 'keyDown',
-        key: ' ',
-        code: 'Space',
-        windowsVirtualKeyCode: 32,
-        nativeVirtualKeyCode: 32
-      });
-      await dbgSend(tabId, 'Input.dispatchKeyEvent', {
-        type: 'keyUp',
-        key: ' ',
-        code: 'Space',
-        windowsVirtualKeyCode: 32,
-        nativeVirtualKeyCode: 32
-      });
       await delay(300);
     }
 
+    const closeMenus = async () => {
+      await dbgSendEscape(tabId);
+      await delay(120);
+    };
 
-    // 4) Verify activation heuristically
+    const attemptModelMenu = async () => {
+      console.log('[CDP][ModelMenu] Trying model selector path...');
+      try {
+        const trigger = await dbgFindModelSelectorButton(tabId, { timeout: Math.min(timeoutMs, 3200) });
+        if (!trigger) return { ok: false, error: '[ModelMenu] Model selector button not found' };
+        await dbgTrustedClickXY(tabId, trigger.x, trigger.y);
+        await delay(220);
+
+        const menuReady = await dbgWaitForOpenMenu(tabId, { timeout: 2200 });
+        if (!menuReady) {
+          await closeMenus();
+          return { ok: false, error: '[ModelMenu] Menu did not open' };
+        }
+
+        const target = await dbgFindResearchMenuItem(tabId, { timeout: 2600 });
+        if (!target) {
+          await closeMenus();
+          return { ok: false, error: '[ModelMenu] Research option not found' };
+        }
+
+        await dbgTrustedClickXY(tabId, target.x, target.y);
+        await delay(320);
+        return { ok: true };
+      } catch (e) {
+        await closeMenus();
+        return { ok: false, error: `[ModelMenu] ${e?.message || e}` };
+      }
+    };
+
+    const attemptPlusMenu = async () => {
+      console.log('[CDP][PlusMenu] Trying composer plus path...');
+      try {
+        const plus = await dbgFindComposerPlusButton(tabId, { timeout: Math.min(timeoutMs, 3200) });
+        if (!plus) return { ok: false, error: '[PlusMenu] Plus button not found' };
+        await dbgTrustedClickXY(tabId, plus.x, plus.y);
+        await delay(260);
+
+        const menuReady = await dbgWaitForOpenMenu(tabId, { timeout: 2200 });
+        if (!menuReady) {
+          await closeMenus();
+          return { ok: false, error: '[PlusMenu] Menu did not appear after clicking plus' };
+        }
+
+        const target = await dbgFindResearchMenuItem(tabId, { timeout: 2600 });
+        if (!target) {
+          await closeMenus();
+          return { ok: false, error: '[PlusMenu] Research option not found in menu' };
+        }
+
+        await dbgTrustedClickXY(tabId, target.x, target.y);
+        await delay(320);
+        return { ok: true };
+      } catch (e) {
+        await closeMenus();
+        return { ok: false, error: `[PlusMenu] ${e?.message || e}` };
+      }
+    };
+
+    const errors = [];
+    let activatedViaSelection = false;
+
+    const modelResult = await attemptModelMenu();
+    if (modelResult.ok) {
+      activatedViaSelection = true;
+    } else if (modelResult.error) {
+      console.warn('[CDP][ModelMenu] Failed:', modelResult.error);
+      errors.push(modelResult.error);
+    }
+
+    if (!activatedViaSelection) {
+      const plusResult = await attemptPlusMenu();
+      if (plusResult.ok) {
+        activatedViaSelection = true;
+      } else if (plusResult.error) {
+        console.warn('[CDP][PlusMenu] Failed:', plusResult.error);
+        errors.push(plusResult.error);
+      }
+    }
+
+    if (!activatedViaSelection) {
+      return { ok: false, error: errors.join(' | ') || 'Unable to select Research model' };
+    }
+
     console.log('[CDP] Verifying Research mode activation...');
     const activated = await dbgWaitFor(
       tabId,
-      `(() => {
-        // Check heading change
-        const h1 = document.querySelector('h1');
-        if (h1 && /what are you researching/i.test(h1.textContent || '')) {
-          console.log('[CDP] ✓ Heading changed to research mode');
-          return true;
-        }
-
-        // Check for Research pill/tag
-        const pills = document.querySelectorAll('button, [role="button"], .pill, .tag, .badge');
-        for (const pill of pills) {
-          const text = (pill.textContent || '').toLowerCase();
-          const aria = (pill.getAttribute('aria-label') || '').toLowerCase();
-          if (text.includes('research') || aria.includes('research')) {
-            console.log('[CDP] ✓ Research pill/tag found');
-            return true;
-          }
-        }
-
-        // Check for GitHub Sources button (appears in research mode)
-        const sources = Array.from(document.querySelectorAll('button')).find(b =>
-          b.textContent && b.textContent.includes('Sources')
-        );
-        if (sources) {
-          console.log('[CDP] ✓ Sources button found');
-          return true;
-        }
-
+      buildEvalWithResearchHelpers(`
+        const heading = document.querySelector('h1');
+        if (heading && /what are you researching/i.test(heading.textContent || '')) return true;
+        const pills = Array.from(document.querySelectorAll('button, [role="button"], .pill, .tag, .badge'));
+        if (pills.some((pill) => researchPattern.test(normalizeText(pill.textContent || pill.getAttribute('aria-label') || '')))) return true;
+        const modelBtn = Array.from(document.querySelectorAll('button[aria-label], button[aria-haspopup="menu"]')).find((btn) => {
+          const label = normalizeText((btn.getAttribute('aria-label') || '') + ' ' + (btn.textContent || ''));
+          return label.includes('model');
+        });
+        if (modelBtn && modelLabelIndicatesResearch(modelBtn)) return true;
+        const sourcesBtn = Array.from(document.querySelectorAll('button')).find((btn) => {
+          const text = normalizeText(btn.textContent || '');
+          return text.includes('sources');
+        });
+        if (sourcesBtn) return true;
         return false;
-      })()`,
-      { timeout: 2500 }
+      `),
+      { timeout: 2500, interval: 180 }
     );
 
     if (activated) {
@@ -495,6 +441,7 @@ async function enableChatGPTResearchViaCDP(tabId, { timeoutMs = 6000 } = {}) {
     try { await dbgDetach(tabId); } catch {}
   }
 }
+
 
 function generateSessionId() {
   return `burst-${Date.now()}-${Math.random().toString(36).slice(2, 8)}`;

@@ -8,11 +8,14 @@
     "format:fix": "prettier --write \"chrome_ext/content/injectors/claude.js\"",
     "lint": "eslint chrome_ext/content/injectors/claude.js",
     "lint:fix": "eslint chrome_ext/content/injectors/claude.js --fix",
-    "typecheck": "tsc --noEmit"
+    "typecheck": "tsc --noEmit && tsc --noEmit -p tsconfig.playwright.json",
+    "test:playwright": "playwright test"
   },
   "devDependencies": {
     "@eslint/js": "9.35.0",
+    "@playwright/test": "^1.56.0",
     "@types/chrome": "0.1.11",
+    "@types/node": "^24.7.2",
     "eslint": "9.35.0",
     "globals": "16.4.0",
     "prettier": "3.6.2",

@@ -189,6 +189,17 @@
       element.appendChild(p);
     }
 
+    try {
+      element.dispatchEvent(new InputEvent('beforeinput', {
+        bubbles: true,
+        cancelable: true,
+        inputType: 'insertFromPaste',
+        data: String(text)
+      }));
+    } catch {
+      element.dispatchEvent(new Event('beforeinput', { bubbles: true, cancelable: true }));
+    }
+
     // Dispatch events expected by React/ProseMirror-like editors
     try {
       element.dispatchEvent(new InputEvent('input', {
@@ -211,6 +222,17 @@
   utils.setTextareaText = function setTextareaText(textarea, text) {
     if (!textarea) throw new Error('setTextareaText: no textarea provided');
     textarea.value = String(text);
+
+    try {
+      textarea.dispatchEvent(new InputEvent('beforeinput', {
+        bubbles: true,
+        cancelable: true,
+        inputType: 'insertFromPaste',
+        data: String(text)
+      }));
+    } catch {
+      textarea.dispatchEvent(new Event('beforeinput', { bubbles: true, cancelable: true }));
+    }
 
     try {
       textarea.dispatchEvent(new InputEvent('input', {
