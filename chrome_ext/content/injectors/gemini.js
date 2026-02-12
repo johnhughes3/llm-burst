@@ -30,12 +30,342 @@
     });
   });
 
-  async function ensureEditorReady(timeout = 15000) {
+  const visible = typeof u.visible === 'function'
+    ? u.visible.bind(u)
+    : (el) => {
+        if (!el) return false;
+        const style = window.getComputedStyle(el);
+        if (style.display === 'none' || style.visibility === 'hidden') return false;
+        const opacity = Number(style.opacity);
+        if (Number.isFinite(opacity) && opacity === 0) return false;
+        const rect = el.getBoundingClientRect?.();
+        return !!rect && rect.width > 0 && rect.height > 0;
+      };
+
+  const simulateFocusSequence = typeof u.simulateFocusSequence === 'function'
+    ? u.simulateFocusSequence.bind(u)
+    : (element) => {
+        if (!element) return;
+        try { element.focus({ preventScroll: true }); } catch {
+          try { element.focus(); } catch { /* ignore */ }
+        }
+      };
+
+  const setContentEditableText = typeof u.setContentEditableText === 'function'
+    ? u.setContentEditableText.bind(u)
+    : (element, text) => {
+        if (!element) throw new Error('setContentEditableText fallback: no element provided');
+        const normalizedText = String(text ?? '');
+        const editableMode = String(
+          element.getAttribute('contenteditable') || element.contentEditable || ''
+        ).toLowerCase();
+        if (editableMode === 'plaintext-only') {
+          element.textContent = normalizedText;
+          try {
+            element.dispatchEvent(new InputEvent('input', {
+              bubbles: true,
+              cancelable: true,
+              inputType: 'insertText',
+              data: normalizedText
+            }));
+          } catch {
+            try { element.dispatchEvent(new Event('input', { bubbles: true, cancelable: true })); } catch {}
+          }
+          return;
+        }
+        while (element.firstChild) element.removeChild(element.firstChild);
+        const lines = normalizedText.split('\n');
+        for (const line of lines) {
+          const p = document.createElement('p');
+          p.textContent = line || '\u00A0';
+          element.appendChild(p);
+        }
+        try { element.dispatchEvent(new Event('input', { bubbles: true, cancelable: true })); } catch {}
+      };
+
+  const setTextareaText = typeof u.setTextareaText === 'function'
+    ? u.setTextareaText.bind(u)
+    : (textarea, text) => {
+        if (!(textarea instanceof HTMLTextAreaElement)) {
+          throw new Error('setTextareaText fallback: expected textarea element');
+        }
+        textarea.value = String(text);
+        try { textarea.dispatchEvent(new Event('input', { bubbles: true, cancelable: true })); } catch {}
+        try {
+          const end = textarea.value.length;
+          textarea.selectionStart = textarea.selectionEnd = end;
+        } catch {
+          /* ignore */
+        }
+      };
+
+  const isDisabled = typeof u.isDisabled === 'function'
+    ? u.isDisabled.bind(u)
+    : (btn) => {
+        if (!btn) return true;
+        if (btn.disabled) return true;
+        const aria = btn.getAttribute?.('aria-disabled');
+        if (aria === 'true') return true;
+        if (btn.classList?.contains('disabled')) return true;
+        const style = window.getComputedStyle(btn);
+        if (style.pointerEvents === 'none') return true;
+        return false;
+      };
+
+  const EDITOR_PRIMARY_SELECTORS = [
+    '.ql-editor',
+    '[data-lexical-editor="true"][contenteditable="true"]',
+    '[data-lexical-editor="true"][contenteditable="plaintext-only"]',
+    '[role="textbox"][contenteditable="true"]',
+    '[role="textbox"][contenteditable="plaintext-only"]',
+    '[contenteditable="true"][aria-label*="Gemini" i]',
+    '[contenteditable="plaintext-only"][aria-label*="Gemini" i]',
+    '[contenteditable="true"][aria-label*="message" i]',
+    '[contenteditable="plaintext-only"][aria-label*="message" i]',
+    'textarea[aria-label*="Gemini" i]',
+    'textarea[aria-label*="message" i]',
+    'textarea[name="message"]',
+    'textarea[data-testid*="chat-input"]',
+    'textarea[data-testid*="composer"]',
+  ];
+
+  const EDITOR_FALLBACK_SELECTORS = [
+    '[role="textbox"][contenteditable]',
+    '[contenteditable="true"]',
+    '[contenteditable="plaintext-only"]',
+    '[contenteditable]:not([contenteditable="false"])',
+    'textarea',
+  ];
+
+  function isEditableCandidate(node) {
+    if (!(node instanceof HTMLElement)) return false;
+    if (!visible(node)) return false;
+    if (node instanceof HTMLTextAreaElement) {
+      if (node.disabled) return false;
+      if (node.hasAttribute('readonly')) return false;
+      return true;
+    }
+    const editable = node.getAttribute('contenteditable');
+    if (editable && editable.toLowerCase() === 'false') return false;
+    if (node.getAttribute('aria-hidden') === 'true') return false;
+    return true;
+  }
+
+  function collectEditorCandidates() {
+    const seen = new Set();
+    const collected = [];
+    const push = (el, priority) => {
+      if (!(el instanceof HTMLElement)) return;
+      if (seen.has(el)) return;
+      if (!isEditableCandidate(el)) return;
+      collected.push({ el, priority });
+      seen.add(el);
+    };
+
+    for (const selector of EDITOR_PRIMARY_SELECTORS) {
+      const nodes = document.querySelectorAll(selector);
+      for (const node of nodes) {
+        push(node, 0);
+      }
+    }
+    for (const selector of EDITOR_FALLBACK_SELECTORS) {
+      const nodes = document.querySelectorAll(selector);
+      for (const node of nodes) {
+        push(node, 1);
+      }
+    }
+
+    collected.sort((a, b) => a.priority - b.priority);
+    return collected.map((entry) => entry.el);
+  }
+
+  function pickEditorCandidate() {
+    const candidates = collectEditorCandidates();
+    return candidates.length > 0 ? candidates[0] : null;
+  }
+
+  async function ensureEditorReady(timeout = 15000, interval = 120) {
     try {
-      return await waitUntil(() => document.querySelector('.ql-editor'), timeout, 100);
+      const editor = await waitUntil(() => pickEditorCandidate(), timeout, interval);
+      return editor instanceof HTMLElement ? editor : null;
     } catch {
       return null;
     }
+  }
+
+  function normalizeWhitespace(value) {
+    return String(value ?? '')
+      .replace(/\s+/g, ' ')
+      .trim();
+  }
+
+  function editorTextMatches(element, expected) {
+    if (!(element instanceof HTMLElement)) return false;
+    const target = normalizeWhitespace(expected);
+    if (element instanceof HTMLTextAreaElement) {
+      const actual = normalizeWhitespace(element.value);
+      if (!target) return actual === '';
+      return actual.includes(target);
+    }
+    const textContent = element.innerText || element.textContent || '';
+    const actual = normalizeWhitespace(textContent);
+    if (!target) return actual === '';
+    return actual.includes(target);
+  }
+
+  async function tryExecCommandInsert(element, text) {
+    if (!(element instanceof HTMLElement)) return false;
+    try {
+      element.focus({ preventScroll: true });
+    } catch {
+      try { element.focus(); } catch { /* ignore */ }
+    }
+    await wait(20);
+    try { document.execCommand('selectAll', false); } catch { /* ignore */ }
+    await wait(10);
+    let inserted = false;
+    try {
+      inserted = document.execCommand('insertText', false, String(text || ''));
+    } catch {
+      inserted = false;
+    }
+    await wait(60);
+    return inserted || editorTextMatches(element, text);
+  }
+
+  async function applyTextToEditor(element, text, warnings) {
+    if (!(element instanceof HTMLElement)) {
+      throw new Error('Gemini editor element not found');
+    }
+    simulateFocusSequence(element);
+    await wait(40);
+
+    if (element instanceof HTMLTextAreaElement) {
+      setTextareaText(element, text);
+      return;
+    }
+
+    try {
+      setContentEditableText(element, text);
+    } catch (error) {
+      warnings.push(`Gemini editor text insert error: ${String(error ?? 'unknown error')}`);
+    }
+
+    if (editorTextMatches(element, text)) {
+      return;
+    }
+
+    const execOk = await tryExecCommandInsert(element, text);
+    if (execOk) {
+      return;
+    }
+
+    try {
+      element.textContent = String(text ?? '');
+      element.dispatchEvent(new Event('input', { bubbles: true, cancelable: true }));
+    } catch {
+      /* ignore */
+    }
+
+    if (!editorTextMatches(element, text)) {
+      warnings.push('Gemini editor did not confirm text insertion');
+    }
+  }
+
+  const SEND_BUTTON_SELECTORS = [
+    'button.send-button',
+    'button[data-testid*="send"]',
+    '[role="button"][data-testid*="send"]',
+    'button[aria-label*="send" i]',
+    '[role="button"][aria-label*="send" i]',
+    'button[aria-label*="submit" i]',
+    'button[type="submit"]',
+  ];
+
+  function getSendButtonCandidates() {
+    const seen = new Set();
+    const candidates = [];
+    const push = (el) => {
+      if (!(el instanceof HTMLElement)) return;
+      if (seen.has(el)) return;
+      if (!visible(el)) return;
+      candidates.push(el);
+      seen.add(el);
+    };
+
+    for (const sel of SEND_BUTTON_SELECTORS) {
+      const nodes = Array.from(document.querySelectorAll(sel));
+      for (const node of nodes) {
+        if (!(node instanceof HTMLElement)) continue;
+        push(node);
+        const button = node.closest('button, [role="button"]');
+        if (button instanceof HTMLElement) push(button);
+      }
+    }
+
+    const fallbackButtons = Array.from(document.querySelectorAll('button, [role="button"]'));
+    for (const btn of fallbackButtons) {
+      if (!(btn instanceof HTMLElement)) continue;
+      const text = (btn.textContent || '').toLowerCase();
+      const aria = (btn.getAttribute('aria-label') || '').toLowerCase();
+      if (text.includes('send') || aria.includes('send') || text.includes('submit')) {
+        push(btn);
+      }
+    }
+
+    return candidates;
+  }
+
+  function findSendButtonCandidate({ requireEnabled = false } = {}) {
+    const candidates = getSendButtonCandidates();
+    for (const btn of candidates) {
+      if (requireEnabled && isDisabled(btn)) continue;
+      return btn;
+    }
+    return null;
+  }
+
+  async function waitForSendButtonEnabled(timeout = 9000, interval = 120) {
+    try {
+      const button = await waitUntil(() => {
+        const candidate = findSendButtonCandidate();
+        if (candidate && !isDisabled(candidate)) return candidate;
+        return null;
+      }, timeout, interval);
+      return button instanceof HTMLElement ? button : null;
+    } catch {
+      return null;
+    }
+  }
+
+  async function triggerKeyboardSendFallback(editor) {
+    const target =
+      (editor && editor.isConnected ? editor : document.activeElement) ||
+      document.body ||
+      document.documentElement;
+    if (!(target instanceof HTMLElement)) return false;
+    const combos = [
+      { key: 'Enter', code: 'Enter' },
+      { key: 'Enter', code: 'Enter', metaKey: true },
+      { key: 'Enter', code: 'Enter', ctrlKey: true },
+    ];
+    for (const combo of combos) {
+      try {
+        target.dispatchEvent(new KeyboardEvent('keydown', { bubbles: true, cancelable: true, ...combo }));
+        target.dispatchEvent(new KeyboardEvent('keyup', { bubbles: true, cancelable: true, ...combo }));
+      } catch {
+        /* ignore */
+      }
+      await wait(200);
+      const candidate = findSendButtonCandidate({ requireEnabled: false });
+      if (!candidate || isDisabled(candidate)) {
+        return true;
+      }
+      if (editor instanceof HTMLElement && editorTextMatches(editor, '')) {
+        return true;
+      }
+    }
+    return false;
   }
 
   // ---------------------------------------------------------------------------
@@ -238,86 +568,38 @@
     }
   }
 
-  function addTextAndSend(messageText, resolve, reject) {
-    try {
-      // Find the editable text area
-      const editor = document.querySelector('.ql-editor');
-      if (!editor) {
-        reject('Editor element not found');
-        return;
-      }
-      console.log('Found editor element');
-
-      // Focus the editor
-      try { editor.focus(); } catch {}
-
-      // Clear existing content - use DOM methods instead of innerHTML
-      try {
-        while (editor.firstChild) {
-          editor.removeChild(editor.firstChild);
-        }
-      } catch {}
-
-      // Split text into paragraphs and add them properly
-      const lines = String(messageText || '').split('\n');
-      lines.forEach(line => {
-        const p = document.createElement('p');
-        // Use non-breaking space for empty lines to maintain structure
-        p.textContent = line || '\u00A0';
-        editor.appendChild(p);
-      });
-      console.log('Text added as individual paragraphs');
-
-      // Dispatch input event to ensure the UI updates
-      try { editor.dispatchEvent(new Event('input', { bubbles: true, cancelable: true })); } catch {}
-      console.log('Input event dispatched');
-
-      // Wait for send button (using the slightly longer delay and retry logic)
-      setTimeout(() => {
-        const sendButton = document.querySelector('button.send-button');
-        if (!sendButton) {
-          reject('Send button not found');
-          return;
-        }
-        console.log('Found send button');
-        if (sendButton.getAttribute('aria-disabled') === 'true') {
-          console.log('Send button is disabled, waiting longer...');
-          setTimeout(() => {
-            if (sendButton.getAttribute('aria-disabled') === 'true') {
-              // Try dispatching another input event just before the final check
-              try { editor.dispatchEvent(new Event('input', { bubbles: true, cancelable: true })); } catch {}
-              setTimeout(() => { // Nested timeout
-                if (sendButton.getAttribute('aria-disabled') === 'true') {
-                  reject('Send button is still disabled after waiting and extra event');
-                  return;
-                }
-                try { sendButton.click(); } catch {}
-                console.log('Send button clicked after extra wait');
-                resolve();
-              }, 500);
-              return;
-            }
-            try { sendButton.click(); } catch {}
-            console.log('Send button clicked after initial wait');
-            resolve();
-          }, 1000);
-          return;
-        }
-        try { sendButton.click(); } catch {}
-        console.log('Send button clicked');
-        resolve();
-      }, 750); // Initial wait after inserting text
-    } catch (error) {
-      reject(`Error adding text or sending: ${error}`);
+  async function addTextAndSend(messageText) {
+    const warnings = [];
+    const editor = await ensureEditorReady(15000);
+    if (!editor) {
+      throw new Error('Gemini editor element not found');
     }
+
+    await applyTextToEditor(editor, messageText, warnings);
+
+    const sendButton = await waitForSendButtonEnabled(9000);
+    if (sendButton) {
+      try { sendButton.click(); } catch {}
+      return { ok: true, warnings };
+    }
+
+    warnings.push('Gemini send button not found or disabled; attempting keyboard fallback');
+    const keyboardSent = await triggerKeyboardSendFallback(editor);
+    if (!keyboardSent) {
+      warnings.push('Gemini keyboard fallback did not confirm message submission');
+      return {
+        ok: false,
+        error: 'Gemini send action could not be confirmed',
+        warnings
+      };
+    }
+
+    return { ok: true, warnings };
   }
 
-  function selectModelAndProceed(messageText, resolve, reject) {
+  async function selectModelAndProceed(messageText) {
     try {
-      // Find and click the model selector button
       console.log('Looking for model selector button');
-
-      // Find buttons that might be the model selector
       const possibleModelButtons = Array.from(document.querySelectorAll('button'))
         .filter(button => {
           const text = button.textContent || '';
@@ -332,56 +614,41 @@
 
       if (!modelButton) {
         console.log('Model selector button not found, proceeding with current model');
-        // Skip to adding text
-        addTextAndSend(messageText, resolve, reject);
-        return;
+        return await addTextAndSend(messageText);
       }
 
       console.log('Found model selector button, clicking it');
       modelButton.click();
+      await wait(500);
 
-      // Wait for dropdown to appear and click 2.5 Pro option
-      setTimeout(() => {
-        console.log('Looking for 2.5 Pro button in dropdown');
+      console.log('Looking for 2.5 Pro button in dropdown');
+      const proButtons = Array.from(document.querySelectorAll('button'))
+        .filter(button => {
+          const text = button.textContent || '';
+          return text.includes('2.5 Pro');
+        });
 
-        // Find 2.5 Pro button in the dropdown
-        const proButtons = Array.from(document.querySelectorAll('button'))
-          .filter(button => {
-            const text = button.textContent || '';
-            return text.includes('2.5 Pro');
-          });
+      const proButton = proButtons[0];
 
-        const proButton = proButtons[0];
+      if (!proButton) {
+        console.log('2.5 Pro button not found, proceeding with current model');
+        try { document.body.click(); } catch {}
+        await wait(300);
+        return await addTextAndSend(messageText);
+      }
 
-        if (!proButton) {
-          console.log('2.5 Pro button not found, proceeding with current model');
-          // Click somewhere else to close the dropdown
-          try { document.body.click(); } catch {}
-          setTimeout(() => {
-            addTextAndSend(messageText, resolve, reject);
-          }, 300);
-          return;
-        }
-
-        console.log('Found 2.5 Pro button, clicking it');
-        proButton.click();
-
-        // Wait for model selection to apply and dropdown to close
-        setTimeout(() => {
-          addTextAndSend(messageText, resolve, reject);
-        }, 500);
-      }, 500);
+      console.log('Found 2.5 Pro button, clicking it');
+      proButton.click();
+      await wait(500);
+      return await addTextAndSend(messageText);
     } catch (error) {
-      reject(`Error selecting model: ${error}`);
+      throw new Error(`Error selecting model: ${error}`);
     }
   }
 
-  function selectModelAndPasteOnly(messageText, resolve, reject) {
+  async function selectModelAndPasteOnly(messageText) {
     try {
-      // Find and click the model selector button
       console.log('Looking for model selector button (paste-only mode)');
-
-      // Find buttons that might be the model selector
       const possibleModelButtons = Array.from(document.querySelectorAll('button'))
         .filter(button => {
           const text = button.textContent || '';
@@ -396,92 +663,48 @@
 
       if (!modelButton) {
         console.log('Model selector button not found, proceeding with current model');
-        // Skip to pasting text only
-        addTextOnly(messageText, resolve, reject);
-        return;
+        return await addTextOnly(messageText);
       }
 
       console.log('Found model selector button, clicking it');
       modelButton.click();
+      await wait(500);
 
-      // Wait for dropdown to appear and click 2.5 Pro option
-      setTimeout(() => {
-        console.log('Looking for 2.5 Pro button in dropdown');
+      console.log('Looking for 2.5 Pro button in dropdown');
+      const proButtons = Array.from(document.querySelectorAll('button'))
+        .filter(button => {
+          const text = button.textContent || '';
+          return text.includes('2.5 Pro');
+        });
 
-        // Find 2.5 Pro button in the dropdown
-        const proButtons = Array.from(document.querySelectorAll('button'))
-          .filter(button => {
-            const text = button.textContent || '';
-            return text.includes('2.5 Pro');
-          });
+      const proButton = proButtons[0];
 
-        const proButton = proButtons[0];
+      if (!proButton) {
+        console.log('2.5 Pro button not found, proceeding with current model');
+        try { document.body.click(); } catch {}
+        await wait(300);
+        return await addTextOnly(messageText);
+      }
 
-        if (!proButton) {
-          console.log('2.5 Pro button not found, proceeding with current model');
-          // Click somewhere else to close the dropdown
-          try { document.body.click(); } catch {}
-          setTimeout(() => {
-            addTextOnly(messageText, resolve, reject);
-          }, 300);
-          return;
-        }
-
-        console.log('Found 2.5 Pro button, clicking it');
-        proButton.click();
-
-        // Wait for model selection to apply and dropdown to close
-        setTimeout(() => {
-          addTextOnly(messageText, resolve, reject);
-        }, 500);
-      }, 500);
+      console.log('Found 2.5 Pro button, clicking it');
+      proButton.click();
+      await wait(500);
+      return await addTextOnly(messageText);
     } catch (error) {
-      reject(`Error selecting model: ${error}`);
+      throw new Error(`Error selecting model: ${error}`);
     }
   }
 
-  function addTextOnly(messageText, resolve, reject) {
-    try {
-      // Find the editable text area
-      const editor = document.querySelector('.ql-editor');
-      if (!editor) {
-        reject('Editor element not found');
-        return;
-      }
-      console.log('Found editor element');
-
-      // Focus the editor
-      try { editor.focus(); } catch {}
-
-      // Clear existing content - use DOM methods instead of innerHTML
-      try {
-        while (editor.firstChild) {
-          editor.removeChild(editor.firstChild);
-        }
-      } catch {}
-
-      // Split text into paragraphs and add them properly
-      const lines = String(messageText || '').split('\n');
-      lines.forEach(line => {
-        const p = document.createElement('p');
-        // Use non-breaking space for empty lines to maintain structure
-        p.textContent = line || '\u00A0';
-        editor.appendChild(p);
-      });
-      console.log('Text added as individual paragraphs');
-
-      // Dispatch input event to ensure the UI updates
-      try { editor.dispatchEvent(new Event('input', { bubbles: true, cancelable: true })); } catch {}
-      console.log('Input event dispatched');
-
-      console.log('⚠️ Text pasted but NOT submitted - Deep Research activation failed');
-      console.log('Please manually enable Deep Research and click send.');
-
-      // Resolve successfully since we pasted the text
-      resolve({ pastedOnly: true, reason: 'Deep Research activation failed' });
-    } catch (error) {
-      reject(`Error adding text: ${error}`);
+  async function addTextOnly(messageText) {
+    const warnings = [];
+    const editor = await ensureEditorReady(15000);
+    if (!editor) {
+      throw new Error('Gemini editor element not found');
     }
+
+    await applyTextToEditor(editor, messageText, warnings);
+    warnings.push('Text pasted without submission (Deep Research activation failed)');
+    return { ok: true, warnings, pastedOnly: true, reason: 'Deep Research activation failed' };
   }
 
   async function enableTemporaryChat() {
@@ -647,9 +870,7 @@
 
   async function automateGeminiChat(messageText, enableResearch, enableIncognito) {
     try {
-      // Track if we're in research mode for the follow-up action
       let isResearchMode = false;
-
       // Step 1: Check if we need to enable Temporary Chat (incognito) first
       if (enableIncognito === 'Yes') {
         console.log('Incognito mode requested, will enable Temporary chat first');
@@ -670,22 +891,20 @@
 
         if (researchSuccess) {
           // Successfully enabled Deep Research, continue with model selection and submission
-          return new Promise((resolve, reject) => {
-            selectModelAndProceed(messageText, resolve, reject);
-
-            // After successful submission in research mode, start waiting for confirm button
-            // This is non-blocking - we don't await it
+          const result = await selectModelAndProceed(messageText);
+          // After successful submission in research mode, start waiting for confirm button
+          // This is non-blocking - we don't await it
+          if (isResearchMode) {
             waitForAndClickResearchConfirm().catch(err => {
               console.log('Non-critical error in research confirm:', err);
             });
-          });
-        } else {
-          // Failed to enable Deep Research - paste text but DON'T submit
-          console.log('⚠️ Could not enable Deep Research mode. Pasting prompt without submitting.');
-          return new Promise((resolve, reject) => {
-            selectModelAndPasteOnly(messageText, resolve, reject);
-          });
+          }
+          return result;
         }
+
+        // Failed to enable Deep Research - paste text but DON'T submit
+        console.log('⚠️ Could not enable Deep Research mode. Pasting prompt without submitting.');
+        return await selectModelAndPasteOnly(messageText);
       } else {
         // Deep Research not selected - enable Canvas instead
         // Canvas and Deep Research are mutually exclusive, but Canvas is compatible with incognito
@@ -698,9 +917,7 @@
         }
 
         // Proceed to model selection and submission
-        return new Promise((resolve, reject) => {
-          selectModelAndProceed(messageText, resolve, reject);
-        });
+        return await selectModelAndProceed(messageText);
       }
     } catch (error) {
       throw new Error(`Error in automation process: ${error}`);
@@ -710,68 +927,8 @@
   // ---------------------------------------------------------------------------
   // Ported logic: geminiFollowUpMessage (follow-up)
   // ---------------------------------------------------------------------------
-  function geminiFollowUpMessage(messageText) {
-    return new Promise((resolve, reject) => {
-      try {
-        // Find the editable text area
-        const editor = document.querySelector('.ql-editor');
-        if (!editor) {
-          console.error('Gemini editor element not found');
-          reject('Editor element not found');
-          return;
-        }
-        console.log('Found Gemini editor element');
-
-        try { editor.focus(); } catch {}
-
-        // Clear existing content - use DOM methods instead of innerHTML
-        try {
-          while (editor.firstChild) {
-            editor.removeChild(editor.firstChild);
-          }
-        } catch {}
-
-        // Split text into paragraphs and add them properly
-        const lines = String(messageText || '').split('\n');
-        lines.forEach(line => {
-          const p = document.createElement('p');
-          p.textContent = line || '\u00A0'; // Use non-breaking space for empty lines
-          editor.appendChild(p);
-        });
-        console.log('Follow-up text added as individual paragraphs');
-
-        // Dispatch input event
-        try { editor.dispatchEvent(new Event('input', { bubbles: true, cancelable: true })); } catch {}
-        console.log('Input event dispatched');
-
-        // Wait for send button (using the existing retry logic)
-        const checkSendButton = () => {
-          const sendButton = document.querySelector('.send-button');
-          if (!sendButton) {
-            reject('Send button not found');
-            return;
-          }
-          const isDisabled =
-            sendButton.getAttribute('aria-disabled') === 'true' ||
-            (sendButton.parentElement && sendButton.parentElement.classList.contains('disabled'));
-
-          if (isDisabled) {
-            console.log('Send button is disabled, waiting...');
-            setTimeout(checkSendButton, 300); // Keep checking
-            return;
-          }
-          console.log('Send button enabled, clicking');
-          try { sendButton.click(); } catch {}
-          console.log('Gemini follow-up message sent successfully');
-          resolve();
-        };
-        setTimeout(checkSendButton, 500); // Initial delay before checking
-
-      } catch (error) {
-        console.error(`Error in geminiFollowUpMessage: ${error}`);
-        reject(`Error: ${error}`);
-      }
-    });
+  async function geminiFollowUpMessage(messageText) {
+    return await addTextAndSend(messageText);
   }
 
   // ---------------------------------------------------------------------------

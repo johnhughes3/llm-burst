@@ -179,6 +179,32 @@
    */
   utils.setContentEditableText = function setContentEditableText(element, text) {
     if (!element) throw new Error('setContentEditableText: no element provided');
+    const editableMode = String(element.getAttribute('contenteditable') || '').toLowerCase();
+    if (editableMode === 'plaintext-only') {
+      element.textContent = String(text ?? '');
+      try {
+        element.dispatchEvent(new InputEvent('beforeinput', {
+          bubbles: true,
+          cancelable: true,
+          inputType: 'insertText',
+          data: String(text)
+        }));
+      } catch {
+        element.dispatchEvent(new Event('beforeinput', { bubbles: true, cancelable: true }));
+      }
+      try {
+        element.dispatchEvent(new InputEvent('input', {
+          bubbles: true,
+          cancelable: true,
+          inputType: 'insertText',
+          data: String(text)
+        }));
+      } catch {
+        element.dispatchEvent(new Event('input', { bubbles: true, cancelable: true }));
+      }
+      element.dispatchEvent(new Event('change', { bubbles: true, cancelable: true }));
+      return;
+    }
     // Clear existing content
     while (element.firstChild) element.removeChild(element.firstChild);
 
