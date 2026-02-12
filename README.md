@@ -75,7 +75,7 @@ pytest -v --headed
 
 ## Development
 
-See [docs/spec.md](docs/spec.md) for the full technical specification.
+See `docs/specs.md` for the full technical specification.
 
 ## License
 

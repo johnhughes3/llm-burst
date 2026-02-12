@@ -19,7 +19,13 @@ const ALLOWED_COLORS = new Set([
 ]);
 
 const DEFAULT_COLOR = 'blue';
-const EXTENSION_VERSION = '1.0.0';
+const EXTENSION_VERSION = (() => {
+  try {
+    return chrome?.runtime?.getManifest?.().version || 'unknown';
+  } catch {
+    return 'unknown';
+  }
+})();
 
 // Providers registry with URLs and default group colors
 const PROVIDERS = {
@@ -69,14 +75,13 @@ function delay(ms) {
 }
 
 function withTimeout(promise, ms, message = 'Operation timed out') {
-  const controller = new AbortController();
-  const timer = setTimeout(() => controller.abort(), ms);
-  return Promise.race([
-    promise.finally(() => clearTimeout(timer)),
-    new Promise((_, reject) => {
-      setTimeout(() => reject(new Error(message)), ms);
-    })
-  ]);
+  let timer = null;
+  const timeoutPromise = new Promise((_, reject) => {
+    timer = setTimeout(() => reject(new Error(message)), ms);
+  });
+  return Promise.race([Promise.resolve(promise), timeoutPromise]).finally(() => {
+    if (timer) clearTimeout(timer);
+  });
 }
 
 // ============================================================================
@@ -936,6 +941,13 @@ async function injectIntoTab(tabId, providerKey, payload, timeoutMs = 15000) {
 
   for (let attempt = 1; attempt <= maxAttempts; attempt++) {
     try {
+      console.debug('[llm-burst][injectIntoTab]', {
+        stage: 'sendMessage',
+        provider: providerKey,
+        tabId,
+        attempt,
+        payload,
+      });
       const res = await withTimeout(
         chrome.tabs.sendMessage(tabId, {
           type: 'llmburst-inject',
@@ -945,6 +957,14 @@ async function injectIntoTab(tabId, providerKey, payload, timeoutMs = 15000) {
         timeoutMs,
         'Injection timed out'
       );
+
+      console.debug('[llm-burst][injectIntoTab]', {
+        stage: 'response',
+        provider: providerKey,
+        tabId,
+        attempt,
+        response: res,
+      });
 
       const normalized = isStructuredResponse(res)
         ? res
@@ -1306,6 +1326,33 @@ chrome.runtime.onMessage.addListener((message, sender, sendResponse) => {
             sendResponse({ ok: result.ok, activated: !!result.activated, error: result.error || null });
           } catch (e) {
             sendResponse({ ok: false, error: e?.message || String(e) });
+          }
+          break;
+        }
+
+        case 'llmburst-inject': {
+          const tabId = sender?.tab?.id || params.tabId;
+          if (!tabId) {
+            sendResponse({ ok: false, error: 'No sender tab for injection' });
+            break;
+          }
+          const provider = params.provider;
+          if (!provider) {
+            sendResponse({ ok: false, error: 'provider is required' });
+            break;
+          }
+          const mode = params.mode === 'followup' ? 'followup' : 'submit';
+          const prompt = String(params.prompt || '');
+          if (!prompt.trim()) {
+            sendResponse({ ok: false, error: 'prompt is required' });
+            break;
+          }
+          const options = params.options && typeof params.options === 'object' ? params.options : {};
+          try {
+            const result = await injectIntoTab(tabId, provider, { mode, prompt, options });
+            sendResponse(result);
+          } catch (error) {
+            sendResponse({ ok: false, error: error?.message || String(error) });
           }
           break;
         }
