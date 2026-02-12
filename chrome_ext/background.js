@@ -938,6 +938,21 @@ async function handleGrokInjectionFailure(tabId, response, { attempt, maxAttempt
  */
 async function injectIntoTab(tabId, providerKey, payload, timeoutMs = 15000) {
   const maxAttempts = providerKey === 'GROK' ? 3 : 2;
+  const payloadForLog =
+    payload && typeof payload === 'object'
+      ? {
+          mode: payload.mode,
+          options: payload.options,
+          ...(Object.prototype.hasOwnProperty.call(payload, 'prompt')
+            ? {
+                prompt:
+                  typeof payload.prompt === 'string'
+                    ? `[redacted:${payload.prompt.length} chars]`
+                    : '[redacted]'
+              }
+            : {})
+        }
+      : undefined;
 
   for (let attempt = 1; attempt <= maxAttempts; attempt++) {
     try {
@@ -946,7 +961,7 @@ async function injectIntoTab(tabId, providerKey, payload, timeoutMs = 15000) {
         provider: providerKey,
         tabId,
         attempt,
-        payload,
+        payload: payloadForLog,
       });
       const res = await withTimeout(
         chrome.tabs.sendMessage(tabId, {
@@ -963,7 +978,18 @@ async function injectIntoTab(tabId, providerKey, payload, timeoutMs = 15000) {
         provider: providerKey,
         tabId,
         attempt,
-        response: res,
+        response:
+          res && typeof res === 'object'
+            ? {
+                ok: !!res.ok,
+                code: res.code,
+                state: res.state,
+                error: res.error,
+                warningsCount: Array.isArray(res.warnings) ? res.warnings.length : undefined,
+              }
+            : typeof res === 'string'
+              ? `[redacted-string:${res.length} chars]`
+              : res,
       });
 
       const normalized = isStructuredResponse(res)

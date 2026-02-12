@@ -55,8 +55,26 @@
     ? u.setContentEditableText.bind(u)
     : (element, text) => {
         if (!element) throw new Error('setContentEditableText fallback: no element provided');
+        const normalizedText = String(text ?? '');
+        const editableMode = String(
+          element.getAttribute('contenteditable') || element.contentEditable || ''
+        ).toLowerCase();
+        if (editableMode === 'plaintext-only') {
+          element.textContent = normalizedText;
+          try {
+            element.dispatchEvent(new InputEvent('input', {
+              bubbles: true,
+              cancelable: true,
+              inputType: 'insertText',
+              data: normalizedText
+            }));
+          } catch {
+            try { element.dispatchEvent(new Event('input', { bubbles: true, cancelable: true })); } catch {}
+          }
+          return;
+        }
         while (element.firstChild) element.removeChild(element.firstChild);
-        const lines = String(text).split('\n');
+        const lines = normalizedText.split('\n');
         for (const line of lines) {
           const p = document.createElement('p');
           p.textContent = line || '\u00A0';
@@ -321,8 +339,11 @@
   }
 
   async function triggerKeyboardSendFallback(editor) {
-    const target = (editor && editor.isConnected ? editor : document.activeElement) || document.body;
-    if (!target) return false;
+    const target =
+      (editor && editor.isConnected ? editor : document.activeElement) ||
+      document.body ||
+      document.documentElement;
+    if (!(target instanceof HTMLElement)) return false;
     const combos = [
       { key: 'Enter', code: 'Enter' },
       { key: 'Enter', code: 'Enter', metaKey: true },
@@ -336,8 +357,15 @@
         /* ignore */
       }
       await wait(200);
+      const candidate = findSendButtonCandidate({ requireEnabled: false });
+      if (!candidate || isDisabled(candidate)) {
+        return true;
+      }
+      if (editor instanceof HTMLElement && editorTextMatches(editor, '')) {
+        return true;
+      }
     }
-    return true;
+    return false;
   }
 
   // ---------------------------------------------------------------------------
@@ -556,7 +584,16 @@
     }
 
     warnings.push('Gemini send button not found or disabled; attempting keyboard fallback');
-    await triggerKeyboardSendFallback(editor);
+    const keyboardSent = await triggerKeyboardSendFallback(editor);
+    if (!keyboardSent) {
+      warnings.push('Gemini keyboard fallback did not confirm message submission');
+      return {
+        ok: false,
+        error: 'Gemini send action could not be confirmed',
+        warnings
+      };
+    }
+
     return { ok: true, warnings };
   }
 
@@ -833,6 +870,7 @@
 
   async function automateGeminiChat(messageText, enableResearch, enableIncognito) {
     try {
+      let isResearchMode = false;
       // Step 1: Check if we need to enable Temporary Chat (incognito) first
       if (enableIncognito === 'Yes') {
         console.log('Incognito mode requested, will enable Temporary chat first');
@@ -856,9 +894,11 @@
           const result = await selectModelAndProceed(messageText);
           // After successful submission in research mode, start waiting for confirm button
           // This is non-blocking - we don't await it
-          waitForAndClickResearchConfirm().catch(err => {
-            console.log('Non-critical error in research confirm:', err);
-          });
+          if (isResearchMode) {
+            waitForAndClickResearchConfirm().catch(err => {
+              console.log('Non-critical error in research confirm:', err);
+            });
+          }
           return result;
         }
 
