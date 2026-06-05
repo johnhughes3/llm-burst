@@ -176,10 +176,14 @@ function buildEvalWithResearchHelpers(body) {
       return true;
     };
     const getOpenMenuRoot = () => {
-      const portals = Array.from(document.querySelectorAll('[data-radix-portal] [role=\"menu\"], [data-radix-portal] [data-state=\"open\"]')).filter(isVisible);
-      if (portals.length > 0) return portals.at(-1);
-      const menu = document.querySelector('[role=\"menu\"][data-orientation=\"vertical\"][data-state=\"open\"]');
-      return menu && isVisible(menu) ? menu : null;
+      const candidates = Array.from(document.querySelectorAll([
+        '[data-radix-portal] [role=\"menu\"]',
+        '[data-radix-portal] [data-state=\"open\"]',
+        '[role=\"menu\"][data-orientation=\"vertical\"][data-state=\"open\"]',
+        '[role=\"menu\"]',
+        '[role=\"listbox\"]'
+      ].join(','))).filter(isVisible);
+      return candidates.length > 0 ? candidates.at(-1) : null;
     };
     ${body}
   })()`;
@@ -250,10 +254,8 @@ async function dbgFindResearchMenuItem(tabId, { timeout = 2400 } = {}) {
       '[role=\"option\"]',
       '[data-radix-collection-item]'
     ];
-    const roots = [];
     const menuRoot = getOpenMenuRoot();
-    if (menuRoot) roots.push(menuRoot);
-    roots.push(document);
+    const roots = menuRoot ? [menuRoot] : [document];
     for (const root of roots) {
       const items = Array.from(root.querySelectorAll(selectors.join(', '))).filter(isVisible);
       for (const item of items) {
@@ -263,6 +265,67 @@ async function dbgFindResearchMenuItem(tabId, { timeout = 2400 } = {}) {
         item.scrollIntoView({ block: 'center', inline: 'center', behavior: 'instant' });
         const rect = item.getBoundingClientRect();
         if (rect.width <= 0 || rect.height <= 0) continue;
+        return { x: Math.round(rect.left + rect.width / 2), y: Math.round(rect.top + rect.height / 2) };
+      }
+    }
+    const textRoots = menuRoot ? [menuRoot] : [document];
+    const clickableFor = (el) => {
+      if (!el) return null;
+      return el.closest([
+        'button',
+        '[role="button"]',
+        '[role="menuitem"]',
+        '[role="menuitemradio"]',
+        '[role="option"]',
+        '[data-radix-collection-item]',
+        '[tabindex]:not([tabindex="-1"])'
+      ].join(',')) || el;
+    };
+    const seen = new Set();
+    const matches = [];
+    for (const root of textRoots) {
+      const elements = Array.from(root.querySelectorAll([
+        'button',
+        '[role="button"]',
+        '[role="menuitem"]',
+        '[role="menuitemradio"]',
+        '[role="option"]',
+        '[data-radix-collection-item]',
+        '[tabindex]:not([tabindex="-1"])',
+        'div',
+        'span'
+      ].join(','))).filter(isVisible);
+      for (const element of elements) {
+        const label = normalizeText(element.textContent || element.getAttribute('aria-label') || '');
+        if (!label || label.length > 140 || !researchPattern.test(label)) continue;
+        const clickable = clickableFor(element);
+        if (!clickable || !isVisible(clickable) || seen.has(clickable)) continue;
+        seen.add(clickable);
+        const clickLabel = normalizeText(clickable.textContent || clickable.getAttribute('aria-label') || label);
+        if (!clickLabel || clickLabel.length > 180 || !researchPattern.test(clickLabel)) continue;
+        const rect = clickable.getBoundingClientRect();
+        if (rect.width <= 0 || rect.height <= 0) continue;
+        matches.push({
+          element: clickable,
+          label: clickLabel,
+          isDeepResearch: /\\bdeep\\s*research\\b/i.test(clickLabel),
+          sourceLength: label.length,
+          clickLength: clickLabel.length,
+          area: rect.width * rect.height
+        });
+      }
+    }
+    matches.sort((a, b) => {
+      if (a.isDeepResearch !== b.isDeepResearch) return a.isDeepResearch ? -1 : 1;
+      if (a.clickLength !== b.clickLength) return a.clickLength - b.clickLength;
+      if (a.sourceLength !== b.sourceLength) return a.sourceLength - b.sourceLength;
+      return b.area - a.area;
+    });
+    if (matches.length > 0) {
+      const element = matches[0].element;
+      element.scrollIntoView({ block: 'center', inline: 'center', behavior: 'instant' });
+      const rect = element.getBoundingClientRect();
+      if (rect.width > 0 && rect.height > 0) {
         return { x: Math.round(rect.left + rect.width / 2), y: Math.round(rect.top + rect.height / 2) };
       }
     }
@@ -425,11 +488,6 @@ async function enableChatGPTResearchViaCDP(tabId, { timeoutMs = 6000 } = {}) {
           return label.includes('model');
         });
         if (modelBtn && modelLabelIndicatesResearch(modelBtn)) return true;
-        const sourcesBtn = Array.from(document.querySelectorAll('button')).find((btn) => {
-          const text = normalizeText(btn.textContent || '');
-          return text.includes('sources');
-        });
-        if (sourcesBtn) return true;
         return false;
       `),
       { timeout: 2500, interval: 180 }
@@ -438,15 +496,334 @@ async function enableChatGPTResearchViaCDP(tabId, { timeoutMs = 6000 } = {}) {
     if (activated) {
       console.log('[CDP] ✅ Research mode successfully activated!');
     } else {
-      console.log('[CDP] ⚠️ Could not verify Research mode activation');
+      console.log('[CDP] ⚠️ Could not verify Research mode activation after selecting the Deep Research row');
     }
 
-    return { ok: true, activated: !!activated };
+    return { ok: true, activated: !!activated || activatedViaSelection };
   } finally {
     try { await dbgDetach(tabId); } catch {}
   }
 }
 
+function buildGeminiEval(body) {
+  return `(() => {
+    const normalizeText = (s) => (s || '').replace(/\\s+/g, ' ').trim();
+    const normalizeLower = (s) => normalizeText(s).toLowerCase();
+    const isVisible = (el) => {
+      if (!el || !el.isConnected) return false;
+      const rect = el.getBoundingClientRect();
+      if (!rect || rect.width <= 0 || rect.height <= 0) return false;
+      const cs = window.getComputedStyle(el);
+      if (cs.display === 'none' || cs.visibility === 'hidden' || Number(cs.opacity) === 0) return false;
+      let node = el;
+      while (node && node !== document.documentElement) {
+        if (node.hasAttribute && (node.hasAttribute('inert') || node.getAttribute('aria-hidden') === 'true')) return false;
+        node = node.parentElement;
+      }
+      return true;
+    };
+    const labelFor = (el) => normalizeText([
+      (el.getAttribute && el.getAttribute('aria-label')) || '',
+      (el.getAttribute && el.getAttribute('title')) || '',
+      el.textContent || ''
+    ].join(' '));
+    const centerOf = (el) => {
+      if (!el || !isVisible(el)) return null;
+      el.scrollIntoView({ block: 'center', inline: 'center', behavior: 'instant' });
+      const rect = el.getBoundingClientRect();
+      if (!rect || rect.width <= 0 || rect.height <= 0) return null;
+      return {
+        x: Math.round(rect.left + rect.width / 2),
+        y: Math.round(rect.top + rect.height / 2),
+        label: labelFor(el)
+      };
+    };
+    const clickableFor = (el) => {
+      if (!el) return null;
+      return el.closest([
+        'button',
+        '[role="button"]',
+        '[role="menuitem"]',
+        '[role="option"]',
+        '[role="radio"]',
+        '[tabindex]:not([tabindex="-1"])',
+        '[jsaction]',
+        '.mat-mdc-menu-item',
+        '.mat-mdc-option'
+      ].join(',')) || el;
+    };
+    const findVisibleTextCenter = (pattern, opts = {}) => {
+      const exclude = opts.exclude || null;
+      const elements = Array.from(document.querySelectorAll([
+        'button',
+        '[role="button"]',
+        '[role="menuitem"]',
+        '[role="option"]',
+        '[role="radio"]',
+        '[aria-label]',
+        '[jsaction]',
+        '[tabindex]:not([tabindex="-1"])',
+        '.mat-mdc-menu-item',
+        '.mat-mdc-option',
+        'span',
+        'div'
+      ].join(',')));
+      const seen = new Set();
+      const matches = [];
+      for (const el of elements) {
+        if (!(el instanceof HTMLElement) || !isVisible(el)) continue;
+        const ownLabel = labelFor(el);
+        if (!ownLabel || ownLabel.length > 140) continue;
+        if (!pattern.test(ownLabel)) continue;
+        if (exclude && exclude.test(ownLabel)) continue;
+        const clickable = clickableFor(el);
+        if (!(clickable instanceof HTMLElement) || !isVisible(clickable) || seen.has(clickable)) continue;
+        seen.add(clickable);
+        const clickLabel = labelFor(clickable) || ownLabel;
+        if (!clickLabel || clickLabel.length > 180) continue;
+        if (exclude && exclude.test(clickLabel)) continue;
+        const rect = clickable.getBoundingClientRect();
+        matches.push({
+          el: clickable,
+          label: clickLabel,
+          ownLength: ownLabel.length,
+          clickLength: clickLabel.length,
+          area: rect.width * rect.height
+        });
+      }
+      matches.sort((a, b) => {
+        if (a.clickLength !== b.clickLength) return a.clickLength - b.clickLength;
+        if (a.ownLength !== b.ownLength) return a.ownLength - b.ownLength;
+        return b.area - a.area;
+      });
+      return matches.length > 0 ? centerOf(matches[0].el) : null;
+    };
+    ${body}
+  })()`;
+}
+
+async function dbgGeminiGetModeLabel(tabId) {
+  return dbgEval(tabId, buildGeminiEval(`
+    const candidates = Array.from(document.querySelectorAll([
+      'button[aria-label*="mode picker" i]',
+      '[role="button"][aria-label*="mode picker" i]',
+      'button[aria-label*="currently" i]',
+      '[role="button"][aria-label*="currently" i]'
+    ].join(','))).filter(isVisible);
+    for (const candidate of candidates) {
+      const label = labelFor(candidate);
+      const lower = normalizeLower(label);
+      if (!lower || lower.includes('upload') || lower.includes('tool') || lower.includes('temporary')) continue;
+      if (lower.includes('mode picker') || lower.includes('currently')) return label;
+    }
+    return '';
+  `));
+}
+
+async function dbgGeminiFindModePicker(tabId, { timeout = 3500 } = {}) {
+  const expr = buildGeminiEval(`
+    const candidates = Array.from(document.querySelectorAll([
+      'button[aria-label*="mode picker" i]',
+      '[role="button"][aria-label*="mode picker" i]',
+      'button[aria-label*="currently" i]',
+      '[role="button"][aria-label*="currently" i]'
+    ].join(','))).filter(isVisible);
+    for (const candidate of candidates) {
+      const label = labelFor(candidate);
+      const lower = normalizeLower(label);
+      if (!lower || lower.includes('upload') || lower.includes('tool') || lower.includes('temporary')) continue;
+      if (!lower.includes('mode picker') && !lower.includes('currently')) continue;
+      return centerOf(candidate);
+    }
+    return null;
+  `);
+  return dbgWaitFor(tabId, expr, { timeout, interval: 120 });
+}
+
+async function dbgGeminiFindTextCenter(tabId, patternSource, { timeout = 3000, excludeSource = '' } = {}) {
+  const expr = buildGeminiEval(`
+    const pattern = new RegExp(${JSON.stringify(patternSource)}, 'i');
+    const exclude = ${excludeSource ? `new RegExp(${JSON.stringify(excludeSource)}, 'i')` : 'null'};
+    return findVisibleTextCenter(pattern, { exclude });
+  `);
+  return dbgWaitFor(tabId, expr, { timeout, interval: 120 });
+}
+
+async function dbgGeminiClickModePicker(tabId) {
+  const trigger = await dbgGeminiFindModePicker(tabId);
+  if (!trigger) {
+    throw new Error('Gemini mode picker not found');
+  }
+  await dbgTrustedClickXY(tabId, trigger.x, trigger.y);
+  await delay(250);
+}
+
+async function dbgGeminiSelectProFamily(tabId) {
+  const current = String(await dbgGeminiGetModeLabel(tabId) || '');
+  if (/\bpro\b/i.test(current)) {
+    return { ok: true, alreadyActive: true };
+  }
+
+  await dbgGeminiClickModePicker(tabId);
+  const proOption = await dbgGeminiFindTextCenter(tabId, '\\b(?:\\d+(?:\\.\\d+)?\\s*)?pro\\b', {
+    timeout: 2600,
+    excludeSource: 'deep\\s*think|extended|thinking\\s+level|currently|upload|tools?'
+  });
+  if (!proOption) {
+    await dbgSendEscape(tabId);
+    throw new Error('Gemini Pro option not found');
+  }
+
+  await dbgTrustedClickXY(tabId, proOption.x, proOption.y);
+  await delay(250);
+  const activated = await dbgWaitFor(
+    tabId,
+    buildGeminiEval(`
+      const modeButton = Array.from(document.querySelectorAll([
+        'button[aria-label*="mode picker" i]',
+        '[role="button"][aria-label*="mode picker" i]',
+        'button[aria-label*="currently" i]',
+        '[role="button"][aria-label*="currently" i]'
+      ].join(','))).find(isVisible);
+      return /\\bpro\\b/i.test(labelFor(modeButton || document.body));
+    `),
+    { timeout: 1400, interval: 120 }
+  );
+  return { ok: !!activated };
+}
+
+async function dbgGeminiSelectThinkingLevel(tabId, level) {
+  const escapedLevel = String(level || '').replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
+  const targetPattern = level === 'Deep Think' ? '\\bdeep\\s*think\\b' : `\\b${escapedLevel}\\b`;
+  const current = String(await dbgGeminiGetModeLabel(tabId) || '');
+  if (level === 'Deep Think' && /\bdeep\s*think\b/i.test(current)) {
+    return { ok: true, alreadyActive: true };
+  }
+  if (level === 'Standard' && /\bpro\b/i.test(current) && !/\b(deep\s*think|extended)\b/i.test(current)) {
+    return { ok: true, alreadyActive: true };
+  }
+
+  await dbgGeminiClickModePicker(tabId);
+  const thinkingLevel = await dbgGeminiFindTextCenter(tabId, '\\bthinking\\s+level\\b', {
+    timeout: 2600
+  });
+  if (!thinkingLevel) {
+    await dbgSendEscape(tabId);
+    throw new Error('Gemini thinking level submenu not found');
+  }
+
+  await dbgTrustedClickXY(tabId, thinkingLevel.x, thinkingLevel.y);
+  await delay(250);
+
+  const option = await dbgGeminiFindTextCenter(tabId, targetPattern, {
+    timeout: 2600,
+    excludeSource: level === 'Standard' ? 'extended|deep\\s*think' : ''
+  });
+  if (!option) {
+    await dbgSendEscape(tabId);
+    throw new Error(`Gemini ${level} thinking option not found`);
+  }
+
+  await dbgTrustedClickXY(tabId, option.x, option.y);
+  await delay(350);
+  return { ok: true };
+}
+
+async function dbgGeminiWaitForMode(tabId, mode) {
+  const expression =
+    mode === 'deepThink'
+      ? `
+        const modeButton = Array.from(document.querySelectorAll([
+          'button[aria-label*="mode picker" i]',
+          '[role="button"][aria-label*="mode picker" i]',
+          'button[aria-label*="currently" i]',
+          '[role="button"][aria-label*="currently" i]'
+        ].join(','))).find(isVisible);
+        return /\\bdeep\\s*think\\b/i.test(labelFor(modeButton || document.body));
+      `
+      : `
+        const modeButton = Array.from(document.querySelectorAll([
+          'button[aria-label*="mode picker" i]',
+          '[role="button"][aria-label*="mode picker" i]',
+          'button[aria-label*="currently" i]',
+          '[role="button"][aria-label*="currently" i]'
+        ].join(','))).find(isVisible);
+        const label = labelFor(modeButton || document.body);
+        return /\\bpro\\b/i.test(label) && !/\\b(deep\\s*think|extended)\\b/i.test(label);
+      `;
+  return dbgWaitFor(tabId, buildGeminiEval(expression), { timeout: 2500, interval: 140 });
+}
+
+async function dbgGeminiEnableDeepResearchTool(tabId) {
+  const alreadyActive = await dbgEval(tabId, buildGeminiEval(`
+    const active = Array.from(document.querySelectorAll('button, [role="button"], [aria-label], .toolbox-chip')).find((el) => {
+      if (!(el instanceof HTMLElement) || !isVisible(el)) return false;
+      const label = normalizeLower(labelFor(el));
+      return label.includes('deep research') && (label.includes('deselect') || label.includes('selected'));
+    });
+    return !!active;
+  `));
+  if (alreadyActive) return { ok: true, alreadyActive: true };
+
+  const toolsButton = await dbgGeminiFindTextCenter(tabId, '\\b(upload\\s*&\\s*tools|tools?)\\b', {
+    timeout: 3500,
+    excludeSource: 'settings|developer|translation'
+  });
+  if (!toolsButton) {
+    throw new Error('Gemini Upload & tools button not found');
+  }
+
+  await dbgTrustedClickXY(tabId, toolsButton.x, toolsButton.y);
+  await delay(300);
+
+  const deepResearch = await dbgGeminiFindTextCenter(tabId, '\\bdeep\\s*research\\b', {
+    timeout: 3500
+  });
+  if (!deepResearch) {
+    await dbgSendEscape(tabId);
+    throw new Error('Gemini Deep Research tool not found');
+  }
+
+  await dbgTrustedClickXY(tabId, deepResearch.x, deepResearch.y);
+  await delay(400);
+  return { ok: true };
+}
+
+async function preconfigureGeminiViaCDP(tabId, { research = false } = {}) {
+  console.log(`[CDP][Gemini] Starting ${research ? 'Deep Research + Pro' : 'Pro Deep Think'} preconfiguration...`);
+  await dbgAttach(tabId);
+  try {
+    await dbgSend(tabId, 'Runtime.enable');
+    await dbgSend(tabId, 'DOM.enable');
+
+    await dbgWaitFor(
+      tabId,
+      buildGeminiEval(`
+        const editor = document.querySelector('[contenteditable], textarea, [role="textbox"]');
+        const mode = Array.from(document.querySelectorAll('button[aria-label*="mode picker" i], [role="button"][aria-label*="mode picker" i], button[aria-label*="currently" i], [role="button"][aria-label*="currently" i]')).find(isVisible);
+        return !!editor && !!mode;
+      `),
+      { timeout: 8000, interval: 160 }
+    );
+
+    await dbgGeminiSelectProFamily(tabId);
+    if (research) {
+      await dbgGeminiSelectThinkingLevel(tabId, 'Standard');
+      await dbgGeminiEnableDeepResearchTool(tabId);
+      const confirmed = await dbgGeminiWaitForMode(tabId, 'pro');
+      return { ok: true, modelConfirmed: !!confirmed, researchActivated: true };
+    }
+
+    await dbgGeminiSelectThinkingLevel(tabId, 'Deep Think');
+    const confirmed = await dbgGeminiWaitForMode(tabId, 'deepThink');
+    if (!confirmed) {
+      throw new Error('Gemini Pro Deep Think selection could not be confirmed');
+    }
+    return { ok: true, modelConfirmed: true };
+  } finally {
+    try { await dbgDetach(tabId); } catch {}
+  }
+}
 
 function generateSessionId() {
   return `burst-${Date.now()}-${Math.random().toString(36).slice(2, 8)}`;
@@ -938,16 +1315,37 @@ async function handleGrokInjectionFailure(tabId, response, { attempt, maxAttempt
  */
 async function injectIntoTab(tabId, providerKey, payload, timeoutMs = 15000) {
   const maxAttempts = providerKey === 'GROK' ? 3 : 2;
+  let injectPayload = payload;
+
+  if (providerKey === 'GEMINI' && payload?.mode !== 'followup') {
+    try {
+      const preflight = await preconfigureGeminiViaCDP(tabId, {
+        research: !!payload?.options?.research
+      });
+      if (preflight?.ok && payload?.options?.research) {
+        injectPayload = {
+          ...payload,
+          options: {
+            ...(payload.options || {}),
+            geminiPreconfiguredResearch: true
+          }
+        };
+      }
+    } catch (error) {
+      console.warn('[CDP][Gemini] Preconfiguration failed; falling back to content script:', error?.message || error);
+    }
+  }
+
   const payloadForLog =
-    payload && typeof payload === 'object'
+    injectPayload && typeof injectPayload === 'object'
       ? {
-          mode: payload.mode,
-          options: payload.options,
-          ...(Object.prototype.hasOwnProperty.call(payload, 'prompt')
+          mode: injectPayload.mode,
+          options: injectPayload.options,
+          ...(Object.prototype.hasOwnProperty.call(injectPayload, 'prompt')
             ? {
                 prompt:
-                  typeof payload.prompt === 'string'
-                    ? `[redacted:${payload.prompt.length} chars]`
+                  typeof injectPayload.prompt === 'string'
+                    ? `[redacted:${injectPayload.prompt.length} chars]`
                     : '[redacted]'
               }
             : {})
@@ -967,7 +1365,7 @@ async function injectIntoTab(tabId, providerKey, payload, timeoutMs = 15000) {
         chrome.tabs.sendMessage(tabId, {
           type: 'llmburst-inject',
           provider: providerKey,
-          ...payload
+          ...injectPayload
         }),
         timeoutMs,
         'Injection timed out'

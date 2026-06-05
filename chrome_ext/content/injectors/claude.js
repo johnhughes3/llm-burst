@@ -801,6 +801,7 @@
       const el = document.querySelector(sel);
       if (el instanceof HTMLElement && visible(el)) return el;
     }
+    /** @type {(Document | HTMLElement)[]} */
     const roots = [document];
     const portals = Array.from(document.querySelectorAll('[data-radix-portal]'));
     for (const portal of portals) {

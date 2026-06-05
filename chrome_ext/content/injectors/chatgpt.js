@@ -151,13 +151,19 @@
 
   function getOpenMenuRoot() {
     // Radix portals typically mark data-state="open". Prefer last visible portal to avoid selecting wrong menu.
-    const portals = [...document.querySelectorAll('[data-radix-portal] [role="menu"], [data-radix-portal] [data-state="open"]')].filter(isVisible);
-    return portals.at(-1) || document.querySelector('[role="menu"][data-orientation="vertical"][data-state="open"]') || null;
+    const menus = [...document.querySelectorAll([
+      '[data-radix-portal] [role="menu"]',
+      '[data-radix-portal] [data-state="open"]',
+      '[role="menu"][data-orientation="vertical"][data-state="open"]',
+      '[role="menu"]',
+      '[role="listbox"]'
+    ].join(','))].filter(isVisible);
+    return menus.at(-1) || null;
   }
 
   function findMenuItemByText(root, regex) {
     if (!root) return null;
-    const items = root.querySelectorAll('[role="menuitem"], [role="menuitemradio"], [role="option"], button');
+    const items = root.querySelectorAll('[role="menuitem"], [role="menuitemradio"], [role="menuitemcheckbox"], [role="option"], [data-radix-collection-item], button, [tabindex]:not([tabindex="-1"])');
     for (const it of items) {
       const t = normalizeText(it.textContent);
       if (regex.test(t)) return it;
@@ -173,6 +179,270 @@
   function modelLabelIndicatesResearch(btn) {
     const txt = normalizeText(btn?.getAttribute('aria-label') || btn?.textContent || '');
     return /(?:\b(?:current model is\s*)?(?:pro\s*)?(?:deep\s*)?research(?:-grade)?\b)/i.test(txt);
+  }
+
+  function normalizeWhitespace(value) {
+    return String(value || '').replace(/\s+/g, ' ').trim();
+  }
+
+  function getEditorElement() {
+    return document.querySelector('#prompt-textarea') ||
+           document.querySelector('[data-testid="prompt-textarea"]') ||
+           document.querySelector('.ProseMirror') ||
+           document.querySelector('[contenteditable="true"][role="textbox"]') ||
+           document.querySelector('[contenteditable="true"]');
+  }
+
+  function editorTextMatches(element, expected) {
+    if (!(element instanceof HTMLElement)) return false;
+    const target = normalizeWhitespace(expected);
+    if (element instanceof HTMLTextAreaElement) {
+      const actual = normalizeWhitespace(element.value);
+      return target ? actual.includes(target) : actual === '';
+    }
+    const actual = normalizeWhitespace(element.innerText || element.textContent || '');
+    return target ? actual.includes(target) : actual === '';
+  }
+
+  function isButtonDisabled(button) {
+    if (!button) return true;
+    if (button.disabled) return true;
+    if (button.getAttribute('aria-disabled') === 'true') return true;
+    if (button.hasAttribute('disabled') || button.hasAttribute('data-disabled')) return true;
+    try {
+      if (window.getComputedStyle(button).pointerEvents === 'none') return true;
+    } catch {
+      // ignore style lookup failures
+    }
+    return false;
+  }
+
+  async function tryExecCommandInsert(element, text) {
+    if (!(element instanceof HTMLElement)) return false;
+    try { element.focus({ preventScroll: true }); } catch {
+      try { element.focus(); } catch { /* ignore */ }
+    }
+    await sleep(20);
+    try { document.execCommand('selectAll', false); } catch { /* ignore */ }
+    await sleep(10);
+    try { document.execCommand('delete', false); } catch { /* ignore */ }
+    await sleep(10);
+    let inserted = false;
+    try {
+      inserted = document.execCommand('insertText', false, String(text || ''));
+    } catch {
+      inserted = false;
+    }
+    try {
+      element.dispatchEvent(new InputEvent('input', {
+        bubbles: true,
+        cancelable: true,
+        inputType: 'insertText',
+        data: String(text || '')
+      }));
+    } catch {
+      try { element.dispatchEvent(new Event('input', { bubbles: true, cancelable: true })); } catch {}
+    }
+    await sleep(80);
+    return inserted || editorTextMatches(element, text);
+  }
+
+  async function applyTextToEditor(element, text) {
+    if (!(element instanceof HTMLElement)) {
+      throw new Error('Editor element not found');
+    }
+
+    const value = String(text || '');
+    await clickInteractable(element).catch(() => {
+      try { element.focus(); } catch { /* ignore */ }
+    });
+
+    if (element instanceof HTMLTextAreaElement) {
+      try {
+        const descriptor = Object.getOwnPropertyDescriptor(window.HTMLTextAreaElement.prototype, 'value');
+        if (descriptor?.set) {
+          descriptor.set.call(element, value);
+        } else {
+          element.value = value;
+        }
+      } catch {
+        element.value = value;
+      }
+      try {
+        element.dispatchEvent(new InputEvent('input', {
+          bubbles: true,
+          cancelable: true,
+          inputType: 'insertFromPaste',
+          data: value
+        }));
+      } catch {
+        element.dispatchEvent(new Event('input', { bubbles: true, cancelable: true }));
+      }
+      element.dispatchEvent(new Event('change', { bubbles: true, cancelable: true }));
+      await sleep(80);
+      if (!editorTextMatches(element, value)) {
+        throw new Error('Editor did not accept textarea text');
+      }
+      return;
+    }
+
+    const execOk = await tryExecCommandInsert(element, value);
+    if (execOk && editorTextMatches(element, value)) return;
+
+    try {
+      while (element.firstChild) element.removeChild(element.firstChild);
+      const lines = value.split('\n');
+      for (const line of lines) {
+        const paragraph = document.createElement('p');
+        paragraph.textContent = line || '\u00A0';
+        element.appendChild(paragraph);
+      }
+      element.dispatchEvent(new InputEvent('beforeinput', {
+        bubbles: true,
+        cancelable: true,
+        inputType: 'insertFromPaste',
+        data: value
+      }));
+      element.dispatchEvent(new InputEvent('input', {
+        bubbles: true,
+        cancelable: true,
+        inputType: 'insertFromPaste',
+        data: value
+      }));
+      element.dispatchEvent(new Event('change', { bubbles: true, cancelable: true }));
+    } catch {
+      try {
+        element.textContent = value;
+        element.dispatchEvent(new Event('input', { bubbles: true, cancelable: true }));
+      } catch {
+        // handled by verification below
+      }
+    }
+
+    await sleep(120);
+    if (!editorTextMatches(element, value)) {
+      throw new Error('Editor did not accept contenteditable text');
+    }
+  }
+
+  const SEND_BUTTON_SELECTORS = [
+    'button[data-testid="send-button"]',
+    'button[data-testid="composer-send-button"]',
+    'button[data-testid="chat-composer__send"]',
+    'button[data-testid*="send" i]',
+    'button[type="submit"]',
+    'button[aria-label*="send" i]',
+    'button[aria-label*="submit" i]',
+    '[role="button"][aria-label*="send" i]',
+    '[role="button"][data-testid*="send" i]'
+  ];
+
+  function getSendButtonCandidates() {
+    const seen = new Set();
+    const candidates = [];
+    const push = (element) => {
+      if (!(element instanceof HTMLElement)) return;
+      const clickable = element.closest('button, [role="button"]') || element;
+      if (!(clickable instanceof HTMLElement) || seen.has(clickable) || !isVisible(clickable)) return;
+      seen.add(clickable);
+      candidates.push(clickable);
+    };
+
+    for (const selector of SEND_BUTTON_SELECTORS) {
+      for (const element of document.querySelectorAll(selector)) {
+        push(element);
+      }
+    }
+
+    for (const button of document.querySelectorAll('button, [role="button"]')) {
+      if (!(button instanceof HTMLElement) || !isVisible(button)) continue;
+      const label = normalizeText((button.getAttribute('aria-label') || '') + ' ' + (button.textContent || ''));
+      if (/\b(send|submit)\b/i.test(label)) push(button);
+    }
+
+    candidates.sort((a, b) => {
+      const aDisabled = isButtonDisabled(a) ? 1 : 0;
+      const bDisabled = isButtonDisabled(b) ? 1 : 0;
+      if (aDisabled !== bDisabled) return aDisabled - bDisabled;
+      return b.getBoundingClientRect().bottom - a.getBoundingClientRect().bottom;
+    });
+    return candidates;
+  }
+
+  function findSendButtonCandidate({ requireEnabled = false } = {}) {
+    for (const candidate of getSendButtonCandidates()) {
+      if (requireEnabled && isButtonDisabled(candidate)) continue;
+      return candidate;
+    }
+    return null;
+  }
+
+  async function waitForSendButtonEnabled(timeout = 9000, interval = 150) {
+    const start = now();
+    while (now() - start < timeout) {
+      const candidate = findSendButtonCandidate({ requireEnabled: true });
+      if (candidate) return candidate;
+      await sleep(interval);
+    }
+    return null;
+  }
+
+  async function triggerKeyboardSendFallback(editor) {
+    const target =
+      (editor instanceof HTMLElement && editor.isConnected ? editor : document.activeElement) ||
+      document.body ||
+      document.documentElement;
+    if (!(target instanceof HTMLElement)) return false;
+
+    const combos = [
+      { key: 'Enter', code: 'Enter' },
+      { key: 'Enter', code: 'Enter', metaKey: true },
+      { key: 'Enter', code: 'Enter', ctrlKey: true }
+    ];
+
+    for (const combo of combos) {
+      try {
+        target.dispatchEvent(new KeyboardEvent('keydown', { bubbles: true, cancelable: true, ...combo }));
+        target.dispatchEvent(new KeyboardEvent('keyup', { bubbles: true, cancelable: true, ...combo }));
+      } catch {
+        // ignore keyboard fallback failures
+      }
+      await sleep(350);
+      const button = findSendButtonCandidate({ requireEnabled: false });
+      if (!button || isButtonDisabled(button) || editorTextMatches(editor, '')) {
+        return true;
+      }
+    }
+    return false;
+  }
+
+  async function submitComposerPrompt(messageText) {
+    const ready = await ensureEditorReady(15000);
+    const editorElement = getEditorElement() || ready;
+    if (!(editorElement instanceof HTMLElement)) {
+      throw new Error('Editor element not found');
+    }
+
+    console.log('Found editor element');
+    await applyTextToEditor(editorElement, messageText);
+    console.log('Text added to input');
+
+    const sendButton = await waitForSendButtonEnabled(9000);
+    if (sendButton) {
+      console.log('Found send button');
+      await clickInteractable(sendButton);
+      console.log('Send button clicked');
+      return;
+    }
+
+    console.warn('Send button not found or enabled; trying keyboard fallback');
+    const keyboardSent = await triggerKeyboardSendFallback(editorElement);
+    if (keyboardSent) {
+      console.log('Prompt submitted with keyboard fallback');
+      return;
+    }
+
+    throw new Error('Send button not found or enabled after text insertion');
   }
 
   // ---------------------------------------------------------------------------
@@ -615,97 +885,8 @@
 
         // Function to submit the prompt
         function submitPrompt() {
-          ensureEditorReady(15000)
-            .then(() => {
-              // Find the editor element - try both selectors
-              let editorElement = document.querySelector('#prompt-textarea');
-              if (!editorElement) {
-                editorElement = document.querySelector('.ProseMirror');
-              }
-              if (!editorElement) {
-                reject('Editor element not found');
-                return;
-              }
-
-              console.log('Found editor element');
-
-              // Focus the editor and clear content
-              try { editorElement.focus(); } catch {}
-              try { editorElement.innerHTML = ''; } catch {}
-
-              // Create a paragraph element with the text
-              try {
-                const paragraph = document.createElement('p');
-                paragraph.textContent = messageText;
-                editorElement.appendChild(paragraph);
-              } catch {}
-
-              // Dispatch multiple events to ensure the UI registers the change
-              try {
-                const inputEvent = new Event('input', { bubbles: true, cancelable: true });
-                const changeEvent = new Event('change', { bubbles: true, cancelable: true });
-                const keyupEvent = new KeyboardEvent('keyup', { bubbles: true, cancelable: true, key: ' ' });
-
-                editorElement.dispatchEvent(inputEvent);
-                editorElement.dispatchEvent(changeEvent);
-                editorElement.dispatchEvent(keyupEvent);
-              } catch {}
-
-              // Optional native setter path for textareas (if any)
-              try {
-                const descTA = Object.getOwnPropertyDescriptor(window.HTMLTextAreaElement.prototype, 'value');
-                const descIN = Object.getOwnPropertyDescriptor(window.HTMLInputElement.prototype, 'value');
-                const setter = (descTA && descTA.set) || (descIN && descIN.set);
-                if (setter && editorElement.value !== undefined) {
-                  setter.call(editorElement, messageText);
-                  editorElement.dispatchEvent(new Event('input', { bubbles: true }));
-                }
-              } catch {}
-
-              console.log('Text added to input');
-
-              // Wait for send button with retry logic
-              let attempts = 0;
-              const maxAttempts = 5;
-              const checkInterval = 500;
-
-              const checkForSendButton = () => {
-                attempts++;
-
-                // Find the send button
-                const sendButton = document.querySelector('button[data-testid="send-button"]');
-
-                if (!sendButton) {
-                  if (attempts < maxAttempts) {
-                    setTimeout(checkForSendButton, checkInterval);
-                  } else {
-                    reject('Send button not found after multiple attempts');
-                  }
-                  return;
-                }
-
-                console.log('Found send button');
-
-                // Check if the button is disabled
-                if (sendButton.disabled) {
-                  if (attempts < maxAttempts) {
-                    console.log('Send button is disabled, waiting...');
-                    setTimeout(checkForSendButton, checkInterval);
-                  } else {
-                    reject('Send button is still disabled after waiting');
-                  }
-                  return;
-                }
-
-                // Click the send button
-                try { sendButton.click(); } catch {}
-                console.log('Send button clicked');
-                resolve();
-              };
-
-              // Start checking after initial delay
-              setTimeout(checkForSendButton, 1000); // Give time for the button to appear after text is entered
-            })
+          submitComposerPrompt(messageText)
+            .then(resolve)
             .catch((e) => {
               reject(e?.message || String(e));
             });
@@ -722,82 +903,9 @@
   function chatGPTFollowUpMessage(messageText) {
     return new Promise((resolve, reject) => {
       try {
-        // Find the editor element
-        const editorElement =
-          document.querySelector('#prompt-textarea') ||
-          document.querySelector('.ProseMirror');
-
-        if (!editorElement) {
-          console.error('Editor element not found');
-          reject('Editor element not found');
-          return;
-        }
-
-        console.log('Found ChatGPT editor element');
-
-        // Focus the editor and clear content
-        try { editorElement.focus(); } catch {}
-        try { editorElement.innerHTML = ''; } catch {}
-
-        // Set the text content
-        try { editorElement.textContent = messageText; } catch {}
-
-        // Dispatch input event to ensure ChatGPT registers the change
-        try {
-          const inputEvent = new Event('input', { bubbles: true });
-          editorElement.dispatchEvent(inputEvent);
-        } catch {}
-
-        console.log('Follow-up text added to ChatGPT input');
-
-        // Wait for send button with retry logic
-        let attempts = 0;
-        const maxAttempts = 5;
-        const checkInterval = 500;
-
-        const checkForSendButton = () => {
-          attempts++;
-          console.log(`Follow-up: Attempt ${attempts} to find send button...`);
-
-          // Try primary selector first
-          let sendButton = document.querySelector('[data-testid="send-button"]');
-
-          // Fallback to submit button if primary not found
-          if (!sendButton) {
-            sendButton = document.querySelector('button[type="submit"]');
-          }
-
-          if (!sendButton) {
-            if (attempts < maxAttempts) {
-              console.log('Follow-up: Send button not found yet, retrying...');
-              setTimeout(checkForSendButton, checkInterval);
-            } else {
-              reject('Send button not found after multiple attempts');
-            }
-            return;
-          }
-
-          console.log('Follow-up: Found send button');
-
-          // Check if the button is disabled
-          if (sendButton.disabled) {
-            if (attempts < maxAttempts) {
-              console.log('Follow-up: Send button is disabled, waiting...');
-              setTimeout(checkForSendButton, checkInterval);
-            } else {
-              reject('Send button is still disabled after waiting');
-            }
-            return;
-          }
-
-          // Click the send button
-          try { sendButton.click(); } catch {}
-          console.log('ChatGPT follow-up message sent successfully');
-          resolve();
-        };
-
-        // Start checking after initial delay
-        setTimeout(checkForSendButton, 1000); // Give time for the button to appear after text is entered
+        submitComposerPrompt(messageText)
+          .then(resolve)
+          .catch((error) => reject(error?.message || String(error)));
       } catch (error) {
         reject(`Error: ${error}`);
       }

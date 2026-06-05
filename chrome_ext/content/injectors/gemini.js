@@ -51,6 +51,26 @@
         }
       };
 
+  const simulateButtonClick = typeof u.simulateButtonClick === 'function'
+    ? u.simulateButtonClick.bind(u)
+    : (element) => {
+        if (!(element instanceof HTMLElement)) return;
+        try { element.scrollIntoView({ block: 'center', inline: 'center', behavior: 'instant' }); } catch {}
+        const rect = element.getBoundingClientRect();
+        const opts = {
+          bubbles: true,
+          cancelable: true,
+          button: 0,
+          clientX: rect.left + rect.width / 2,
+          clientY: rect.top + rect.height / 2,
+        };
+        try { element.dispatchEvent(new PointerEvent('pointerdown', opts)); } catch {}
+        try { element.dispatchEvent(new MouseEvent('mousedown', opts)); } catch {}
+        try { element.dispatchEvent(new PointerEvent('pointerup', opts)); } catch {}
+        try { element.dispatchEvent(new MouseEvent('mouseup', opts)); } catch {}
+        try { element.dispatchEvent(new MouseEvent('click', opts)); } catch {}
+      };
+
   const setContentEditableText = typeof u.setContentEditableText === 'function'
     ? u.setContentEditableText.bind(u)
     : (element, text) => {
@@ -338,6 +358,36 @@
     }
   }
 
+  async function waitForSubmissionAccepted(editor, timeout = 2500, interval = 120) {
+    try {
+      await waitUntil(() => {
+        const candidate = findSendButtonCandidate({ requireEnabled: false });
+        if (editor instanceof HTMLElement && editorTextMatches(editor, '')) return true;
+        if (!candidate || isDisabled(candidate)) return true;
+        const bodyText = normalizeWhitespace(document.body?.innerText || document.body?.textContent || '');
+        if (/\b(start|begin|confirm)\s+(deep\s+)?research\b/i.test(bodyText)) return true;
+        if (/\b(generating|researching|thinking|stop generating)\b/i.test(bodyText)) return true;
+        return null;
+      }, timeout, interval);
+      return true;
+    } catch {
+      return false;
+    }
+  }
+
+  async function clickSendButton(sendButton, editor) {
+    if (!(sendButton instanceof HTMLElement)) return false;
+    try { sendButton.scrollIntoView({ block: 'center', inline: 'center', behavior: 'instant' }); } catch {}
+    await wait(40);
+    simulateButtonClick(sendButton);
+    await wait(250);
+    if (await waitForSubmissionAccepted(editor, 1500)) return true;
+
+    try { sendButton.click(); } catch {}
+    await wait(250);
+    return waitForSubmissionAccepted(editor, 2500);
+  }
+
   async function triggerKeyboardSendFallback(editor) {
     const target =
       (editor && editor.isConnected ? editor : document.activeElement) ||
@@ -579,13 +629,19 @@
 
     const sendButton = await waitForSendButtonEnabled(9000);
     if (sendButton) {
-      try { sendButton.click(); } catch {}
-      return { ok: true, warnings };
+      const accepted = await clickSendButton(sendButton, editor);
+      if (accepted) {
+        return { ok: true, warnings };
+      }
+      warnings.push('Gemini send button click did not appear to submit the prompt; attempting keyboard fallback');
     }
 
-    warnings.push('Gemini send button not found or disabled; attempting keyboard fallback');
+    if (!sendButton) {
+      warnings.push('Gemini send button not found or disabled; attempting keyboard fallback');
+    }
     const keyboardSent = await triggerKeyboardSendFallback(editor);
-    if (!keyboardSent) {
+    const keyboardAccepted = keyboardSent && await waitForSubmissionAccepted(editor, 2500);
+    if (!keyboardAccepted) {
       warnings.push('Gemini keyboard fallback did not confirm message submission');
       return {
         ok: false,
@@ -597,98 +653,356 @@
     return { ok: true, warnings };
   }
 
-  async function selectModelAndProceed(messageText) {
-    try {
-      console.log('Looking for model selector button');
-      const possibleModelButtons = Array.from(document.querySelectorAll('button'))
-        .filter(button => {
-          const text = button.textContent || '';
-          return (
-            text.includes('Gemini') ||
-            text.includes('2.5 Pro') ||
-            text.includes('Advanced')
-          );
-        });
+  const GEMINI_MODEL_MATCHERS = {
+    deepThink: {
+      label: 'Pro Deep Think',
+      option: /\bdeep\s*think\b/i,
+      familyOption: /\b(?:gemini\s*)?(?:\d+(?:\.\d+)?\s*)?pro\b/i,
+      selector: /\b(mode|model|gemini|advanced|flash|pro|deep\s*think)\b/i,
+    },
+    pro: {
+      label: 'Pro',
+      option: /\b(?:gemini\s*)?(?:\d+(?:\.\d+)?\s*)?pro\b/i,
+      familyOption: /\b(?:gemini\s*)?(?:\d+(?:\.\d+)?\s*)?pro\b/i,
+      selector: /\b(mode|model|gemini|advanced|flash|pro|deep\s*think)\b/i,
+    },
+  };
 
-      const modelButton = possibleModelButtons[0];
+  function getElementLabel(element) {
+    if (!(element instanceof HTMLElement)) return '';
+    return normalizeWhitespace(
+      [
+        element.getAttribute('aria-label') || '',
+        element.getAttribute('title') || '',
+        element.getAttribute('data-model') || '',
+        element.getAttribute('data-value') || '',
+        element.textContent || '',
+      ].join(' ')
+    );
+  }
 
-      if (!modelButton) {
-        console.log('Model selector button not found, proceeding with current model');
-        return await addTextAndSend(messageText);
+  function getModelSelectorButton(preferredModel) {
+    const config = GEMINI_MODEL_MATCHERS[preferredModel] || GEMINI_MODEL_MATCHERS.deepThink;
+    const excluded = /\b(tools?|toolbox|canvas|research|send|temporary|upload|attach)\b/i;
+    const directSelectors = [
+      'button[aria-label*="mode picker" i]',
+      'button[aria-label*="model" i]',
+      'button[aria-label*="currently" i]',
+      '[role="button"][aria-label*="mode picker" i]',
+      '[role="button"][aria-label*="model" i]',
+      '[role="button"][aria-label*="currently" i]',
+    ];
+
+    for (const selector of directSelectors) {
+      const direct = Array.from(document.querySelectorAll(selector)).find((element) => {
+        if (!(element instanceof HTMLElement)) return false;
+        if (!visible(element)) return false;
+        const label = getElementLabel(element);
+        return label && !excluded.test(label);
+      });
+      if (direct instanceof HTMLElement) return direct;
+    }
+
+    const buttons = Array.from(document.querySelectorAll('button'));
+    return buttons.find((button) => {
+      const label = getElementLabel(button);
+      if (!label || excluded.test(label)) return false;
+      return config.selector.test(label);
+    }) || null;
+  }
+
+  function getClickableAncestor(element) {
+    if (!(element instanceof HTMLElement)) return null;
+    return element.closest(
+      [
+        'button',
+        '[role="button"]',
+        '[role="menuitem"]',
+        '[role="option"]',
+        '[role="radio"]',
+        '[tabindex]:not([tabindex="-1"])',
+        '[jsaction]',
+        '[data-model]',
+        '.model-option',
+        '.mat-mdc-menu-item',
+        '.mat-mdc-option',
+      ].join(',')
+    ) || element;
+  }
+
+  function collectClickableCandidates() {
+    const candidates = [];
+    const seen = new Set();
+    const elements = Array.from(document.querySelectorAll([
+      'button',
+      '[role="button"]',
+      '[role="menuitem"]',
+      '[role="option"]',
+      '[role="radio"]',
+      '[tabindex]:not([tabindex="-1"])',
+      '[jsaction]',
+      '[data-model]',
+      '.model-option',
+      '.mat-mdc-menu-item',
+      '.mat-mdc-option',
+      '[aria-label]',
+    ].join(',')));
+
+    for (const element of elements) {
+      if (!(element instanceof HTMLElement)) continue;
+      if (!visible(element)) continue;
+      const clickable = getClickableAncestor(element);
+      if (!(clickable instanceof HTMLElement)) continue;
+      if (!visible(clickable)) continue;
+      if (seen.has(clickable)) continue;
+      candidates.push(clickable);
+      seen.add(clickable);
+    }
+
+    return candidates;
+  }
+
+  function elementDepth(element) {
+    let depth = 0;
+    let current = element;
+    while (current && current.parentElement) {
+      depth += 1;
+      current = current.parentElement;
+    }
+    return depth;
+  }
+
+  function collectVisibleTextCandidates() {
+    const seen = new Set();
+    const candidates = [];
+    const elements = Array.from(document.querySelectorAll('body *'));
+
+    for (const element of elements) {
+      if (!(element instanceof HTMLElement)) continue;
+      if (!visible(element)) continue;
+
+      const label = getElementLabel(element);
+      if (!label || label.length > 240) continue;
+
+      const clickable = getClickableAncestor(element);
+      if (!(clickable instanceof HTMLElement)) continue;
+      if (!visible(clickable)) continue;
+
+      const key = clickable;
+      if (seen.has(key)) continue;
+      seen.add(key);
+      candidates.push({
+        element: clickable,
+        label: getElementLabel(clickable) || label,
+        labelLength: label.length,
+        depth: elementDepth(element),
+      });
+    }
+
+    candidates.sort((a, b) => {
+      if (a.labelLength !== b.labelLength) return a.labelLength - b.labelLength;
+      return b.depth - a.depth;
+    });
+
+    return candidates;
+  }
+
+  function findClickableByLabel(match, { exclude = null, allowTextFallback = true } = {}) {
+    const candidates = collectClickableCandidates();
+    const direct = candidates.find((candidate) => {
+      const label = getElementLabel(candidate);
+      if (!label) return false;
+      if (exclude && exclude.test(label)) return false;
+      return match.test(label);
+    });
+    if (direct) return direct;
+    if (!allowTextFallback) return null;
+
+    const textCandidates = collectVisibleTextCandidates();
+    const textMatch = textCandidates.find((candidate) => {
+      if (!candidate.label) return false;
+      if (exclude && exclude.test(candidate.label)) return false;
+      return match.test(candidate.label);
+    });
+    return textMatch ? textMatch.element : null;
+  }
+
+  function getModelOptionElement(preferredModel) {
+    const config = GEMINI_MODEL_MATCHERS[preferredModel] || GEMINI_MODEL_MATCHERS.deepThink;
+    const exclude = preferredModel === 'pro' ? /\b(deep\s*think|extended|flash)\b/i : null;
+    return findClickableByLabel(config.option, {
+      exclude,
+      allowTextFallback: preferredModel !== 'deepThink',
+    });
+  }
+
+  function getCurrentModelLabel(preferredModel) {
+    const selector = getModelSelectorButton(preferredModel);
+    return selector ? getElementLabel(selector) : '';
+  }
+
+  function pageIndicatesModel(preferredModel) {
+    const label = getCurrentModelLabel(preferredModel);
+    if (!label) return false;
+    if (preferredModel === 'deepThink') return /\bdeep\s*think\b/i.test(label);
+    if (preferredModel === 'pro') {
+      return /\bpro\b/i.test(label) && !/\b(deep\s*think|extended)\b/i.test(label);
+    }
+    const config = GEMINI_MODEL_MATCHERS[preferredModel] || GEMINI_MODEL_MATCHERS.deepThink;
+    return config.option.test(label);
+  }
+
+  async function openModelMenu(preferredModel) {
+    const config = GEMINI_MODEL_MATCHERS[preferredModel] || GEMINI_MODEL_MATCHERS.deepThink;
+    const modelButton = getModelSelectorButton(preferredModel);
+
+    if (!modelButton) {
+      throw new Error(`Gemini model selector not found for ${config.label}`);
+    }
+
+    console.log('Found Gemini model selector button, clicking it');
+    modelButton.click();
+    await wait(500);
+    return modelButton;
+  }
+
+  async function selectProFamily(preferredModel, { required = false } = {}) {
+    const config = GEMINI_MODEL_MATCHERS[preferredModel] || GEMINI_MODEL_MATCHERS.deepThink;
+    const currentLabel = getCurrentModelLabel(preferredModel);
+    if (/\bpro\b/i.test(currentLabel)) return { ok: true, selected: false, alreadyActive: true };
+
+    await openModelMenu(preferredModel);
+
+    const option = findClickableByLabel(config.familyOption || config.option, {
+      exclude: /\b(deep\s*think|extended|flash)\b/i,
+    });
+
+    if (!option) {
+      const message = `Gemini Pro model option not found`;
+      try { document.body.click(); } catch {}
+      await wait(300);
+      if (required) throw new Error(message);
+      return { ok: false, selected: false, warning: message };
+    }
+
+    console.log('Found Gemini Pro model option, clicking it');
+    option.click();
+    await wait(600);
+    return { ok: true, selected: true };
+  }
+
+  async function selectThinkingLevel(level, { required = false } = {}) {
+    const normalizedLevel = String(level || '').trim();
+    if (!normalizedLevel) return { ok: true, selected: false };
+
+    const target =
+      normalizedLevel === 'Deep Think'
+        ? /\bdeep\s*think\b/i
+        : new RegExp(`\\b${normalizedLevel.replace(/[.*+?^${}()|[\]\\]/g, '\\$&')}\\b`, 'i');
+
+    const currentLabel = getCurrentModelLabel('deepThink') || getCurrentModelLabel('pro');
+    if (target.test(currentLabel) && normalizedLevel === 'Deep Think') {
+      return { ok: true, selected: false, alreadyActive: true };
+    }
+    if (normalizedLevel === 'Standard' && pageIndicatesModel('pro')) {
+      return { ok: true, selected: false, alreadyActive: true };
+    }
+
+    await openModelMenu(normalizedLevel === 'Deep Think' ? 'deepThink' : 'pro');
+
+    const thinkingMenu = findClickableByLabel(/\bthinking\s+level\b/i);
+    if (thinkingMenu) {
+      console.log('Opening Gemini thinking level submenu');
+      thinkingMenu.click();
+      await wait(400);
+    }
+
+    const option = findClickableByLabel(target, {
+      exclude: normalizedLevel === 'Standard' ? /\b(deep\s*think|extended)\b/i : null,
+    });
+
+    if (!option) {
+      const message = `Gemini ${normalizedLevel} thinking option not found`;
+      try { document.body.click(); } catch {}
+      await wait(300);
+      if (required) throw new Error(message);
+      return { ok: false, selected: false, warning: message };
+    }
+
+    console.log(`Found Gemini ${normalizedLevel} thinking option, clicking it`);
+    option.click();
+    await wait(700);
+    return { ok: true, selected: true };
+  }
+
+  async function selectPreferredModel(preferredModel = 'deepThink', { required = false } = {}) {
+    const config = GEMINI_MODEL_MATCHERS[preferredModel] || GEMINI_MODEL_MATCHERS.deepThink;
+    if (pageIndicatesModel(preferredModel)) {
+      return { ok: true, selected: false, alreadyActive: true };
+    }
+
+    console.log(`Looking for Gemini model selector for ${config.label}`);
+
+    if (preferredModel === 'deepThink') {
+      await openModelMenu(preferredModel);
+      const flatOption = getModelOptionElement(preferredModel);
+      if (flatOption) {
+        console.log(`Found flat Gemini ${config.label} option, clicking it`);
+        flatOption.click();
+        await wait(700);
+      } else {
+        try { document.body.click(); } catch {}
+        await wait(200);
+        await selectProFamily(preferredModel, { required });
+        await selectThinkingLevel('Deep Think', { required });
       }
-
-      console.log('Found model selector button, clicking it');
-      modelButton.click();
-      await wait(500);
-
-      console.log('Looking for 2.5 Pro button in dropdown');
-      const proButtons = Array.from(document.querySelectorAll('button'))
-        .filter(button => {
-          const text = button.textContent || '';
-          return text.includes('2.5 Pro');
-        });
-
-      const proButton = proButtons[0];
-
-      if (!proButton) {
-        console.log('2.5 Pro button not found, proceeding with current model');
+    } else if (preferredModel === 'pro') {
+      await selectProFamily(preferredModel, { required });
+      await selectThinkingLevel('Standard', { required: false });
+    } else {
+      await openModelMenu(preferredModel);
+      const option = getModelOptionElement(preferredModel);
+      if (!option) {
+        const message = `Gemini ${config.label} option not found`;
         try { document.body.click(); } catch {}
         await wait(300);
-        return await addTextAndSend(messageText);
+        if (required) throw new Error(message);
+        console.log(`${message}; proceeding with current model`);
+        return { ok: false, selected: false, warning: message };
       }
-
-      console.log('Found 2.5 Pro button, clicking it');
-      proButton.click();
+      console.log(`Found Gemini ${config.label} option, clicking it`);
+      option.click();
       await wait(500);
-      return await addTextAndSend(messageText);
+    }
+
+    if (!pageIndicatesModel(preferredModel)) {
+      const message = `Gemini ${config.label} selection could not be confirmed`;
+      if (required) throw new Error(message);
+      return { ok: false, selected: true, warning: message };
+    }
+
+    return { ok: true, selected: true };
+  }
+
+  async function selectModelAndProceed(
+    messageText,
+    { preferredModel = 'deepThink', requiredModel = false } = {}
+  ) {
+    try {
+      const modelResult = await selectPreferredModel(preferredModel, { required: requiredModel });
+      const result = await addTextAndSend(messageText);
+      if (modelResult.warning) {
+        result.warnings = [modelResult.warning, ...(result.warnings || [])];
+      }
+      return result;
     } catch (error) {
       throw new Error(`Error selecting model: ${error}`);
     }
   }
 
-  async function selectModelAndPasteOnly(messageText) {
+  async function selectModelAndPasteOnly(messageText, { preferredModel = 'pro' } = {}) {
     try {
-      console.log('Looking for model selector button (paste-only mode)');
-      const possibleModelButtons = Array.from(document.querySelectorAll('button'))
-        .filter(button => {
-          const text = button.textContent || '';
-          return (
-            text.includes('Gemini') ||
-            text.includes('2.5 Pro') ||
-            text.includes('Advanced')
-          );
-        });
-
-      const modelButton = possibleModelButtons[0];
-
-      if (!modelButton) {
-        console.log('Model selector button not found, proceeding with current model');
-        return await addTextOnly(messageText);
-      }
-
-      console.log('Found model selector button, clicking it');
-      modelButton.click();
-      await wait(500);
-
-      console.log('Looking for 2.5 Pro button in dropdown');
-      const proButtons = Array.from(document.querySelectorAll('button'))
-        .filter(button => {
-          const text = button.textContent || '';
-          return text.includes('2.5 Pro');
-        });
-
-      const proButton = proButtons[0];
-
-      if (!proButton) {
-        console.log('2.5 Pro button not found, proceeding with current model');
-        try { document.body.click(); } catch {}
-        await wait(300);
-        return await addTextOnly(messageText);
-      }
-
-      console.log('Found 2.5 Pro button, clicking it');
-      proButton.click();
-      await wait(500);
+      await selectPreferredModel(preferredModel, { required: false });
       return await addTextOnly(messageText);
     } catch (error) {
       throw new Error(`Error selecting model: ${error}`);
@@ -839,15 +1153,20 @@
                              document.querySelector('button.mdc-button.mat-mdc-button-base.confirm-button') ||
                              document.querySelector('button.mdc-button.mat-mdc-button-base.confirm-button.mdc-button--unelevated.mat-mdc-unelevated-button.mat-primary.ng-star-inserted') ||
                              Array.from(document.querySelectorAll('button')).find(b => {
-                               const text = (b.textContent || '').toLowerCase();
+                               const text = normalizeWhitespace(b.textContent || '').toLowerCase();
+                               const aria = normalizeWhitespace(b.getAttribute('aria-label') || '').toLowerCase();
                                const classes = b.className || '';
-                               return (text.includes('confirm') || text.includes('continue') || text.includes('proceed')) &&
-                                      classes.includes('confirm-button');
+                               const label = `${text} ${aria}`;
+                               if (b.disabled || b.getAttribute('aria-disabled') === 'true') return false;
+                               if (/\btry again without deep research\b/.test(label)) return false;
+                               return /\b(start|begin|confirm|continue|proceed)\s+(deep\s+)?research\b/.test(label) ||
+                                      /\b(confirm|continue|proceed)\b/.test(label) && classes.includes('confirm-button');
                              });
 
-        if (confirmButton && !confirmButton.disabled) {
+        if (confirmButton && !confirmButton.disabled && confirmButton.getAttribute('aria-disabled') !== 'true') {
           console.log(`Found Deep Research confirm button after ${(i * 500) / 1000} seconds, clicking...`);
-          confirmButton.click();
+          simulateButtonClick(confirmButton);
+          await wait(250);
           console.log('✅ Deep Research plan confirmed successfully');
           return true;
         }
@@ -868,7 +1187,7 @@
     }
   }
 
-  async function automateGeminiChat(messageText, enableResearch, enableIncognito) {
+  async function automateGeminiChat(messageText, enableResearch, enableIncognito, runtimeOptions = {}) {
     try {
       let isResearchMode = false;
       // Step 1: Check if we need to enable Temporary Chat (incognito) first
@@ -887,37 +1206,37 @@
         console.log('Research mode requested, will enable Deep Research');
         isResearchMode = true;
         // Enable research before model selection to avoid dropdown conflicts
-        const researchSuccess = await enableDeepResearch();
+        const researchSuccess = runtimeOptions.geminiPreconfiguredResearch
+          ? true
+          : await enableDeepResearch();
 
         if (researchSuccess) {
           // Successfully enabled Deep Research, continue with model selection and submission
-          const result = await selectModelAndProceed(messageText);
-          // After successful submission in research mode, start waiting for confirm button
-          // This is non-blocking - we don't await it
+          const result = await selectModelAndProceed(messageText, {
+            preferredModel: 'pro',
+            requiredModel: false,
+          });
           if (isResearchMode) {
-            waitForAndClickResearchConfirm().catch(err => {
-              console.log('Non-critical error in research confirm:', err);
-            });
+            const confirmed = await waitForAndClickResearchConfirm();
+            if (!confirmed) {
+              result.warnings = [
+                ...(result.warnings || []),
+                'Gemini Deep Research plan was submitted but the Start research button was not confirmed',
+              ];
+            }
           }
           return result;
         }
 
         // Failed to enable Deep Research - paste text but DON'T submit
         console.log('⚠️ Could not enable Deep Research mode. Pasting prompt without submitting.');
-        return await selectModelAndPasteOnly(messageText);
+        return await selectModelAndPasteOnly(messageText, { preferredModel: 'pro' });
       } else {
-        // Deep Research not selected - enable Canvas instead
-        // Canvas and Deep Research are mutually exclusive, but Canvas is compatible with incognito
-        console.log('Regular mode requested, will enable Canvas');
-        const canvasSuccess = await enableCanvas();
-        if (canvasSuccess) {
-          console.log('Canvas enabled successfully');
-        } else {
-          console.log('Could not enable Canvas, continuing anyway');
-        }
-
-        // Proceed to model selection and submission
-        return await selectModelAndProceed(messageText);
+        console.log('Regular mode requested, will use Gemini Deep Think');
+        return await selectModelAndProceed(messageText, {
+          preferredModel: 'deepThink',
+          requiredModel: true,
+        });
       }
     } catch (error) {
       throw new Error(`Error in automation process: ${error}`);
@@ -939,7 +1258,9 @@
       await ensureEditorReady(15000).catch(() => {});
       const research = options && options.research ? 'Yes' : 'No';
       const incognito = options && options.incognito ? 'Yes' : 'No';
-      return automateGeminiChat(String(prompt || ''), research, incognito);
+      return automateGeminiChat(String(prompt || ''), research, incognito, {
+        geminiPreconfiguredResearch: !!(options && options.geminiPreconfiguredResearch),
+      });
     },
     followup: async ({ prompt }) => {
       await ensureEditorReady(15000).catch(() => {});
