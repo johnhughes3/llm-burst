@@ -19,6 +19,8 @@ htmlcov/
 .nox/
 *.cover
 *.log
+playwright-report/
+test-results/
 
 # IDE
 .vscode/

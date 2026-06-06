@@ -77,6 +77,23 @@ pytest -v --headed
 
 See `docs/specs.md` for the full technical specification.
 
+## Chrome Extension Build
+
+The Chrome extension is source-loaded during local development from `chrome_ext`.
+Use the build script to validate the manifest/runtime file graph, syntax-check extension JavaScript, copy the extension into `dist/chrome_ext`, and create a Chrome-ready zip:
+
+```bash
+pnpm build
+```
+
+For the full local gate, run:
+
+```bash
+pnpm verify
+```
+
+When developing against the unpacked extension in Chrome, reload the extension at `chrome://extensions` after source edits so Chrome picks up the latest files.
+
 ## License
 
 MIT

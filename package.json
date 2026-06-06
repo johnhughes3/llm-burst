@@ -4,12 +4,14 @@
   "private": true,
   "type": "module",
   "scripts": {
+    "build": "node scripts/build-extension.mjs",
     "format": "prettier --check \"chrome_ext/content/injectors/claude.js\"",
     "format:fix": "prettier --write \"chrome_ext/content/injectors/claude.js\"",
     "lint": "eslint chrome_ext/content/injectors/claude.js",
     "lint:fix": "eslint chrome_ext/content/injectors/claude.js --fix",
     "typecheck": "tsc --noEmit && tsc --noEmit -p tsconfig.playwright.json",
-    "test:playwright": "playwright test"
+    "test:playwright": "playwright test",
+    "verify": "pnpm build && pnpm typecheck && pnpm lint && pnpm test:playwright"
   },
   "devDependencies": {
     "@eslint/js": "9.35.0",

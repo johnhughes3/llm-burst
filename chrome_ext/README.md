@@ -10,6 +10,18 @@ This extension enables tab grouping functionality for the llm-burst CLI tool.
 4. Select this `chrome_ext` folder
 5. The extension should appear in your extensions list
 
+## Build
+
+From the repository root:
+
+```bash
+pnpm build
+```
+
+The build validates `manifest.json`, checks referenced runtime files, syntax-checks extension JavaScript, copies the extension to `dist/chrome_ext`, and writes a Chrome-ready zip named `dist/llm-burst-helper-<version>.zip`.
+
+For QA against the packaged output, use Chrome's "Load unpacked" flow with `dist/chrome_ext`.
+
 ## Important After Installation
 
 **You must reload the extension after making any changes:**
