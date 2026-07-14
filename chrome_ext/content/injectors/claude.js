@@ -400,9 +400,7 @@
     try {
       const payload = buildLexicalStateFromText(text);
       const state =
-        typeof editor.parseEditorState === 'function'
-          ? editor.parseEditorState(payload)
-          : payload;
+        typeof editor.parseEditorState === 'function' ? editor.parseEditorState(payload) : payload;
       const result = editor.setEditorState(state);
       if (result && typeof result.then === 'function') {
         await result;
@@ -520,7 +518,10 @@
       if (parent) {
         observer.observe(parent, { childList: true, subtree: false });
       }
-      observer.observe(element, { attributes: true, attributeFilter: ['contenteditable', 'aria-hidden'] });
+      observer.observe(element, {
+        attributes: true,
+        attributeFilter: ['contenteditable', 'aria-hidden'],
+      });
       editorTracker.observer = observer;
     } catch {
       editorTracker.observer = null;
@@ -687,8 +688,12 @@
 
     for (const combo of combos) {
       try {
-        target.dispatchEvent(new KeyboardEvent('keydown', { bubbles: true, cancelable: true, ...combo }));
-        target.dispatchEvent(new KeyboardEvent('keyup', { bubbles: true, cancelable: true, ...combo }));
+        target.dispatchEvent(
+          new KeyboardEvent('keydown', { bubbles: true, cancelable: true, ...combo }),
+        );
+        target.dispatchEvent(
+          new KeyboardEvent('keyup', { bubbles: true, cancelable: true, ...combo }),
+        );
       } catch {
         /* ignore */
       }
@@ -758,9 +763,9 @@
   async function findToolsMenuButton(timeout = 12000) {
     const deadline = Date.now() + timeout;
     while (Date.now() < deadline) {
-      const direct = /** @type {HTMLButtonElement | null} */ (findEnabledButton(
-        TOOLS_MENU_BUTTON_SELECTORS,
-      ));
+      const direct = /** @type {HTMLButtonElement | null} */ (
+        findEnabledButton(TOOLS_MENU_BUTTON_SELECTORS)
+      );
       if (direct) return direct;
 
       const fallback = /** @type {HTMLButtonElement | null} */ (
@@ -816,11 +821,7 @@
         const text = (candidate.textContent || '').toLowerCase();
         const aria = (candidate.getAttribute('aria-label') || '').toLowerCase();
         const testId = (candidate.getAttribute('data-testid') || '').toLowerCase();
-        if (
-          text.includes('research') ||
-          aria.includes('research') ||
-          testId.includes('research')
-        ) {
+        if (text.includes('research') || aria.includes('research') || testId.includes('research')) {
           return candidate;
         }
       }
@@ -867,7 +868,11 @@
 
   function isResearchPillActive(button) {
     if (!(button instanceof HTMLElement)) return false;
-    const dataState = (button.getAttribute('data-state') || button.dataset?.state || '').toLowerCase();
+    const dataState = (
+      button.getAttribute('data-state') ||
+      button.dataset?.state ||
+      ''
+    ).toLowerCase();
     if (['on', 'active', 'true', 'checked', 'selected'].includes(dataState)) return true;
     const ariaPressed = button.getAttribute('aria-pressed');
     if (ariaPressed === 'true') return true;
@@ -897,7 +902,12 @@
     const ariaPressed = button.getAttribute('aria-pressed');
     if (ariaPressed === 'true') return true;
     const dataState = (button.getAttribute('data-state') || '').toLowerCase();
-    if (dataState === 'on' || dataState === 'true' || dataState === 'checked' || dataState === 'active') {
+    if (
+      dataState === 'on' ||
+      dataState === 'true' ||
+      dataState === 'checked' ||
+      dataState === 'active'
+    ) {
       return true;
     }
     const ariaChecked = button.getAttribute('aria-checked');
@@ -946,7 +956,8 @@
       120,
     ).catch(() => null);
     const active =
-      isResearchToggleActive(/** @type {HTMLElement | null} */ (researchButton)) || isResearchActive();
+      isResearchToggleActive(/** @type {HTMLElement | null} */ (researchButton)) ||
+      isResearchActive();
     if (!wasExpanded) {
       await closeToolsMenu(button);
     }
@@ -988,7 +999,9 @@
     await ensureElementInteractable(pill);
     simulateButtonClick(pill);
 
-    const activated = await waitUntil(() => isResearchPillActive(pill), 2500, 120).catch(() => false);
+    const activated = await waitUntil(() => isResearchPillActive(pill), 2500, 120).catch(
+      () => false,
+    );
     if (activated) {
       return { attempted: true, success: true, method: 'pill' };
     }
@@ -1006,7 +1019,12 @@
       if (pillOutcome.attempted) {
         if (pillOutcome.success) {
           console.log('✅ Research mode enabled via model pill');
-          return { success: true, method: pillOutcome.method || 'pill', alreadyEnabled: pillOutcome.alreadyEnabled, warnings };
+          return {
+            success: true,
+            method: pillOutcome.method || 'pill',
+            alreadyEnabled: pillOutcome.alreadyEnabled,
+            warnings,
+          };
         }
         warnings.push('Research pill activation fallback to tools menu');
       }
@@ -1424,7 +1442,9 @@
     if (!sendButton) {
       const fallback = findSendButtonCandidate({ requireEnabled: false });
       if (fallback) {
-        warnings.push('Claude send control remained disabled after waiting; attempting keyboard fallback');
+        warnings.push(
+          'Claude send control remained disabled after waiting; attempting keyboard fallback',
+        );
       } else {
         warnings.push('Claude send control not found');
       }
