@@ -21,6 +21,7 @@ htmlcov/
 *.log
 playwright-report/
 test-results/
+.playwright-mcp/
 
 # IDE
 .vscode/
