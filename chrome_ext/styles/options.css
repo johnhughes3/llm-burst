@@ -78,6 +78,14 @@ body {
   outline: none;
 }
 
+/* base.css's input:focus-visible outline outranks the rule above; suppress it
+   here so options fields show the same single border+shadow focus treatment
+   as the popup's fields. */
+.input:focus-visible,
+.select:focus-visible {
+  outline: none;
+}
+
 .input:focus,
 .select:focus {
   border-color: var(--accent-primary);

@@ -78,6 +78,9 @@
     els.draftStatus.textContent = text;
     els.draftStatus.classList.remove('prompt__draft-status--persistent');
     els.draftStatus.style.display = 'inline-block';
+    // Restart the fade animation even when a notice is already showing
+    els.draftStatus.classList.remove('animate-fade');
+    void els.draftStatus.offsetWidth;
     els.draftStatus.classList.add('animate-fade');
     if (state.noticeTimer) clearTimeout(state.noticeTimer);
     state.noticeTimer = setTimeout(() => {
@@ -437,6 +440,24 @@
     return new Date(ts).toLocaleDateString(undefined, { month: 'short', day: 'numeric' });
   }
 
+  // Long form for accessible names ("3 hours ago" instead of "3h")
+  function formatRelativeTimeLong(ts) {
+    if (!ts) return '';
+    const mins = Math.floor((Date.now() - ts) / 60000);
+    if (mins < 1) return 'just now';
+    if (mins < 60) return `${mins} minute${mins === 1 ? '' : 's'} ago`;
+    const hours = Math.floor(mins / 60);
+    if (hours < 24) return `${hours} hour${hours === 1 ? '' : 's'} ago`;
+    const days = Math.floor(hours / 24);
+    if (days < 7) return `${days} day${days === 1 ? '' : 's'} ago`;
+    return new Date(ts).toLocaleDateString(undefined, { month: 'long', day: 'numeric' });
+  }
+
+  // Visually-hidden live region for picker state changes (arm/cancel delete)
+  function announcePicker(text) {
+    if (els.pickerStatus) els.pickerStatus.textContent = text;
+  }
+
   function sessionTitle(id) {
     if (id === '__new__') return 'New conversation';
     const sess = state.sessionsById[id];
@@ -460,8 +481,14 @@
     try {
       const result = await chrome.storage.local.get(['sessions', 'sessionOrder']);
       state.sessionsById = result.sessions || {};
+      // Most recently used first (storage order is append-order)
       state.sessionOrder = (result.sessionOrder || Object.keys(state.sessionsById))
-        .filter(id => state.sessionsById[id]);
+        .filter(id => state.sessionsById[id])
+        .sort((a, b) => {
+          const sa = state.sessionsById[a];
+          const sb = state.sessionsById[b];
+          return (sb.lastUsedAt || sb.createdAt || 0) - (sa.lastUsedAt || sa.createdAt || 0);
+        });
 
       // If the selected session disappeared, fall back to a new conversation
       if (state.selectedSessionId !== '__new__' && !state.sessionsById[state.selectedSessionId]) {
@@ -515,6 +542,15 @@
 
     if (!isNew) {
       const when = sess.lastUsedAt || sess.createdAt;
+
+      // Dots and the compact time are visual-only; give AT the full picture
+      const provNames = (Array.isArray(sess.providers) ? sess.providers : [])
+        .map(p => PROVIDER_LABELS[p])
+        .filter(Boolean);
+      const labelParts = [sessionTitle(id)];
+      if (provNames.length) labelParts.push(provNames.join(', '));
+      if (when) labelParts.push(`last used ${formatRelativeTimeLong(when)}`);
+      opt.setAttribute('aria-label', labelParts.join(', '));
       if (when) {
         const time = document.createElement('span');
         time.className = 'session-option__time';
@@ -603,6 +639,8 @@
     els.sessionMenu?.querySelectorAll('.session-option__delete--confirm').forEach(btn => {
       btn.classList.remove('session-option__delete--confirm');
       btn.title = 'Forget this chat (tabs stay open)';
+      const id = btn.closest('[role="option"]')?.dataset?.sessionId;
+      if (id) btn.setAttribute('aria-label', `Forget "${sessionTitle(id)}" (tabs stay open)`);
     });
   }
 
@@ -616,7 +654,12 @@
     state.confirmingDelete = sessionId;
     btn.classList.add('session-option__delete--confirm');
     btn.title = 'Click again to confirm';
-    state.confirmTimer = setTimeout(resetDeleteConfirm, 3000);
+    btn.setAttribute('aria-label', `Confirm forgetting "${sessionTitle(sessionId)}"`);
+    announcePicker(`Press Delete again to forget "${sessionTitle(sessionId)}". Tabs stay open.`);
+    state.confirmTimer = setTimeout(() => {
+      resetDeleteConfirm();
+      announcePicker('Deletion cancelled');
+    }, 3000);
   }
 
   async function forgetSession(sessionId) {
@@ -804,6 +847,13 @@
 
     // Session picker menu: roving focus over [role="option"] rows
     if (els.sessionMenu) {
+      // Clicking dead zones (divider, padding, empty-state row) must not blur
+      // the focused option, or keyboard navigation strands until Escape.
+      els.sessionMenu.addEventListener('mousedown', (e) => {
+        if (!e.target.closest('[role="option"], .session-option__delete')) {
+          e.preventDefault();
+        }
+      });
       els.sessionMenu.addEventListener('keydown', (e) => {
         const opts = menuOptions();
         const idx = opts.indexOf(document.activeElement);
@@ -1056,6 +1106,7 @@
     els.sessionTrigger = document.getElementById('sessionTrigger');
     els.sessionTriggerText = document.getElementById('sessionTriggerText');
     els.sessionMenu = document.getElementById('sessionMenu');
+    els.pickerStatus = document.getElementById('pickerStatus');
     els.groupTitle = document.getElementById('groupTitle');
     els.autonameBtn = document.getElementById('autonameBtn');
     els.autonameSpinner = document.getElementById('autonameSpinner');

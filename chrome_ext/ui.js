@@ -135,6 +135,12 @@ function createSessionSection() {
         role: 'listbox',
         'aria-labelledby': 'sessionLabel',
         hidden: true
+      }),
+      createElement('div', {
+        className: 'sr-only',
+        id: 'pickerStatus',
+        role: 'status',
+        'aria-live': 'polite'
       })
     ])
   ]);
