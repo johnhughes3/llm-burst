@@ -95,8 +95,19 @@ html, body {
   padding: calc(var(--spacing) * 1.25);
 }
 
-/* Trim space after the prompt specifically in popup */
-#promptSection { margin-bottom: calc(var(--spacing) * 0.5) !important; }
+/* Trim space after the prompt specifically in popup.
+   Flex-grow lets the textarea absorb free vertical space (e.g. while
+   Advanced Options is collapsed) instead of leaving a dead gap. */
+#promptSection {
+  margin-bottom: calc(var(--spacing) * 0.5) !important;
+  display: flex;
+  flex-direction: column;
+  flex: 1 1 auto;
+  min-height: 0;
+}
+#promptSection .prompt__textarea {
+  flex: 1 1 auto;
+}
 /* Pull options closer to prompt and keep equal spacing to Advanced */
 #optionsSection { 
   margin-top: 0 !important; 
@@ -110,7 +121,7 @@ html, body {
 /* Compact prompt header and textarea */
 .prompt__header { margin-bottom: var(--spacing) !important; }
 .section__label { margin-bottom: var(--spacing) !important; font-size: 13px; }
-.prompt__textarea { min-height: 84px; max-height: 200px; }
+.prompt__textarea { min-height: 150px; max-height: 240px; }
 .prompt__footer { margin-top: calc(var(--spacing) * 0.25); overflow: visible; }
 .prompt__footer#inlinePromptFooter { margin-bottom: 0; }
 .prompt__draft-status {

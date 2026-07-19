@@ -55,6 +55,37 @@ function createElement(tag, attrs = {}, children = []) {
   return el;
 }
 
+// Inline SVG icons (stroke-based, inherit currentColor)
+const SVG_NS = 'http://www.w3.org/2000/svg';
+const ICON_PATHS = {
+  search: ['M11 3a8 8 0 1 0 0 16 8 8 0 0 0 0-16z', 'M21 21l-4.35-4.35'],
+  ghost: [
+    'M12 2a8 8 0 0 0-8 8v12l3-3 2.5 2.5L12 19l2.5 2.5L17 19l3 3V10a8 8 0 0 0-8-8z',
+    'M9 10h.01',
+    'M15 10h.01'
+  ]
+};
+
+function createIcon(name, size = 15) {
+  const svg = document.createElementNS(SVG_NS, 'svg');
+  svg.setAttribute('viewBox', '0 0 24 24');
+  svg.setAttribute('width', String(size));
+  svg.setAttribute('height', String(size));
+  svg.setAttribute('fill', 'none');
+  svg.setAttribute('stroke', 'currentColor');
+  svg.setAttribute('stroke-width', '2');
+  svg.setAttribute('stroke-linecap', 'round');
+  svg.setAttribute('stroke-linejoin', 'round');
+  svg.setAttribute('aria-hidden', 'true');
+  svg.classList.add('icon');
+  (ICON_PATHS[name] || []).forEach(d => {
+    const path = document.createElementNS(SVG_NS, 'path');
+    path.setAttribute('d', d);
+    svg.appendChild(path);
+  });
+  return svg;
+}
+
 // Create header component
 function createHeader() {
   const header = createElement('header', { className: 'header' }, [
@@ -148,7 +179,7 @@ function createOptionsSection() {
           createElement('div', { className: 'toggle__slider' })
         ]),
         createElement('div', { className: 'toggle__content' }, [
-          createElement('span', {}, ['🔍']),
+          createIcon('search'),
           createElement('span', {}, ['Research'])
         ])
       ]),
@@ -164,7 +195,7 @@ function createOptionsSection() {
           createElement('div', { className: 'toggle__slider' })
         ]),
         createElement('div', { className: 'toggle__content' }, [
-          createElement('span', {}, ['🕵️']),
+          createIcon('ghost'),
           createElement('span', {}, ['Incognito'])
         ])
       ])
@@ -220,7 +251,7 @@ function createAdvancedSection() {
             createElement('label', {
               className: 'section__label section__label--inline',
               for: 'groupTitle'
-            }, ['Chat']),
+            }, ['Title']),
             createElement('input', {
               type: 'text',
               className: 'title-input title-input--inline',
@@ -275,7 +306,7 @@ function createSendButton(mode) {
     className: 'send-button',
     id: 'sendButton'
   }, [
-    '➤ ',
+    createElement('span', { className: 'send-button__arrow', 'aria-hidden': 'true' }, ['➤']),
     createElement('span', { id: 'sendButtonText' }, ['Send']),
     showShortcut ? createElement('span', { 
       className: 'send-button__shortcut' 

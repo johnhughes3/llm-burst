@@ -61,6 +61,16 @@
     state.sending = isLoading;
     if (els.sendButton) {
       els.sendButton.disabled = isLoading;
+      els.sendButton.classList.toggle('send-button--loading', isLoading);
+      els.sendButton.setAttribute('aria-busy', String(isLoading));
+    }
+    const label = document.getElementById('sendButtonText');
+    if (label) {
+      if (isLoading) {
+        label.textContent = state.isNewSession ? 'Opening tabs…' : 'Sending…';
+      } else {
+        label.textContent = state.isNewSession ? 'Send' : 'Continue Thread';
+      }
     }
   }
 
@@ -269,13 +279,15 @@
   }
 
   function updateSendShortcutHint() {
+    const isMac = navigator.platform.toUpperCase().includes('MAC');
+    const modEnter = isMac ? '⌘+Enter' : 'Ctrl+Enter';
     const hint = document.getElementById('promptHint');
     if (hint) {
-      hint.textContent = state.sendOnEnter ? 'Enter to send (Shift+Enter for newline)' : '⌘/Ctrl+Enter to send';
+      hint.textContent = state.sendOnEnter ? 'Enter to send (Shift+Enter for newline)' : `${modEnter} to send`;
     }
     const btnShortcut = document.querySelector('.send-button__shortcut');
     if (btnShortcut) {
-      btnShortcut.textContent = state.sendOnEnter ? 'Enter' : '⌘+Enter';
+      btnShortcut.textContent = state.sendOnEnter ? 'Enter' : modEnter;
     }
   }
   

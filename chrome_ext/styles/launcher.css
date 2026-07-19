@@ -3,33 +3,46 @@
 @import 'components.css';
 @import 'providers-inline.css';
 
-/* Full page launcher mode */
+/* Full page launcher mode: header, main, and send bar are siblings that
+   together form one centered card. */
 .app {
+  min-height: 100vh;
   display: flex;
+  flex-direction: column;
   align-items: center;
   justify-content: center;
-  padding: calc(var(--spacing) * 3);
-  min-height: 100vh;
+  padding: calc(var(--spacing) * 4);
   background: linear-gradient(135deg, var(--bg-primary) 0%, #131722 100%);
 }
 
-/* Centered container with max width */
-.main {
-  max-width: 480px;
+.header,
+.main,
+.send-bar {
   width: 100%;
+  max-width: 540px;
+  position: relative;
+  z-index: 1;
   background: var(--bg-secondary);
-  border-radius: calc(var(--radius) * 2);
   border: 1px solid var(--border);
   box-shadow: 0 20px 25px -5px rgba(0, 0, 0, 0.5), 0 10px 10px -5px rgba(0, 0, 0, 0.2);
-  padding: calc(var(--spacing) * 3);
-  gap: calc(var(--spacing) * 3);
 }
 
-/* Larger elements for launcher */
 .header {
   border-radius: calc(var(--radius) * 2) calc(var(--radius) * 2) 0 0;
-  margin: calc(var(--spacing) * -3) calc(var(--spacing) * -3) 0;
+  border-bottom: none;
+  padding: calc(var(--spacing) * 2.5) calc(var(--spacing) * 3);
+}
+
+.main {
+  border-top: none;
+  border-bottom: none;
   padding: calc(var(--spacing) * 3);
+}
+
+.send-bar {
+  border-top: 1px solid var(--border);
+  border-radius: 0 0 calc(var(--radius) * 2) calc(var(--radius) * 2);
+  padding: calc(var(--spacing) * 2) calc(var(--spacing) * 3);
 }
 
 /* Providers in single row for wider space */
@@ -48,7 +61,7 @@
   display: block;
 }
 
-/* Backdrop blur effect */
+/* Backdrop glow effect */
 .app::before {
   content: '';
   position: fixed;
@@ -59,9 +72,4 @@
   background: radial-gradient(circle at 50% 50%, rgba(79, 140, 255, 0.1) 0%, transparent 70%);
   pointer-events: none;
   z-index: 0;
-}
-
-.main {
-  position: relative;
-  z-index: 1;
 }

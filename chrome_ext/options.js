@@ -5,10 +5,11 @@
 
   function $(id) { return document.getElementById(id); }
 
-  function setStatus(text, kind = 'info') {
-    els.status.textContent = text || '';
-    els.status.classList.remove('success', 'error', 'info');
-    els.status.classList.add(kind);
+  function setStatus(text, kind = 'info', el = els.status) {
+    if (!el) return;
+    el.textContent = text || '';
+    el.classList.remove('success', 'error', 'info');
+    el.classList.add(kind);
   }
 
   function getSelectedProviders() {
@@ -55,6 +56,7 @@
     els.saveDefaultsBtn = $('saveDefaultsBtn');
 
     els.status = $('status');
+    els.statusDefaults = $('statusDefaults');
 
     els.debuggerStatus = $('debuggerStatus');
   }
@@ -74,7 +76,7 @@
       els.sendOnEnter.checked = !!settings.sendOnEnter;
       setSelectedProviders(settings.defaultProviders || ['CHATGPT', 'CLAUDE', 'GEMINI', 'GROK']);
 
-      setStatus('Loaded.', 'info');
+      setStatus('');
     } catch (e) {
       setStatus('Failed to load options', 'error');
     }
@@ -100,9 +102,9 @@
         defaultProviders: getSelectedProviders()
       };
       await chrome.storage.sync.set({ settings });
-      setStatus('Saved defaults.', 'success');
+      setStatus('Saved defaults.', 'success', els.statusDefaults);
     } catch (e) {
-      setStatus('Failed to save defaults', 'error');
+      setStatus('Failed to save defaults', 'error', els.statusDefaults);
     }
   }
 

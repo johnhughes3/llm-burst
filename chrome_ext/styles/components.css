@@ -242,8 +242,18 @@
   border-color: var(--accent-primary);
 }
 
+/* Visually hidden but still keyboard-focusable */
 .toggle__input {
-  display: none;
+  position: absolute;
+  width: 1px;
+  height: 1px;
+  opacity: 0;
+  pointer-events: none;
+}
+
+.toggle:has(.toggle__input:focus-visible) {
+  outline: 2px solid var(--accent-primary);
+  outline-offset: 2px;
 }
 
 .toggle__switch {
@@ -280,6 +290,16 @@
   gap: var(--spacing);
   font-size: 14px;
   font-weight: 500;
+}
+
+.toggle__content .icon {
+  color: var(--text-secondary);
+  flex-shrink: 0;
+  transition: color var(--animation-duration) var(--animation-timing);
+}
+
+.toggle__input:checked ~ .toggle__content .icon {
+  color: var(--accent-primary);
 }
 
 /* Provider cards */
@@ -319,16 +339,28 @@
 
 /* Compact provider cards for inline display */
 .provider-card--compact {
-  padding: calc(var(--spacing) * 0.75) calc(var(--spacing) * 1);
+  padding: calc(var(--spacing) * 0.75) calc(var(--spacing) * 0.75);
   flex-direction: row;
+  justify-content: center;
   gap: calc(var(--spacing) * 0.5);
-  min-width: 72px;
+  min-width: 0;
   flex: 1 1 0;
+}
+
+/* Selection is already shown by border/background/name color; the corner
+   badge just overlaps the label at compact sizes. */
+.provider-card--compact .provider-card__check {
+  display: none;
 }
 
 .provider-card:hover {
   transform: scale(1.02);
   border-color: var(--accent-primary);
+}
+
+.provider-card:has(.provider-card__checkbox:focus-visible) {
+  outline: 2px solid var(--accent-primary);
+  outline-offset: 2px;
 }
 
 .provider-card--selected {
@@ -353,6 +385,7 @@
   font-size: 12px;
   font-weight: bold;
   color: white;
+  transition: opacity var(--animation-duration) var(--animation-timing);
 }
 
 .provider-card--compact .provider-card__icon {
@@ -361,8 +394,27 @@
   font-size: 10px;
 }
 
-.provider-card--selected .provider-card__icon {
-  background: linear-gradient(135deg, var(--accent-primary) 0%, #6366f1 100%);
+/* Brand-colored monograms for instant recognition */
+.provider-card[data-provider="CHATGPT"] .provider-card__icon {
+  background: #10a37f;
+}
+
+.provider-card[data-provider="CLAUDE"] .provider-card__icon {
+  background: #d97757;
+}
+
+.provider-card[data-provider="GEMINI"] .provider-card__icon {
+  background: linear-gradient(135deg, #4285f4 0%, #9b72cb 100%);
+}
+
+.provider-card[data-provider="GROK"] .provider-card__icon {
+  background: #e6edf3;
+  color: #0f1115;
+}
+
+/* Dim unselected providers so selection reads at a glance */
+.provider-card:not(.provider-card--selected) .provider-card__icon {
+  opacity: 0.45;
 }
 
 .provider-card__name {
@@ -512,6 +564,26 @@
   opacity: 0.5;
   cursor: not-allowed;
   transform: none;
+}
+
+/* Loading state: swap the arrow for a spinner */
+.send-button--loading {
+  opacity: 0.85;
+}
+
+.send-button--loading .send-button__arrow {
+  display: none;
+}
+
+.send-button--loading::before {
+  content: '';
+  width: 16px;
+  height: 16px;
+  border: 2px solid rgba(255, 255, 255, 0.35);
+  border-top-color: white;
+  border-radius: 50%;
+  animation: spin 0.8s linear infinite;
+  flex-shrink: 0;
 }
 
 .send-button__shortcut {

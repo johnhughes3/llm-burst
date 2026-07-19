@@ -120,11 +120,11 @@ select:focus-visible {
   }
 }
 
-/* High contrast mode */
+/* High contrast mode: raise (never lower) contrast vs. the defaults */
 @media (prefers-contrast: high) {
   :root {
-    --border: #404040;
-    --text-secondary: #a0a0a0;
+    --border: #4a5468;
+    --text-secondary: #c3cad6;
   }
 }
 
