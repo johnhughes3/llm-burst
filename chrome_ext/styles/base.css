@@ -12,6 +12,11 @@
   --accent-hover: #407be3;
   --radius: 8px;
   --spacing: 8px;
+  --brand-chatgpt: #10a37f;
+  --brand-claude: #d97757;
+  --brand-gemini-a: #4285f4;
+  --brand-gemini-b: #9b72cb;
+  --brand-grok: #e6edf3;
   --animation-duration: 150ms;
   --animation-timing: cubic-bezier(0.4, 0, 0.2, 1);
 }

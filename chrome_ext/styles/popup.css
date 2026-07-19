@@ -89,9 +89,11 @@ html, body {
   margin: 0; 
   white-space: nowrap;
 }
-#sessionSection .session-select { 
-  flex: 1 1 auto; 
+#sessionSection .session-picker {
+  flex: 1 1 auto;
   min-width: 0;
+}
+#sessionSection .session-picker__trigger {
   padding: calc(var(--spacing) * 1.25);
 }
 
@@ -131,6 +133,14 @@ html, body {
   background: rgba(79, 140, 255, 0.12);
   line-height: 1.2;
   white-space: nowrap;
+}
+
+/* Persistent draft indicator: plain muted text, no pill, no flashing */
+.prompt__draft-status--persistent {
+  background: none;
+  padding: 0;
+  color: var(--text-secondary);
+  opacity: 0.85;
 }
 
 /* Compact advanced summary row when closed */

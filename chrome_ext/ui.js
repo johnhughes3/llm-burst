@@ -63,7 +63,10 @@ const ICON_PATHS = {
     'M12 2a8 8 0 0 0-8 8v12l3-3 2.5 2.5L12 19l2.5 2.5L17 19l3 3V10a8 8 0 0 0-8-8z',
     'M9 10h.01',
     'M15 10h.01'
-  ]
+  ],
+  chevron: ['M6 9l6 6 6-6'],
+  plus: ['M12 5v14', 'M5 12h14'],
+  x: ['M18 6 6 18', 'M6 6l12 12']
 };
 
 function createIcon(name, size = 15) {
@@ -103,22 +106,39 @@ function createHeader() {
   return header;
 }
 
-// Create session selector
+// Create session selector (custom combobox rendered/managed by popup.js)
 function createSessionSection() {
   const section = createElement('div', { className: 'section', id: 'sessionSection' }, [
-    createElement('label', { 
+    createElement('span', {
       className: 'section__label',
-      for: 'sessionSelect'
+      id: 'sessionLabel'
     }, ['Chat']),
-    createElement('select', {
-      className: 'session-select',
-      id: 'sessionSelect',
-      'aria-label': 'Select chat'
-    }, [
-      createElement('option', { value: '__new__', selected: true }, ['New conversation'])
+    createElement('div', { className: 'session-picker', id: 'sessionPicker' }, [
+      createElement('button', {
+        type: 'button',
+        className: 'session-picker__trigger',
+        id: 'sessionTrigger',
+        'aria-haspopup': 'listbox',
+        'aria-expanded': 'false',
+        'aria-controls': 'sessionMenu',
+        'aria-labelledby': 'sessionLabel sessionTriggerText'
+      }, [
+        createElement('span', {
+          className: 'session-picker__value',
+          id: 'sessionTriggerText'
+        }, ['New conversation']),
+        createIcon('chevron', 14)
+      ]),
+      createElement('div', {
+        className: 'session-picker__menu',
+        id: 'sessionMenu',
+        role: 'listbox',
+        'aria-labelledby': 'sessionLabel',
+        hidden: true
+      })
     ])
   ]);
-  
+
   return section;
 }
 
@@ -375,45 +395,9 @@ export function renderApp({ mode = 'popup' } = {}) {
     }
   });
   
-  // Initialize UI state based on session
-  setTimeout(() => {
-    const sessionSelect = document.getElementById('sessionSelect');
-    if (sessionSelect) {
-      sessionSelect.addEventListener('change', updateUIState);
-      updateUIState();
-    }
-  }, 100);
 }
 
-// Update UI based on session state
-function updateUIState() {
-  const sessionSelect = document.getElementById('sessionSelect');
-  const isNewSession = !sessionSelect || sessionSelect.value === '__new__';
-  
-  // Elements to hide/show based on state
-  const conditionalSections = ['providerSection', 'optionsSection', 'titleSection'];
-  
-  // For existing conversations, hide the entire advanced section
-  const advancedSection = document.getElementById('advancedSection');
-  if (advancedSection) {
-    if (isNewSession) {
-      advancedSection.classList.remove('section--hidden');
-      advancedSection.setAttribute('aria-hidden', 'false');
-    } else {
-      advancedSection.classList.add('section--hidden');
-      advancedSection.setAttribute('aria-hidden', 'true');
-    }
-  }
-  
-  // Update send button text
-  const sendButtonText = document.getElementById('sendButtonText');
-  if (sendButtonText) {
-    sendButtonText.textContent = isNewSession ? 'Send' : 'Continue Thread';
-  }
-  
-  // Adjust textarea rows
-  const promptTextarea = document.getElementById('prompt');
-  if (promptTextarea) {
-    promptTextarea.rows = isNewSession ? 6 : 10;
-  }
+// Shared with popup.js (a classic script) for rendering session menu items
+if (typeof window !== 'undefined') {
+  window.llmBurstIcons = { createIcon };
 }

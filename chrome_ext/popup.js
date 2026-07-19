@@ -11,7 +11,18 @@
     isComposing: false,
     charCount: 0,
     isNewSession: true,
-    sendOnEnter: false
+    sendOnEnter: false,
+    // Session picker
+    selectedSessionId: '__new__',
+    sessionsById: {},
+    sessionOrder: [],
+    pickerOpen: false,
+    confirmingDelete: null,
+    confirmTimer: null,
+    // Draft indicator
+    draftSaved: false,
+    noticeActive: false,
+    noticeTimer: null
   };
   
   // Store cleanup functions for event listeners
@@ -44,16 +55,37 @@
     setStatus('', 'info'); 
   }
 
-  // Inline notice in the prompt footer (same area as Draft saved)
+  // Persistent, quiet draft indicator: appears once and stays put instead of
+  // flashing on every debounced save while the user types.
+  function renderDraftStatus() {
+    if (!els.draftStatus || state.noticeActive) return;
+    if (state.draftSaved) {
+      els.draftStatus.textContent = 'Draft saved';
+      els.draftStatus.classList.add('prompt__draft-status--persistent');
+      els.draftStatus.classList.remove('animate-fade');
+      els.draftStatus.style.display = 'inline-block';
+    } else {
+      els.draftStatus.style.display = 'none';
+      els.draftStatus.classList.remove('prompt__draft-status--persistent');
+    }
+  }
+
+  // Transient inline notice (paste/restore/etc.); temporarily overrides the
+  // persistent draft indicator, then restores it.
   function showInlineNotice(text) {
     if (!els.draftStatus) return;
+    state.noticeActive = true;
     els.draftStatus.textContent = text;
+    els.draftStatus.classList.remove('prompt__draft-status--persistent');
     els.draftStatus.style.display = 'inline-block';
     els.draftStatus.classList.add('animate-fade');
-    setTimeout(() => {
+    if (state.noticeTimer) clearTimeout(state.noticeTimer);
+    state.noticeTimer = setTimeout(() => {
+      state.noticeActive = false;
       if (!els?.draftStatus) return;
       els.draftStatus.style.display = 'none';
       els.draftStatus.classList.remove('animate-fade');
+      renderDraftStatus();
     }, 2000);
   }
 
@@ -102,9 +134,9 @@
           timestamp: Date.now(),
         }
       });
-      
-      // Show inline indicator
-      showInlineNotice('Draft saved');
+
+      state.draftSaved = true;
+      renderDraftStatus();
     } catch (e) {
       console.error('[llm-burst] Failed to save draft:', e);
     }
@@ -128,6 +160,8 @@
   async function clearDraft() {
     try {
       await chrome.storage.session.remove(['draft']);
+      state.draftSaved = false;
+      renderDraftStatus();
     } catch (e) {
       console.error('[llm-burst] Failed to clear draft:', e);
     }
@@ -204,6 +238,8 @@
       if (draft) {
         els.prompt.value = draft;
         els.prompt.dispatchEvent(new Event('input', { bubbles: true }));
+        state.draftSaved = true;
+        state.lastDraftText = draft;
         showInlineNotice('Draft restored');
         return;
       }
@@ -369,7 +405,7 @@
   }
 
   function ensureDefaultProvidersForNewSession() {
-    const isNew = !els.sessionSelect || els.sessionSelect.value === '__new__';
+    const isNew = state.selectedSessionId === '__new__';
     if (!isNew) return;
     const selected = getSelectedProviders();
     if (selected.length === 0) {
@@ -380,31 +416,59 @@
     }
   }
 
-  // Load sessions from storage
+  // ----- Session picker (custom combobox) -----
+
+  const PROVIDER_LABELS = {
+    CHATGPT: 'ChatGPT',
+    CLAUDE: 'Claude',
+    GEMINI: 'Gemini',
+    GROK: 'Grok'
+  };
+
+  function formatRelativeTime(ts) {
+    if (!ts) return '';
+    const mins = Math.floor((Date.now() - ts) / 60000);
+    if (mins < 1) return 'now';
+    if (mins < 60) return `${mins}m`;
+    const hours = Math.floor(mins / 60);
+    if (hours < 24) return `${hours}h`;
+    const days = Math.floor(hours / 24);
+    if (days < 7) return `${days}d`;
+    return new Date(ts).toLocaleDateString(undefined, { month: 'short', day: 'numeric' });
+  }
+
+  function sessionTitle(id) {
+    if (id === '__new__') return 'New conversation';
+    const sess = state.sessionsById[id];
+    return (sess && sess.title) || `Session ${id}`;
+  }
+
+  function updateTriggerText() {
+    if (els.sessionTriggerText) {
+      els.sessionTriggerText.textContent = sessionTitle(state.selectedSessionId);
+    }
+  }
+
+  function selectSession(id) {
+    state.selectedSessionId = id;
+    updateTriggerText();
+    updateUIState();
+  }
+
+  // Load sessions from storage into state
   async function loadSessions() {
     try {
       const result = await chrome.storage.local.get(['sessions', 'sessionOrder']);
-      const sessions = result.sessions || {};
-      const order = result.sessionOrder || Object.keys(sessions);
-      
-      if (els.sessionSelect) {
-        // Clear ALL options except "New conversation"
-        while (els.sessionSelect.options.length > 1) {
-          els.sessionSelect.remove(1);
-        }
-        
-        // Add sessions in order
-        order.forEach(sessionId => {
-          const session = sessions[sessionId];
-          if (session) {
-            const option = document.createElement('option');
-            option.value = sessionId;
-            option.textContent = session.title || `Session ${sessionId}`;
-            els.sessionSelect.appendChild(option);
-          }
-        });
+      state.sessionsById = result.sessions || {};
+      state.sessionOrder = (result.sessionOrder || Object.keys(state.sessionsById))
+        .filter(id => state.sessionsById[id]);
+
+      // If the selected session disappeared, fall back to a new conversation
+      if (state.selectedSessionId !== '__new__' && !state.sessionsById[state.selectedSessionId]) {
+        selectSession('__new__');
+      } else {
+        updateTriggerText();
       }
-      
       clearStatus();
     } catch (e) {
       console.error('[llm-burst] Failed to load sessions:', e);
@@ -412,9 +476,167 @@
     }
   }
 
+  function buildSessionOption(id) {
+    const isNew = id === '__new__';
+    const sess = isNew ? null : state.sessionsById[id];
+    const icons = window.llmBurstIcons;
+
+    const opt = document.createElement('div');
+    opt.className = 'session-option';
+    opt.setAttribute('role', 'option');
+    opt.tabIndex = -1;
+    opt.dataset.sessionId = id;
+    opt.setAttribute('aria-selected', String(state.selectedSessionId === id));
+
+    if (isNew) {
+      const badge = document.createElement('span');
+      badge.className = 'session-option__icon';
+      if (icons) badge.appendChild(icons.createIcon('plus', 12));
+      opt.appendChild(badge);
+    } else {
+      const dots = document.createElement('span');
+      dots.className = 'session-option__dots';
+      const provs = Array.isArray(sess.providers) ? sess.providers : [];
+      Object.keys(PROVIDER_LABELS)
+        .filter(p => provs.includes(p))
+        .forEach(p => {
+          const dot = document.createElement('span');
+          dot.className = `session-option__dot session-option__dot--${p.toLowerCase()}`;
+          dot.title = PROVIDER_LABELS[p];
+          dots.appendChild(dot);
+        });
+      opt.appendChild(dots);
+    }
+
+    const title = document.createElement('span');
+    title.className = 'session-option__title';
+    title.textContent = sessionTitle(id);
+    opt.appendChild(title);
+
+    if (!isNew) {
+      const when = sess.lastUsedAt || sess.createdAt;
+      if (when) {
+        const time = document.createElement('span');
+        time.className = 'session-option__time';
+        time.textContent = formatRelativeTime(when);
+        time.title = new Date(when).toLocaleString();
+        opt.appendChild(time);
+      }
+
+      const del = document.createElement('button');
+      del.type = 'button';
+      del.className = 'session-option__delete';
+      del.tabIndex = -1;
+      del.setAttribute('aria-label', `Forget "${sessionTitle(id)}" (tabs stay open)`);
+      del.title = 'Forget this chat (tabs stay open)';
+      if (icons) del.appendChild(icons.createIcon('x', 12));
+      del.addEventListener('click', (e) => {
+        e.stopPropagation();
+        handleDeleteClick(id, del);
+      });
+      opt.appendChild(del);
+    }
+
+    opt.addEventListener('click', () => {
+      selectSession(id);
+      closeSessionMenu();
+    });
+
+    return opt;
+  }
+
+  function renderSessionMenu() {
+    const menu = els.sessionMenu;
+    if (!menu) return;
+    resetDeleteConfirm();
+    menu.textContent = '';
+    menu.appendChild(buildSessionOption('__new__'));
+
+    if (state.sessionOrder.length > 0) {
+      const divider = document.createElement('div');
+      divider.className = 'session-picker__divider';
+      divider.setAttribute('aria-hidden', 'true');
+      menu.appendChild(divider);
+      state.sessionOrder.forEach(id => menu.appendChild(buildSessionOption(id)));
+    } else {
+      const empty = document.createElement('div');
+      empty.className = 'session-picker__empty';
+      empty.textContent = 'Saved chats appear here after you send.';
+      menu.appendChild(empty);
+    }
+  }
+
+  function menuOptions() {
+    return els.sessionMenu
+      ? Array.from(els.sessionMenu.querySelectorAll('[role="option"]'))
+      : [];
+  }
+
+  function openSessionMenu() {
+    if (!els.sessionMenu || state.pickerOpen) return;
+    renderSessionMenu();
+    state.pickerOpen = true;
+    els.sessionMenu.hidden = false;
+    els.sessionPicker?.classList.add('session-picker--open');
+    els.sessionTrigger?.setAttribute('aria-expanded', 'true');
+    const opts = menuOptions();
+    const current = opts.find(o => o.dataset.sessionId === state.selectedSessionId) || opts[0];
+    current?.focus();
+  }
+
+  function closeSessionMenu(focusTrigger = true) {
+    if (!state.pickerOpen) return;
+    resetDeleteConfirm();
+    state.pickerOpen = false;
+    if (els.sessionMenu) els.sessionMenu.hidden = true;
+    els.sessionPicker?.classList.remove('session-picker--open');
+    els.sessionTrigger?.setAttribute('aria-expanded', 'false');
+    if (focusTrigger) els.sessionTrigger?.focus();
+  }
+
+  function resetDeleteConfirm() {
+    state.confirmingDelete = null;
+    if (state.confirmTimer) {
+      clearTimeout(state.confirmTimer);
+      state.confirmTimer = null;
+    }
+    els.sessionMenu?.querySelectorAll('.session-option__delete--confirm').forEach(btn => {
+      btn.classList.remove('session-option__delete--confirm');
+      btn.title = 'Forget this chat (tabs stay open)';
+    });
+  }
+
+  // Two-click confirm: first click arms the button, second click deletes.
+  function handleDeleteClick(sessionId, btn) {
+    if (state.confirmingDelete === sessionId) {
+      forgetSession(sessionId);
+      return;
+    }
+    resetDeleteConfirm();
+    state.confirmingDelete = sessionId;
+    btn.classList.add('session-option__delete--confirm');
+    btn.title = 'Click again to confirm';
+    state.confirmTimer = setTimeout(resetDeleteConfirm, 3000);
+  }
+
+  async function forgetSession(sessionId) {
+    resetDeleteConfirm();
+    const result = await sendMessage('llmburst-delete-session', { sessionId });
+    if (!result.ok) {
+      setStatus(result.error || 'Failed to forget chat', 'error');
+      return;
+    }
+    await loadSessions();
+    if (state.pickerOpen) {
+      renderSessionMenu();
+      menuOptions()[0]?.focus();
+    }
+    showInlineNotice('Chat forgotten — tabs stay open');
+  }
+
   // Update UI state based on session selection
   function updateUIState() {
-    const isNew = !els.sessionSelect || els.sessionSelect.value === '__new__';
+    const isNew = state.selectedSessionId === '__new__';
     state.isNewSession = isNew;
     
     // Add/remove class on app container for layout adjustment
@@ -423,9 +645,16 @@
       app.classList.toggle('app--existing-conversation', !isNew);
     }
     
+    // For existing conversations, hide the entire advanced section
+    const advancedSection = document.getElementById('advancedSection');
+    if (advancedSection) {
+      advancedSection.classList.toggle('section--hidden', !isNew);
+      advancedSection.setAttribute('aria-hidden', String(!isNew));
+    }
+
     // Update conditional sections
     const conditionalSections = ['providerSection', 'optionsSection', 'titleSection'];
-    
+
     conditionalSections.forEach(id => {
       const element = document.getElementById(id);
       if (element) {
@@ -501,8 +730,8 @@
       return;
     }
     
-    const sessionId = els.sessionSelect?.value;
-    const isNew = !sessionId || sessionId === '__new__';
+    const sessionId = state.selectedSessionId;
+    const isNew = sessionId === '__new__';
     
     // Auto-generate title if needed (for new sessions with no manual title)
     if (isNew && !state.titleDirty && !els.groupTitle?.value && prompt) {
@@ -545,10 +774,7 @@
       // Reload sessions if new one was created
       if (isNew && result.sessionId) {
         await loadSessions();
-        if (els.sessionSelect) {
-          els.sessionSelect.value = result.sessionId;
-          updateUIState();
-        }
+        selectSession(result.sessionId);
       }
       
       setTimeout(() => window.close(), 1500);
@@ -559,10 +785,72 @@
 
   // Bind events
   function bindEvents() {
-    // Session selector
-    if (els.sessionSelect) {
-      els.sessionSelect.addEventListener('change', updateUIState);
+    // Session picker trigger
+    if (els.sessionTrigger) {
+      els.sessionTrigger.addEventListener('click', () => {
+        if (state.pickerOpen) {
+          closeSessionMenu();
+        } else {
+          openSessionMenu();
+        }
+      });
+      els.sessionTrigger.addEventListener('keydown', (e) => {
+        if (e.key === 'ArrowDown' || e.key === 'ArrowUp') {
+          e.preventDefault();
+          openSessionMenu();
+        }
+      });
     }
+
+    // Session picker menu: roving focus over [role="option"] rows
+    if (els.sessionMenu) {
+      els.sessionMenu.addEventListener('keydown', (e) => {
+        const opts = menuOptions();
+        const idx = opts.indexOf(document.activeElement);
+        if (e.key === 'ArrowDown') {
+          e.preventDefault();
+          opts[Math.min(idx + 1, opts.length - 1)]?.focus();
+        } else if (e.key === 'ArrowUp') {
+          e.preventDefault();
+          opts[Math.max(idx - 1, 0)]?.focus();
+        } else if (e.key === 'Home') {
+          e.preventDefault();
+          opts[0]?.focus();
+        } else if (e.key === 'End') {
+          e.preventDefault();
+          opts[opts.length - 1]?.focus();
+        } else if (e.key === 'Enter' || e.key === ' ') {
+          e.preventDefault();
+          const target = document.activeElement;
+          if (target?.dataset?.sessionId) {
+            selectSession(target.dataset.sessionId);
+            closeSessionMenu();
+          }
+        } else if (e.key === 'Escape') {
+          // Close only the menu, not the whole popup
+          e.preventDefault();
+          e.stopPropagation();
+          closeSessionMenu();
+        } else if (e.key === 'Delete' || e.key === 'Backspace') {
+          const target = document.activeElement;
+          const id = target?.dataset?.sessionId;
+          if (id && id !== '__new__') {
+            e.preventDefault();
+            const btn = target.querySelector('.session-option__delete');
+            if (btn) handleDeleteClick(id, btn);
+          }
+        } else if (e.key === 'Tab') {
+          closeSessionMenu(false);
+        }
+      });
+    }
+
+    // Close the picker when clicking anywhere outside it
+    document.addEventListener('mousedown', (e) => {
+      if (state.pickerOpen && els.sessionPicker && !els.sessionPicker.contains(e.target)) {
+        closeSessionMenu(false);
+      }
+    });
     
     // Prompt textarea
     if (els.prompt) {
@@ -734,9 +1022,13 @@
         }
       }
 
-      // Esc closes the popup/launcher
+      // Esc closes the session menu first, then the popup/launcher
       if (e.key === 'Escape' && !e.altKey && !e.ctrlKey && !e.metaKey) {
         e.preventDefault();
+        if (state.pickerOpen) {
+          closeSessionMenu();
+          return;
+        }
         window.close();
       }
     });
@@ -760,7 +1052,10 @@
     els.clearBtn = document.getElementById('clearBtn');
     els.research = document.getElementById('research');
     els.incognito = document.getElementById('incognito');
-    els.sessionSelect = document.getElementById('sessionSelect');
+    els.sessionPicker = document.getElementById('sessionPicker');
+    els.sessionTrigger = document.getElementById('sessionTrigger');
+    els.sessionTriggerText = document.getElementById('sessionTriggerText');
+    els.sessionMenu = document.getElementById('sessionMenu');
     els.groupTitle = document.getElementById('groupTitle');
     els.autonameBtn = document.getElementById('autonameBtn');
     els.autonameSpinner = document.getElementById('autonameSpinner');
