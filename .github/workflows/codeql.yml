@@ -19,7 +19,11 @@ concurrency:
 jobs:
   analyze:
     name: Analyze (${{ matrix.language }})
-    runs-on: ubicloud-standard-2
+    # Public johnhughes3 repos often cannot see the private org CI_RUNNER
+    # variable. The clamp allows an explicit ubuntu-latest override and
+    # falls back to ubicloud-standard-2 when the variable is unset, so
+    # GitHub-hosted minutes are not billed.
+    runs-on: ${{ (vars.CI_RUNNER == 'ubuntu-latest' || startsWith(vars.CI_RUNNER, 'ubicloud-')) && vars.CI_RUNNER || 'ubicloud-standard-2' }}
     timeout-minutes: 90
     permissions:
       security-events: write
