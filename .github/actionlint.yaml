@@ -1,0 +1,5 @@
+self-hosted-runner:
+  labels:
+    - ubicloud-standard-2
+
+config-variables: null
