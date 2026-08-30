@@ -592,11 +592,11 @@
       /* ignore */
     }
     await wait(10);
-    let inserted = false;
+    let inserted;
     try {
       inserted = document.execCommand('insertText', false, String(text || ''));
     } catch {
-      inserted = false;
+      /* ignore */
     }
     await wait(60);
     return inserted || editorTextMatches(element, text);
@@ -626,7 +626,9 @@
       try {
         setTextareaText(element, value);
       } catch (error) {
-        throw new Error(`Unable to set Claude textarea text: ${String(error ?? 'unknown error')}`);
+        throw new Error(`Unable to set Claude textarea text: ${String(error ?? 'unknown error')}`, {
+          cause: error,
+        });
       }
       await wait(40);
       return;
@@ -640,7 +642,9 @@
     try {
       setContentEditableText(element, value);
     } catch (error) {
-      throw new Error(`Unable to set Claude message text: ${String(error ?? 'unknown error')}`);
+      throw new Error(`Unable to set Claude message text: ${String(error ?? 'unknown error')}`, {
+        cause: error,
+      });
     }
 
     await wait(60);
@@ -1421,7 +1425,9 @@
       if (error instanceof Error) {
         throw error;
       }
-      throw new Error(`Unable to set Claude message text: ${String(error ?? 'unknown error')}`);
+      throw new Error(`Unable to set Claude message text: ${String(error ?? 'unknown error')}`, {
+        cause: error,
+      });
     }
 
     try {

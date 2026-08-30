@@ -13,15 +13,19 @@
     "test:playwright": "playwright test",
     "verify": "pnpm build && pnpm typecheck && pnpm lint && pnpm test:playwright"
   },
+  "engines": {
+    "node": ">=24 <25",
+    "pnpm": ">=10.34.5 <11"
+  },
   "devDependencies": {
-    "@eslint/js": "9.39.5",
+    "@eslint/js": "10.0.1",
     "@playwright/test": "^1.62.1",
     "@types/chrome": "0.2.7",
-    "@types/node": "^26.3.0",
+    "@types/node": "^24.13.3",
     "eslint": "10.9.1",
     "globals": "17.11.0",
     "prettier": "3.9.6",
     "typescript": "7.0.2"
   },
-  "packageManager": "pnpm@10.15.1+sha512.34e538c329b5553014ca8e8f4535997f96180a1d0f614339357449935350d924e22f8614682191264ec33d1462ac21561aff97f6bb18065351c162c7e8f6de67"
+  "packageManager": "pnpm@10.34.5+sha512.a4ee05f2f73658255bd6a89859c065a45c28a57daefae2c893a168ee2b73168c37b91e83e57ea67654ad03f03031746430e8bce38e362e042605fb8abc80192e"
 }
