@@ -1,98 +1,56 @@
 # llm-burst
 
-A tool for burst processing with LLMs - orchestrating multiple AI chat sessions simultaneously.
+A Chrome extension for sending one prompt to multiple LLM chat providers.
 
 ## Overview
 
-`llm-burst` replaces complex Keyboard Maestro macros with a simple Python CLI tool that:
-- Opens and manages multiple LLM chat sessions (Gemini, Claude, ChatGPT, Grok)
-- Optional window arrangement via Chrome DevTools (CDP)
-- Supports tab grouping in Chrome
-- Maintains state across sessions
-
-## Project Status
-
-### ✅ Stage 0 - Patch Selectors (Complete)
-- Extracted JavaScript selectors from KM macros
-- Wrapped selectors in `tryFind()` helpers
-- Created Python site modules for all LLMs
-- Added basic Playwright tests
-- Set up GitHub Actions CI
-
-### ✅ Stage 1 - swiftDialog Prompt (Complete)
-- Created `bin/swift_prompt.sh` wrapper script
-- Captures Task Name, Prompt Text, Research mode, and Incognito mode
-- Returns JSON output for Python parsing
-- Integrated with `llm_burst.cli.prompt_user()` function
-
-### 🔲 Stage 2 - Chrome Adapter
-- Implement Chrome automation via Playwright
-- Update state management to record browser/tab IDs
-
-### 🔲 Stage 3 - llm-burst CLI
-- Create Python CLI with Click
-- Replace KM orchestration with Python
-
-### 🔲 Stage 4 - Auto-naming
-- Add Gemini Flash integration for automatic session naming
-
-### 🔲 Stage 5 - Group/UnGroup
-- Implement Chrome tab grouping functionality
+LLM Burst Helper opens selected ChatGPT, Claude, Gemini, and Grok sessions, injects the prompt, and supports provider-specific research and temporary-chat modes. The shipped project is a Manifest V3 Chrome extension in `chrome_ext`; there is no Python package or CLI.
 
 ## Prerequisites
 
-- macOS (for swiftDialog GUI prompt)
-- Python 3.11+
-- swiftDialog: `brew install swiftdialog`
-- Chrome browser
+- Google Chrome
+- Node.js 24 LTS
+- pnpm 10 (managed through Corepack)
 
 ## Installation
 
 ```bash
 # Clone the repository
-git clone https://github.com/jj3ny/llm-burst.git
+git clone https://github.com/johnhughes3/llm-burst.git
 cd llm-burst
-
-# Install with uv (recommended)
-uv sync
-
-# Or install with pip
-pip install -e .
-
-# Install Playwright browsers
-python -m playwright install chromium
+corepack enable
+pnpm install --frozen-lockfile
+pnpm exec playwright install chromium
 ```
 
-## Testing
-
-```bash
-# Run tests
-pytest -v
-
-# Run tests with headed browser (for debugging)
-pytest -v --headed
-```
+Load `chrome_ext` as an unpacked extension from `chrome://extensions`, or run `pnpm build` and load the validated copy from `dist/chrome_ext`.
 
 ## Development
 
-See `docs/specs.md` for the full technical specification.
-
-## Chrome Extension Build
-
-The Chrome extension is source-loaded during local development from `chrome_ext`.
-Use the build script to validate the manifest/runtime file graph, syntax-check extension JavaScript, copy the extension into `dist/chrome_ext`, and create a Chrome-ready zip:
-
 ```bash
 pnpm build
+pnpm typecheck
+pnpm lint
+pnpm test:playwright
 ```
 
-For the full local gate, run:
+The full local gate runs the build, type checks, lint, and Playwright tests:
 
 ```bash
 pnpm verify
 ```
 
+Run the dependency security audit separately:
+
+```bash
+pnpm audit --audit-level=high
+```
+
 When developing against the unpacked extension in Chrome, reload the extension at `chrome://extensions` after source edits so Chrome picks up the latest files.
+
+## Historical references
+
+`docs/specs.md` records an earlier Python CLI design that was not implemented. `docs/reference/original_macros` preserves the Keyboard Maestro source material, and `docs/reference/extension-ui-template` is an archived Bolt/Vite UI prototype; neither reference tree is part of the root build, dependency graph, tests, or shipped extension.
 
 ## License
 

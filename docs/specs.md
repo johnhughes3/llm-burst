@@ -1,3 +1,9 @@
+# Historical Python CLI design
+
+This document preserves the original Python CLI proposal for context. That package, its commands, and its Pytest suite were not implemented; the current supported project is the Manifest V3 Chrome extension under `chrome_ext`, with its Node/pnpm build and Playwright tests defined at the repository root.
+
+The remaining sections describe the unimplemented proposal, not current installation or development instructions. See the root `README.md` for the live project.
+
 ## 0  High‑level summary
 
 | Item                 | Decision                                                                                                                                                                                                                                   |

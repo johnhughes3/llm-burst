@@ -5,7 +5,7 @@ on:
   pull_request:
 
 jobs:
-  pytest:
+  test:
     runs-on: macos-latest
 
     steps:
@@ -17,7 +17,7 @@ jobs:
       - name: Set up Node.js
         uses: actions/setup-node@v7
         with:
-          node-version: "20"
+          node-version: "24"
           cache: pnpm
 
       - name: Install dependencies
@@ -26,7 +26,7 @@ jobs:
       - name: Install Playwright browser
         run: pnpm exec playwright install chromium
 
-      - name: Run Playwright tests
+      - name: Verify build, types, lint, and tests
         env:
           CI: "true"
-        run: pnpm run test:playwright
+        run: pnpm verify

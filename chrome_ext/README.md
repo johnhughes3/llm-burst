@@ -1,6 +1,6 @@
 # LLM Burst Helper Chrome Extension
 
-This extension enables tab grouping functionality for the llm-burst CLI tool.
+This is the shipped LLM Burst implementation. It opens selected LLM providers, injects prompts, and manages the resulting Chrome tabs and windows; it does not depend on a separate Python CLI.
 
 ## Installation
 
