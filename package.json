@@ -19,12 +19,12 @@
   },
   "devDependencies": {
     "@eslint/js": "10.0.1",
-    "@playwright/test": "^1.63.0",
-    "@types/chrome": "0.3.4",
-    "@types/node": "^26.6.4",
+    "@playwright/test": "^1.64.0",
+    "@types/chrome": "0.3.5",
+    "@types/node": "^26.6.5",
     "eslint": "10.12.0",
     "globals": "17.13.0",
-    "prettier": "3.9.9",
+    "prettier": "3.9.10",
     "typescript": "7.0.2"
   },
   "packageManager": "pnpm@10.34.5+sha512.a4ee05f2f73658255bd6a89859c065a45c28a57daefae2c893a168ee2b73168c37b91e83e57ea67654ad03f03031746430e8bce38e362e042605fb8abc80192e"
