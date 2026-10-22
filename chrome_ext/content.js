@@ -6,6 +6,10 @@
   'use strict';
 
   let responseId = 0;
+  // Page JavaScript is untrusted. Keep the page-facing bridge limited to the
+  // documented health check; privileged extension operations are initiated by
+  // the popup or background service worker, not by arbitrary site scripts.
+  const PAGE_MESSAGE_TYPES = new Set(['llmburst-ping']);
 
   // Send message to background and return response
   async function relayToBackground(data) {
@@ -25,8 +29,15 @@
 
     const data = event.data;
 
-    // Process only llmburst-* messages
-    if (!data || typeof data !== 'object' || !data.type || typeof data.type !== 'string' || !data.type.startsWith('llmburst-')) {
+    // Process only the explicitly documented, non-privileged page message.
+    // Do not relay arbitrary llmburst-* values: this content script runs in
+    // third-party pages, whose scripts can call window.postMessage().
+    if (
+      !data ||
+      typeof data !== 'object' ||
+      typeof data.type !== 'string' ||
+      !PAGE_MESSAGE_TYPES.has(data.type)
+    ) {
       return;
     }
 
