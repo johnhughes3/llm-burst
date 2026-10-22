@@ -65,14 +65,6 @@
         return;
       }
 
-      // Relay any other llmburst-* message to background
-      const response = await relayToBackground(data);
-      window.postMessage({
-        type: responseType,
-        responseId: currentResponseId,
-        requestType: data.type,
-        ...response
-      }, '*');
     } catch (error) {
       window.postMessage({
         type: responseType,
